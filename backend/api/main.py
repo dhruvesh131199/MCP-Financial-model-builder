@@ -1,18 +1,30 @@
 """Read-only API for session dashboards."""
 
+import os
+
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from store import load_workspace, session_exists
 
+load_dotenv()
+
 app = FastAPI(title="Financial Model Builder API")
+
+
+def _cors_origins() -> list[str]:
+    origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+    if base := os.getenv("VIEW_BASE_URL", "").strip().rstrip("/"):
+        origins.append(base)
+    if extra := os.getenv("CORS_ORIGINS", "").strip():
+        origins.extend(item.strip().rstrip("/") for item in extra.split(",") if item.strip())
+    return origins
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=_cors_origins(),
     allow_methods=["GET"],
     allow_headers=["*"],
 )
