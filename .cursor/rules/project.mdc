@@ -1,0 +1,26 @@
+---
+description: Core conventions for the MCP Financial Model Builder
+alwaysApply: true
+---
+
+# MCP Financial Model Builder
+
+## Principles
+
+- Host LLM (Cursor/Claude) orchestrates; **Python computes all financial math**.
+- Phase 1: `start_session` + `run_dcf`, anonymous session folders, no Groq, no `/chat` endpoint.
+- MCP runs over **HTTP** (`http://localhost:8080/mcp`) — Cursor config uses `url`, not stdio.
+- Each user gets `data/sessions/{uuid}/` — dashboard at `http://localhost:5173/s/{uuid}`.
+
+## Stack
+
+- Backend: Python, FastMCP, FastAPI, Pydantic, pytest
+- Frontend: React, Vite, TypeScript, Tailwind
+- Reference algorithms: sibling project `AI assisted Financial model builder` (reimplement, don't bulk-copy)
+
+## Layout
+
+- `backend/engine/` — pure math, no HTTP/MCP imports
+- `backend/mcp/` — MCP tools only; thin wrappers calling engine + store
+- `backend/api/` — read-only REST for dashboard
+- `frontend/` — polls API, no embedded chat

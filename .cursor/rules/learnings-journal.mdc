@@ -1,0 +1,18 @@
+---
+description: Keep KEY_LEARNINGS_AND_CHALLENGES.md updated for interview-worthy decisions
+alwaysApply: true
+---
+
+# Learnings journal
+
+When you make a **significant** decision, fix a non-trivial bug, or hit an architectural tradeoff during this project:
+
+1. Update [KEY_LEARNINGS_AND_CHALLENGES.md](KEY_LEARNINGS_AND_CHALLENGES.md) in the project root.
+2. Add a row to the **Maintenance log** table (newest first).
+3. For major decisions, add to **Major design decisions** with: choice, options considered, rationale.
+
+**Do update for:** architecture choices, phase scope changes, MCP/host integration lessons, cross-process data issues, deploy strategy, interview-worthy bugs.
+
+**Do not update for:** typo fixes, formatting, minor refactors, routine dependency bumps.
+
+Match the tone and structure of the existing file — decisions tables, chronological journey, honest gaps.
