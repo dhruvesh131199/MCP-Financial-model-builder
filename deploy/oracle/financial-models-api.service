@@ -1,0 +1,15 @@
+[Unit]
+Description=Financial Model Builder API (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/financial-models/backend
+EnvironmentFile=/opt/financial-models/backend/.env
+ExecStart=/opt/financial-models/backend/.venv/bin/uvicorn api.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

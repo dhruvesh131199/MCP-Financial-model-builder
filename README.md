@@ -57,15 +57,17 @@ Restart Cursor after adding. Check **Settings → MCP** — `financial-models` s
 
 ### Try it
 
-In Cursor chat:
+In Cursor or Claude:
 
-> Call start_session and give me my dashboard link.
+> I want to build a DCF.
 
-Open the link, then:
+The host should call `start_session` (you get a dashboard link), ask for assumptions, call `set_model_inputs` with only what you stated, then `run_dcf` when `ready=true`.
 
-> Build a DCF on my session: revenue $100M, 10% growth for 5 years, EBITDA margin 25%, tax 21%, CapEx 3%, NWC 2% of revenue growth, WACC 10%, terminal growth 2%. Use my session_id.
+Example after you provide numbers:
 
-The model appears on your private dashboard within a few seconds.
+> Revenue $100M, 10% growth for 5 years, EBITDA margin 25%, tax 21%, CapEx 3%, NWC 2%, WACC 10%, terminal growth 2%.
+
+The model appears on your dashboard within a few seconds.
 
 ## Manual start (3 terminals)
 

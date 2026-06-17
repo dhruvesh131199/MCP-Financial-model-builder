@@ -1,0 +1,10 @@
+# Replace yourdomain.com with your real domain.
+# DNS: api and mcp A records → this VM's public IP.
+
+api.yourdomain.com {
+	reverse_proxy localhost:8000
+}
+
+mcp.yourdomain.com {
+	reverse_proxy localhost:8080
+}

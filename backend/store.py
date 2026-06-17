@@ -157,3 +157,93 @@ def load_workspace(session_id: str) -> dict | None:
         "models": models,
         "files": files,
     }
+
+
+# --- DCF input bundle (server-side; host records only user-stated values) ---
+
+REQUIRED_DCF_FIELDS = [
+    "base_revenue",
+    "revenue_growth",
+    "ebitda_margin",
+    "tax_rate",
+    "capex_pct",
+    "nwc_pct",
+    "wacc",
+    "terminal_growth",
+    "projection_years",
+]
+
+OPTIONAL_DCF_FIELDS = ["net_debt", "shares_outstanding", "company_name"]
+
+ALL_DCF_FIELDS = REQUIRED_DCF_FIELDS + OPTIONAL_DCF_FIELDS
+
+
+def _inputs_path(session_id: str) -> Path:
+    return _session_dir(session_id) / "inputs.json"
+
+
+def load_input_bundle(session_id: str) -> dict:
+    path = _inputs_path(session_id)
+    if not path.exists():
+        return {"values": {}, "updated_at": None}
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def merge_model_inputs(session_id: str, values: dict) -> dict:
+    """Merge user-stated values. Ignores unknown keys."""
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+
+    bundle = load_input_bundle(session_id)
+    current = dict(bundle.get("values") or {})
+    for key, val in values.items():
+        if key in ALL_DCF_FIELDS and val is not None:
+            current[key] = val
+
+    record = {"values": current, "updated_at": _utc_now()}
+    _inputs_path(session_id).write_text(json.dumps(record, indent=2), encoding="utf-8")
+    return summarize_input_bundle(session_id)
+
+
+def summarize_input_bundle(session_id: str) -> dict:
+    bundle = load_input_bundle(session_id)
+    values = bundle.get("values") or {}
+    missing = [f for f in REQUIRED_DCF_FIELDS if f not in values]
+    return {
+        "session_id": session_id,
+        "filled": {k: values[k] for k in ALL_DCF_FIELDS if k in values},
+        "missing_required": missing,
+        "ready": len(missing) == 0,
+        "updated_at": bundle.get("updated_at"),
+    }
+
+
+def build_dcf_inputs_from_bundle(session_id: str) -> DcfInputs:
+    summary = summarize_input_bundle(session_id)
+    if not summary["ready"]:
+        missing = ", ".join(summary["missing_required"])
+        raise ValueError(f"Missing required inputs: {missing}")
+
+    from engine.dcf import DcfInputs
+
+    values = summary["filled"]
+    return DcfInputs(
+        base_revenue=values["base_revenue"],
+        revenue_growth=values["revenue_growth"],
+        ebitda_margin=values["ebitda_margin"],
+        tax_rate=values["tax_rate"],
+        capex_pct=values["capex_pct"],
+        nwc_pct=values["nwc_pct"],
+        wacc=values["wacc"],
+        terminal_growth=values["terminal_growth"],
+        projection_years=values["projection_years"],
+        net_debt=values.get("net_debt"),
+        shares_outstanding=values.get("shares_outstanding"),
+    )
+
+
+def company_name_from_bundle(session_id: str) -> str | None:
+    values = load_input_bundle(session_id).get("values") or {}
+    name = values.get("company_name")
+    return str(name).strip() if name else None

@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--bg-app)] px-4">
@@ -8,16 +10,12 @@ export default function HomePage() {
           no signup required.
         </p>
 
-        <ol className="mt-6 list-decimal space-y-2 pl-5 text-sm text-gray-700">
-          <li>
-            Add the MCP server to Cursor:{" "}
-            <code className="rounded bg-gray-100 px-1 text-xs">
-              http://localhost:8080/mcp
-            </code>
-          </li>
-          <li>Ask Cursor to call <strong>start_session</strong> — it gives you a private link</li>
-          <li>Open that link and keep chatting — your model appears on the dashboard</li>
-        </ol>
+        <Link
+          to="/setup"
+          className="mt-6 flex w-full items-center justify-center rounded-xl bg-gray-900 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-gray-800"
+        >
+          Set up in 1 minute →
+        </Link>
 
         <p className="mt-6 text-xs text-gray-400">
           Demo mode: security is the unguessable session URL (like a Google Docs link).

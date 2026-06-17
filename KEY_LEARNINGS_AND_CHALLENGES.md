@@ -79,7 +79,7 @@ Newest first. Add a row when something interview-worthy happens.
 |------|------|---------|
 | 2026-06-17 | Decision | Anonymous sessions: UUID folder per user, no login; security = unguessable URL (demo). |
 | 2026-06-17 | Decision | HTTP MCP from day one (`http://localhost:8080/mcp`); Cursor uses `url` not stdio — same pattern deploys to Render/GCP. |
-| 2026-06-17 | Feature | Phase 1 implemented: `start_session` + `run_dcf`, session store, FastAPI, React `/s/:sessionId`. |
+| 2026-06-17 | Decision | Three-tool workflow + server input bundle: set_model_inputs before run_dcf; server rejects incomplete builds. |
 | 2026-06-17 | Decision | MCP-first fresh start; one `run_dcf` tool; manual inputs Phase 1; JSON store for cross-process sharing. |
 | 2026-06-17 | Decision | Local stdio MCP now; streamable-http later for Render/GCP — same tool handlers. |
 | 2026-06-17 | Doc | Initial plan, learnings doc, and cursor rule created. |

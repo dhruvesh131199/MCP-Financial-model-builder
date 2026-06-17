@@ -8,7 +8,7 @@ alwaysApply: true
 ## Principles
 
 - Host LLM (Cursor/Claude) orchestrates; **Python computes all financial math**.
-- Phase 1: `start_session` + `run_dcf`, anonymous session folders, no Groq, no `/chat` endpoint.
+- Phase 1: `start_session` + `set_model_inputs` + `run_dcf`, anonymous session folders, no Groq, no `/chat` endpoint.
 - MCP runs over **HTTP** (`http://localhost:8080/mcp`) — Cursor config uses `url`, not stdio.
 - Each user gets `data/sessions/{uuid}/` — dashboard at `http://localhost:5173/s/{uuid}`.
 

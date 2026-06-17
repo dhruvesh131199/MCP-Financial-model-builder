@@ -1,7 +1,0 @@
-{
-  "mcpServers": {
-    "financial-models": {
-      "url": "http://localhost:8080/mcp"
-    }
-  }
-}

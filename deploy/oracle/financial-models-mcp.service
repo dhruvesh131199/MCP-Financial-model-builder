@@ -1,0 +1,15 @@
+[Unit]
+Description=Financial Model Builder MCP server
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/financial-models/backend
+EnvironmentFile=/opt/financial-models/backend/.env
+ExecStart=/opt/financial-models/backend/.venv/bin/python mcp/server.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
