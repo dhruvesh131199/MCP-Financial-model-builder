@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { fetchSessionWorkspace } from "../api";
+import { fetchSessionWorkspace, API_BASE } from "../api";
 import DashboardPanel from "../components/DashboardPanel";
 import type { DashboardSelection, DcfModelEntry } from "../types";
 
@@ -73,7 +73,7 @@ export default function SessionPage() {
       <div className="min-h-0 flex-1">
         {error && (
           <div className="m-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            Cannot reach API at localhost:8000 — is the backend running?
+            Cannot reach API at {API_BASE} — is the backend running?
           </div>
         )}
 

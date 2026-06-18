@@ -1,6 +1,6 @@
 import type { DcfResult, ModelRecord, Workspace } from "./types";
 
-const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export async function fetchSessionWorkspace(
   sessionId: string,
