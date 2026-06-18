@@ -1,12 +1,12 @@
 import { PUBLIC_APP_URL, PUBLIC_MCP_URL } from "../../../config/publicUrls";
 import SetupImage from "../SetupImage";
 
-export default function ClaudeMacGuide() {
+export default function ClaudeGuide() {
   return (
     <div className="space-y-8">
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
         <strong>About 1 minute</strong> — add a connector in Settings, restart Claude, and
-        you&apos;re ready to go.
+        you&apos;re ready. Same steps on Mac and Windows.
       </div>
 
       <ol className="space-y-8">
@@ -31,7 +31,7 @@ export default function ClaudeMacGuide() {
             </div>
           </div>
           <SetupImage
-            src="/setup/claude-mac/step-1-settings.png"
+            src="/setup/claude/step-1-settings.png"
             alt="Claude Desktop Settings with Connectors and a custom connector URL"
             caption="Settings → Connectors → add custom connector"
           />
@@ -45,15 +45,13 @@ export default function ClaudeMacGuide() {
             <div className="min-w-0 space-y-2">
               <h3 className="font-medium text-gray-900">Restart Claude</h3>
               <p className="text-sm text-gray-600">
-                Fully quit Claude with <kbd className="rounded border px-1">Cmd</kbd> +{" "}
-                <kbd className="rounded border px-1">Q</kbd>, then open it again. Closing the
-                window isn&apos;t enough — you need a full restart for the connector to load.
+                Fully quit and reopen Claude — closing the window isn&apos;t enough.
               </p>
             </div>
           </div>
           <SetupImage
-            src="/setup/claude-mac/step-2-restart.png"
-            alt="Quitting Claude Desktop from the menu bar"
+            src="/setup/claude/step-2-restart.png"
+            alt="Quitting Claude Desktop"
             caption="Quit Claude completely, then reopen"
           />
         </li>
@@ -72,7 +70,7 @@ export default function ClaudeMacGuide() {
             </div>
           </div>
           <SetupImage
-            src="/setup/claude-mac/step-3-connectors.png"
+            src="/setup/claude/step-3-connectors.png"
             alt="Claude chat plus menu showing Connectors and Financial Models"
             caption="+ → Connectors → Financial Models"
           />
@@ -86,14 +84,13 @@ export default function ClaudeMacGuide() {
             <div className="min-w-0 space-y-2">
               <h3 className="font-medium text-gray-900">Get your private dashboard</h3>
               <p className="text-sm text-gray-600">
-                Ask Claude to start a session. You&apos;ll get a private link on our dashboard —
-                open it and keep chatting. Models show up as you build them.
+                Ask Claude to start a session. Open the link it gives you and keep chatting.
               </p>
               <blockquote className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-sidebar)] px-4 py-3 text-sm italic text-gray-700">
                 Call start_session and give me my dashboard link.
               </blockquote>
               <p className="text-xs text-gray-500">
-                Your dashboard lives at{" "}
+                Dashboard:{" "}
                 <a
                   href={PUBLIC_APP_URL}
                   className="font-medium text-gray-700 underline"
@@ -102,20 +99,11 @@ export default function ClaudeMacGuide() {
                 >
                   {PUBLIC_APP_URL}
                 </a>
-                . Setup guide:{" "}
-                <a
-                  href={`${PUBLIC_APP_URL}/setup`}
-                  className="font-medium text-gray-700 underline"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  /setup
-                </a>
               </p>
             </div>
           </div>
           <SetupImage
-            src="/setup/claude-mac/step-4-dashboard.png"
+            src="/setup/claude/step-4-dashboard.png"
             alt="Browser dashboard showing a DCF model after chatting with Claude"
             caption="Your private dashboard link"
           />

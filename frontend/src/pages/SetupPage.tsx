@@ -1,17 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import SegmentedToggle from "../components/setup/SegmentedToggle";
-import ClaudeMacGuide from "../components/setup/guides/ClaudeMacGuide";
-import PlaceholderGuide from "../components/setup/guides/PlaceholderGuide";
+import ClaudeGuide from "../components/setup/guides/ClaudeGuide";
+import CursorGuide from "../components/setup/guides/CursorGuide";
 
-type OsChoice = "mac" | "windows";
 type ClientChoice = "claude" | "cursor";
 
 export default function SetupPage() {
-  const [os, setOs] = useState<OsChoice>("mac");
-  const [client, setClient] = useState<ClientChoice>("claude");
-
-  const showClaudeMac = os === "mac" && client === "claude";
+  const [client, setClient] = useState<ClientChoice>("cursor");
 
   return (
     <div className="min-h-screen bg-[var(--bg-app)] px-4 py-10">
@@ -26,26 +22,17 @@ export default function SetupPage() {
         <header className="mt-4">
           <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Set up in 1 minute</h1>
           <p className="mt-2 text-gray-600">
-            Add a connector in Claude Settings, restart the app, and start building DCF models on
-            your own private dashboard.
+            Add our MCP server to Cursor or Claude, restart once, and start building DCF models on
+            your private dashboard.
           </p>
         </header>
 
-        <div className="mt-8 flex flex-wrap gap-6">
-          <SegmentedToggle
-            label="Your system"
-            options={[
-              { value: "mac", label: "Mac" },
-              { value: "windows", label: "Windows" },
-            ]}
-            value={os}
-            onChange={setOs}
-          />
+        <div className="mt-8">
           <SegmentedToggle
             label="Your assistant"
             options={[
-              { value: "claude", label: "Claude" },
               { value: "cursor", label: "Cursor" },
+              { value: "claude", label: "Claude" },
             ]}
             value={client}
             onChange={setClient}
@@ -58,15 +45,9 @@ export default function SetupPage() {
         >
           <h2 className="mb-6 text-lg font-semibold text-gray-900">
             {client === "claude" ? "Claude Desktop" : "Cursor"}
-            <span className="font-normal text-gray-400"> · </span>
-            {os === "mac" ? "macOS" : "Windows"}
           </h2>
 
-          {showClaudeMac ? (
-            <ClaudeMacGuide />
-          ) : (
-            <PlaceholderGuide os={os} client={client} />
-          )}
+          {client === "cursor" ? <CursorGuide /> : <ClaudeGuide />}
         </section>
       </div>
     </div>
