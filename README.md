@@ -92,19 +92,26 @@ Copy `backend/.env.example` to `backend/.env`:
 | `MCP_HOST` | `0.0.0.0` | MCP server bind address |
 | `MCP_PORT` | `8080` | MCP server port |
 
-## Deploy (Render / GCP)
+## Deploy (production)
 
-Same URLs pattern, just swap localhost for your domain:
+| Piece | Host |
+|-------|------|
+| Frontend (React) | [Render](https://render.com) static site — see `render.yaml` |
+| API + MCP | AWS EC2 — **[deploy/aws/README.md](deploy/aws/README.md)** |
+
+Local dev: `./scripts/dev.sh` (see Quick start below).
+
+### Legacy / alternatives
+
+Swap `localhost` for public domains when deployed:
 
 | Local | Deployed |
 |-------|----------|
-| `http://localhost:8080/mcp` | `https://mcp.yourapp.com/mcp` |
-| `http://localhost:8000` | `https://api.yourapp.com` |
-| `http://localhost:5173/s/{id}` | `https://app.yourapp.com/s/{id}` |
+| `http://localhost:8080/mcp` | `https://mcp.yourdomain.com/mcp` |
+| `http://localhost:8000` | `https://api.yourdomain.com` |
+| `http://localhost:5173/s/{id}` | `https://your-app.onrender.com/s/{id}` |
 
-Set `VIEW_BASE_URL=https://app.yourapp.com` on the MCP server.
-
-Users add your public MCP URL to Cursor — no Python install needed.
+Set `VIEW_BASE_URL` on the MCP server to your Render app URL.
 
 ## Tests
 
@@ -114,5 +121,6 @@ cd backend && source .venv/bin/activate && python -m pytest tests/ -v
 
 ## Project docs
 
+- [deploy/aws/README.md](deploy/aws/README.md) — production EC2 + Render guide
 - [PLAN.md](PLAN.md) — living plan
 - [KEY_LEARNINGS_AND_CHALLENGES.md](KEY_LEARNINGS_AND_CHALLENGES.md) — decisions & interview notes

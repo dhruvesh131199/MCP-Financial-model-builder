@@ -1,0 +1,10 @@
+# DuckDNS example (replace with your subdomains).
+# Both A records must point at your EC2 public IP.
+
+myfmdc-api.duckdns.org {
+	reverse_proxy localhost:8000
+}
+
+myfmdc-mcp.duckdns.org {
+	reverse_proxy localhost:8080
+}
