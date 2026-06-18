@@ -43,7 +43,7 @@ You did **not** upload a zip file to AWS. You:
 
 | Role | Example (this project) |
 |------|-------------------------|
-| Frontend | `https://financial-model-dashboard.onrender.com` |
+| Frontend | `https://mcp-financial-model-builder.onrender.com` |
 | API | `https://myfmdc-api.duckdns.org` |
 | MCP | `https://myfmdc-mcp.duckdns.org/mcp` |
 | EC2 public IP | From AWS console → Instances → Public IPv4 |
@@ -221,14 +221,29 @@ For hacking on your laptop — no EC2 needed:
 
 ---
 
+## Auto-deploy on git push?
+
+| Host | Auto-deploy? |
+|------|----------------|
+| **Render** (frontend) | **Yes** — push to `main` triggers a new build (if GitHub auto-deploy is enabled in Render dashboard). |
+| **EC2** (API + MCP) | **No** — run `bash ~/financial-models/deploy/aws/update-ec2.sh` after SSH in. |
+
+See **[DEPLOY.md](../../DEPLOY.md)** at repo root for the big picture.
+
 ## Pull code updates on EC2
+
+```bash
+bash ~/financial-models/deploy/aws/update-ec2.sh
+```
+
+Or manually:
 
 ```bash
 cd ~/financial-models
 git pull
 source backend/.venv/bin/activate
 pip install -r backend/requirements.txt
-# Restart API + MCP (manual Ctrl+C or systemctl restart)
+sudo systemctl restart financial-models-api financial-models-mcp
 ```
 
 ---
@@ -267,6 +282,7 @@ curl -s http://checkip.amazonaws.com
 |------|---------|
 | `README.md` | This guide |
 | `Caddyfile.example` | HTTPS config template |
-| `install-systemd.sh` | Optional auto-start for API + MCP |
+| `install-systemd.sh` | One-time: API + MCP run in background |
+| `update-ec2.sh` | After `git push`: pull + restart on EC2 |
 
 Oracle deploy (alternative backend): `deploy/oracle/`

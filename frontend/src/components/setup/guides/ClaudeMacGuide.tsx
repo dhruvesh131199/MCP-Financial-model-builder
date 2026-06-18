@@ -1,4 +1,4 @@
-import { PUBLIC_MCP_URL } from "../../../config/publicUrls";
+import { PUBLIC_APP_URL, PUBLIC_MCP_URL } from "../../../config/publicUrls";
 import SetupImage from "../SetupImage";
 
 export default function ClaudeMacGuide() {
@@ -86,12 +86,32 @@ export default function ClaudeMacGuide() {
             <div className="min-w-0 space-y-2">
               <h3 className="font-medium text-gray-900">Get your private dashboard</h3>
               <p className="text-sm text-gray-600">
-                Ask Claude to start a session. You&apos;ll get a link only you have — open it and
-                keep chatting. Models show up on the dashboard as you build them.
+                Ask Claude to start a session. You&apos;ll get a private link on our dashboard —
+                open it and keep chatting. Models show up as you build them.
               </p>
               <blockquote className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-sidebar)] px-4 py-3 text-sm italic text-gray-700">
                 Call start_session and give me my dashboard link.
               </blockquote>
+              <p className="text-xs text-gray-500">
+                Your dashboard lives at{" "}
+                <a
+                  href={PUBLIC_APP_URL}
+                  className="font-medium text-gray-700 underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {PUBLIC_APP_URL}
+                </a>
+                . Setup guide:{" "}
+                <a
+                  href={`${PUBLIC_APP_URL}/setup`}
+                  className="font-medium text-gray-700 underline"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  /setup
+                </a>
+              </p>
             </div>
           </div>
           <SetupImage

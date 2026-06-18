@@ -77,7 +77,8 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
-| 2026-06-18 | Doc | EC2 deploy runbook: `deploy/aws/README.md` (Render frontend + DuckDNS + Caddy on AWS). |
+| 2026-06-18 | Deploy | Production live: Render `mcp-financial-model-builder.onrender.com` + EC2 DuckDNS (`myfmdc-api/mcp`) + Caddy/systemd. Render auto-deploys; EC2 manual `update-ec2.sh`. |
+| 2026-06-18 | Doc | EC2 deploy runbook: `DEPLOY.md`, `deploy/aws/README.md`. |
 | 2026-06-17 | Decision | Deploy split: Render **Static Site** (frontend, no cold start) + Oracle Always Free VM (API + MCP always on). Not Render web service for backend. |
 | 2026-06-17 | Decision | Anonymous sessions: UUID folder per user, no login; security = unguessable URL (demo). |
 | 2026-06-17 | Decision | HTTP MCP from day one (`http://localhost:8080/mcp`); Cursor uses `url` not stdio — same pattern deploys to Render/GCP. |

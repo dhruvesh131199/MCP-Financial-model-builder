@@ -94,10 +94,12 @@ Copy `backend/.env.example` to `backend/.env`:
 
 ## Deploy (production)
 
-| Piece | Host |
-|-------|------|
-| Frontend (React) | [Render](https://render.com) static site — see `render.yaml` |
-| API + MCP | AWS EC2 — **[deploy/aws/README.md](deploy/aws/README.md)** |
+**Live app:** https://mcp-financial-model-builder.onrender.com · **Setup:** [/setup](https://mcp-financial-model-builder.onrender.com/setup)
+
+| Piece | Host | Auto-deploy on `git push`? |
+|-------|------|----------------------------|
+| Frontend (React) | [Render](https://render.com) — `render.yaml` | **Yes** |
+| API + MCP | AWS EC2 — **[DEPLOY.md](DEPLOY.md)** · **[deploy/aws/README.md](deploy/aws/README.md)** | **No** — run `deploy/aws/update-ec2.sh` on server |
 
 Local dev: `./scripts/dev.sh` (see Quick start below).
 

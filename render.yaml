@@ -1,5 +1,5 @@
 # Render Blueprint — static frontend only.
-# Backend (API + MCP) runs on Oracle Always Free VM — see deploy/oracle/ and .cursor/skills/deploy-render-oracle/
+# Backend (API + MCP) runs on AWS EC2 — see DEPLOY.md and deploy/aws/
 
 services:
   - type: web
