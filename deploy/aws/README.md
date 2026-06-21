@@ -75,9 +75,15 @@ source ~/financial-models/backend/.venv/bin/activate
 VIEW_BASE_URL=https://YOUR-APP.onrender.com
 MCP_HOST=0.0.0.0
 MCP_PORT=8080
+SEC_USER_AGENT=YourAppName you@yourdomain.com
+SESSION_TTL_SECONDS=3600
 ```
 
 `VIEW_BASE_URL` is the link Claude returns from `start_session`. Must match Render exactly (no trailing slash).
+
+`SEC_USER_AGENT` is required by SEC EDGAR (descriptive app name + contact email) for `fetch_sec_financials`.
+
+`SESSION_TTL_SECONDS=3600` deletes each anonymous session folder after one hour — no long-lived user data on disk.
 
 ---
 

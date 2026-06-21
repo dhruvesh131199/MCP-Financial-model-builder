@@ -12,10 +12,10 @@ MCP server (HTTP) + dashboard where **Cursor/Claude orchestrates** and **Python 
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| **1** | In progress | HTTP MCP, anonymous sessions, DCF tool, session dashboard |
-| 2 | Later | SEC auto-fetch for facts |
-| 3 | Later | 20/80 dashboard (Files + Models sidebar) |
-| 4 | Later | Excel export, production deploy polish |
+| **1** | Done | HTTP MCP, anonymous sessions, DCF tools, session dashboard |
+| **2** | In progress | SEC EDGAR fetch, Files sidebar, 1-hour session TTL |
+| 3 | Later | Model-agnostic input bundles from SEC |
+| 4 | Later | Excel export polish, production abuse prevention |
 
 ---
 
@@ -95,6 +95,6 @@ Set `VIEW_BASE_URL` env var on MCP server.
 
 | Phase | Focus |
 |-------|-------|
-| **2** | SEC auto-fetch; host asks only assumptions |
-| **3** | 20/80 sidebar (Files + Models) |
+| **2** | SEC EDGAR fetch via MCP; Files + Models sidebar; 1-hour session TTL on AWS |
+| **3** | Model-agnostic variable bundles (SEC → inputs per model type) |
 | **4** | Excel export; optional API keys for abuse prevention |

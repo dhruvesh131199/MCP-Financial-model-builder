@@ -2,7 +2,8 @@
 
 MCP server + dashboard for building DCF models. Chat in **Cursor or Claude**; Python computes; each user gets a **private workspace link** (no signup).
 
-**Phase 1:** HTTP MCP on localhost, anonymous sessions, manual DCF inputs.
+**Phase 1:** HTTP MCP on localhost, anonymous sessions, manual DCF inputs.  
+**Phase 2:** SEC EDGAR financials (`fetch_sec_financials`), Files sidebar, 1-hour session TTL.
 
 ## Architecture
 
@@ -52,7 +53,7 @@ Restart Cursor after adding. Check **Settings → MCP** — `financial-models` s
 
 3. Add the block from [`claude_desktop_config.example.json`](claude_desktop_config.example.json) in this repo (merge into existing `mcpServers` if you already have other servers).
 4. **Fully quit** Claude Desktop (Cmd+Q) and reopen — not just close the window.
-5. Look for the tools icon in chat; you should see `start_session` and `run_dcf`.
+5. Look for the tools icon in chat; you should see `start_session`, `set_model_inputs`, `run_dcf`, `resolve_ticker`, and `fetch_sec_financials`.
 
 
 ### Try it
@@ -68,6 +69,16 @@ Example after you provide numbers:
 > Revenue $100M, 10% growth for 5 years, EBITDA margin 25%, tax 21%, CapEx 3%, NWC 2%, WACC 10%, terminal growth 2%.
 
 The model appears on your dashboard within a few seconds.
+
+### SEC financials
+
+> Fetch 2023 reports for Apple.
+
+or
+
+> Pull Tesla financials for the last 5 years — annual and quarterly.
+
+The host calls `fetch_sec_financials`; reports appear in the **Files** sidebar on your dashboard. Repeat requests with the same scope do not create duplicate entries. Session data is deleted after one hour (`SESSION_TTL_SECONDS`, default 3600).
 
 ## Manual start (3 terminals)
 

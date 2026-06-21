@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +17,8 @@ SESSION_ID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
     re.IGNORECASE,
 )
+
+SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
 
 
 def _utc_now() -> str:
@@ -140,6 +144,74 @@ def _load_file_entries(session_dir: Path) -> list[dict]:
     return entries
 
 
+def find_file_by_dedup_key(session_id: str, dedup_key: str) -> dict | None:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        return None
+    for entry in _load_file_entries(session_dir):
+        if entry.get("dedup_key") == dedup_key:
+            return entry
+    return None
+
+
+def save_file_entry(session_id: str, entry: dict) -> dict:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+
+    files_dir = session_dir / "files"
+    files_dir.mkdir(exist_ok=True)
+    file_id = entry.get("id") or str(uuid.uuid4())
+    record = {**entry, "id": file_id}
+    if "created_at" not in record:
+        record["created_at"] = _utc_now()
+    (files_dir / f"{file_id}.json").write_text(
+        json.dumps(record, indent=2), encoding="utf-8"
+    )
+    return record
+
+
+def _workspace_updated_at(models: list[dict], files: list[dict]) -> str | None:
+    timestamps = [
+        *(m.get("created_at") for m in models if m.get("created_at")),
+        *(f.get("created_at") for f in files if f.get("created_at")),
+    ]
+    return max(timestamps) if timestamps else None
+
+
+def _session_created_at(session_dir: Path) -> datetime | None:
+    meta_path = session_dir / "meta.json"
+    if not meta_path.exists():
+        return None
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        raw = meta.get("created_at")
+        if not raw:
+            return None
+        return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except (json.JSONDecodeError, ValueError, TypeError):
+        return None
+
+
+def cleanup_expired_sessions() -> int:
+    """Delete session folders older than SESSION_TTL_SECONDS. Returns count removed."""
+    if not SESSIONS_DIR.exists():
+        return 0
+    now = datetime.now(timezone.utc)
+    removed = 0
+    for path in SESSIONS_DIR.iterdir():
+        if not path.is_dir():
+            continue
+        created = _session_created_at(path)
+        if created is None:
+            continue
+        age_seconds = (now - created).total_seconds()
+        if age_seconds > SESSION_TTL_SECONDS:
+            shutil.rmtree(path, ignore_errors=True)
+            removed += 1
+    return removed
+
+
 def load_workspace(session_id: str) -> dict | None:
     if not session_exists(session_id):
         return None
@@ -148,9 +220,7 @@ def load_workspace(session_id: str) -> dict | None:
     _migrate_legacy_model(session_dir)
     models = _load_model_entries(session_dir)
     files = _load_file_entries(session_dir)
-    updated_at = None
-    if models:
-        updated_at = models[-1].get("created_at")
+    updated_at = _workspace_updated_at(models, files)
     return {
         "session_id": session_id,
         "updated_at": updated_at,

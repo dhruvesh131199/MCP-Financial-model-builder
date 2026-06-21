@@ -1,16 +1,41 @@
 """Read-only API for session dashboards."""
 
+import asyncio
 import os
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from store import load_workspace, session_exists
+from store import cleanup_expired_sessions, load_workspace, session_exists
 
 load_dotenv()
 
-app = FastAPI(title="Financial Model Builder API")
+CLEANUP_INTERVAL_SECONDS = 600
+
+
+async def _session_cleanup_loop() -> None:
+    while True:
+        await asyncio.sleep(CLEANUP_INTERVAL_SECONDS)
+        cleanup_expired_sessions()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    cleanup_expired_sessions()
+    task = asyncio.create_task(_session_cleanup_loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+app = FastAPI(title="Financial Model Builder API", lifespan=lifespan)
 
 
 def _cors_origins() -> list[str]:
@@ -37,6 +62,7 @@ def health() -> dict[str, str]:
 
 @app.get("/api/sessions/{session_id}")
 def get_session_workspace(session_id: str) -> dict:
+    cleanup_expired_sessions()
     if not session_exists(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
     workspace = load_workspace(session_id)
@@ -45,7 +71,6 @@ def get_session_workspace(session_id: str) -> dict:
     return workspace
 
 
-# Backward-compatible alias
 @app.get("/api/sessions/{session_id}/model")
 def get_session_model_legacy(session_id: str) -> dict:
     workspace = get_session_workspace(session_id)

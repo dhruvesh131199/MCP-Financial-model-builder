@@ -1,3 +1,41 @@
+export interface LineItem {
+  key: string;
+  label: string;
+  value: number;
+  unit: string;
+}
+
+export interface StatementPeriod {
+  fiscal_year: number;
+  fiscal_period: string;
+  filed?: string | null;
+  form?: string | null;
+  line_items: LineItem[];
+}
+
+export interface StatementSlice {
+  annual: StatementPeriod[];
+  quarterly: StatementPeriod[];
+}
+
+export interface FinancialStatements {
+  ticker: string;
+  cik: string;
+  entity_name: string;
+  fetched_at: string;
+  statements: Record<string, StatementSlice>;
+  fetch_scope?: string[];
+}
+
+export interface FileEntry {
+  id: string;
+  name: string;
+  type: "financials";
+  dedup_key?: string;
+  created_at: string;
+  data: FinancialStatements;
+}
+
 export interface DcfYearRow {
   year: number;
   revenue: number;
@@ -43,11 +81,12 @@ export interface Workspace {
   session_id: string;
   updated_at: string | null;
   models: DcfModelEntry[];
-  files: never[];
+  files: FileEntry[];
 }
 
 export type DashboardSelection =
   | { kind: "none" }
+  | { kind: "file"; id: string }
   | { kind: "model"; id: string };
 
 export interface ModelRecord {

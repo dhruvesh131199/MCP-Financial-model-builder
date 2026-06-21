@@ -1,14 +1,19 @@
 """Tests for session-scoped store."""
 
+import json
+
 import pytest
 
 import store as store_module
 from store import (
     build_dcf_inputs_from_bundle,
+    cleanup_expired_sessions,
     create_session,
+    find_file_by_dedup_key,
     load_workspace,
     merge_model_inputs,
     save_dcf_model,
+    save_file_entry,
     session_exists,
     summarize_input_bundle,
 )
@@ -97,3 +102,54 @@ def test_build_dcf_inputs_when_ready():
     inputs = build_dcf_inputs_from_bundle(sid)
     assert inputs.base_revenue == 100.0
     assert inputs.wacc == 0.10
+
+
+def test_save_file_and_dedup():
+    sid = create_session()
+    entry = save_file_entry(
+        sid,
+        {
+            "name": "AAPL — FY2023",
+            "type": "financials",
+            "dedup_key": "AAPL|years=2023|annual+quarterly|income+balance+cashflow",
+            "data": {"ticker": "AAPL"},
+        },
+    )
+    assert entry["id"]
+    found = find_file_by_dedup_key(sid, entry["dedup_key"])
+    assert found is not None
+    assert found["id"] == entry["id"]
+
+
+def test_workspace_updated_at_includes_files():
+    sid = create_session()
+    save_file_entry(
+        sid,
+        {
+            "name": "TEST",
+            "type": "financials",
+            "dedup_key": "TEST|max_years=5|annual|income",
+            "data": {},
+        },
+    )
+    ws = load_workspace(sid)
+    assert ws is not None
+    assert ws["updated_at"] is not None
+    assert len(ws["files"]) == 1
+
+
+def test_cleanup_expired_sessions(monkeypatch, tmp_path):
+    monkeypatch.setattr(store_module, "SESSIONS_DIR", tmp_path / "sessions")
+    monkeypatch.setattr(store_module, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(store_module, "SESSION_TTL_SECONDS", 1)
+
+    sid = create_session()
+    session_dir = store_module.SESSIONS_DIR / sid
+    meta = json.loads((session_dir / "meta.json").read_text(encoding="utf-8"))
+    old = "2020-01-01T00:00:00+00:00"
+    meta["created_at"] = old
+    (session_dir / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+
+    removed = cleanup_expired_sessions()
+    assert removed == 1
+    assert not session_exists(sid)

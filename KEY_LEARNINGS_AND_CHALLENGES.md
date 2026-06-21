@@ -77,6 +77,9 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-06-18 | Feature | Phase 2 SEC: `resolve_ticker` + `fetch_sec_financials` MCP tools; XBRL normalize; session-scoped files with dedup; 1h TTL; StatementViewer in dashboard. |
+| 2026-06-18 | Decision | SEC data source: EDGAR `companyfacts` API (not Yahoo); session folders only — no global ticker cache on disk. |
+| 2026-06-18 | Decision | File dedup by scope key (`ticker|years|periods|statements`) — repeat fetch returns existing sidebar entry. |
 | 2026-06-18 | Deploy | Production live: Render `mcp-financial-model-builder.onrender.com` + EC2 DuckDNS (`myfmdc-api/mcp`) + Caddy/systemd. Render auto-deploys; EC2 manual `update-ec2.sh`. |
 | 2026-06-18 | Doc | EC2 deploy runbook: `DEPLOY.md`, `deploy/aws/README.md`. |
 | 2026-06-17 | Decision | Deploy split: Render **Static Site** (frontend, no cold start) + Oracle Always Free VM (API + MCP always on). Not Render web service for backend. |
@@ -91,9 +94,6 @@ Newest first. Add a row when something interview-worthy happens.
 
 ## Not yet done (honest gaps)
 
-- SEC data fetching (Phase 2)
-- Session links and multi-user isolation
-- 20/80 dashboard with Files + Models sidebar
-- Excel export with formulas
+- Model-agnostic SEC → input prefill (per model type)
+- Filing HTML/PDF narrative viewer
 - Auth for public MCP endpoint
-- Persistent store beyond single latest model

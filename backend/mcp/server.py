@@ -15,13 +15,24 @@ from dotenv import load_dotenv
 from mcp.server.fastmcp import Context, FastMCP
 
 from engine.dcf import compute_dcf
+from ingest.normalize import FinancialStatements
+from services.sec_client import resolve_ticker as sec_resolve_ticker
+from services.sec_financials import (
+    build_dedup_key,
+    build_file_name,
+    fetch_sec_financials as do_fetch_sec_financials,
+    financials_summary,
+)
 from session_binding import resolve_workspace_session
 from store import (
     REQUIRED_DCF_FIELDS,
     build_dcf_inputs_from_bundle,
+    cleanup_expired_sessions,
     company_name_from_bundle,
+    find_file_by_dedup_key,
     merge_model_inputs,
     save_dcf_model,
+    save_file_entry,
     summarize_input_bundle,
 )
 
@@ -32,27 +43,34 @@ MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8080"))
 
 INSTRUCTIONS = """
-You help users build DCF (Discounted Cash Flow) valuation models.
+You help users build DCF (Discounted Cash Flow) valuation models and fetch SEC financials.
 
 MANDATORY WORKFLOW — follow in order:
-1. start_session() — ALWAYS call this first when the user wants to build a model.
+1. start_session() — ALWAYS call this first for any workspace task (DCF or SEC fetch).
    Immediately share the view_url with the user.
-2. Ask for missing assumptions one at a time or in a short list.
-3. set_model_inputs(values={{...}}) — ONLY include fields the user explicitly stated
-   in this conversation. Never guess or use industry defaults.
-4. If set_model_inputs returns ready=false, ask for missing_required fields.
-5. run_dcf() — ONLY when ready=true. Never pass inputs directly to run_dcf.
+2. For DCF: ask for missing assumptions → set_model_inputs(values={{...}}) → run_dcf() when ready=true.
+3. For SEC financials: call fetch_sec_financials when the user asks for filings, financials,
+   or company reports. Use company_name (e.g. "Apple") or ticker (e.g. "AAPL") from the user's words.
+   Optional resolve_ticker when you need to confirm a symbol before fetching.
 
-CRITICAL RULES:
-- NEVER invent numbers (no default WACC, tax rate, growth, margins, etc.).
-- NEVER build a DCF in prose or do arithmetic yourself — use tools only.
+SEC FETCH RULES:
+- fetch_sec_financials is independent of DCF — no DCF inputs required.
+- fiscal_years=[2023] for a specific year; omit and use max_years=5 for "last 5 years".
+- include_annual / include_quarterly default true; set false only if user asks for one period type.
+- statements can filter to income, balance, or cashflow subsets.
+- Never invent tickers — resolve from what the user said.
+
+DCF RULES:
+- set_model_inputs — ONLY include fields the user explicitly stated. Never guess defaults.
 - NEVER call run_dcf until set_model_inputs reports ready=true.
-- After EVERY tool call, show the user their view_url dashboard link.
-- If the user only asks a question about an existing model, answer from tool results;
-  do not recompute unless they ask to change assumptions.
+- NEVER build a DCF in prose or do arithmetic yourself — use tools only.
 
-Required fields: """ + ", ".join(REQUIRED_DCF_FIELDS) + """
-Optional: net_debt, shares_outstanding, company_name
+CRITICAL:
+- After EVERY tool call, show the user their view_url dashboard link.
+- NEVER invent numbers for DCF (no default WACC, tax rate, growth, margins, etc.).
+
+Required DCF fields: """ + ", ".join(REQUIRED_DCF_FIELDS) + """
+Optional DCF: net_debt, shares_outstanding, company_name
 """
 
 mcp = FastMCP(
@@ -75,6 +93,10 @@ def _with_session(session_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _touch_session_writes() -> None:
+    cleanup_expired_sessions()
+
+
 @mcp.tool()
 def start_session(ctx: Context) -> dict:
     """
@@ -83,6 +105,7 @@ def start_session(ctx: Context) -> dict:
     immediately so they can open their private dashboard.
     """
     session_id = resolve_workspace_session(ctx)
+    _touch_session_writes()
     url = _view_url(session_id)
     return {
         "session_id": session_id,
@@ -127,6 +150,7 @@ def set_model_inputs(
         )
 
     try:
+        _touch_session_writes()
         summary = merge_model_inputs(sid, values)
     except KeyError:
         return {"error": "Session not found. Call start_session first."}
@@ -175,6 +199,7 @@ def run_dcf(ctx: Context, session_id: str | None = None) -> dict:
 
     company_name = company_name_from_bundle(sid)
     result = compute_dcf(inputs, company_name=company_name)
+    _touch_session_writes()
     entry = save_dcf_model(sid, result.model_dump())
     url = _view_url(sid)
 
@@ -189,6 +214,152 @@ def run_dcf(ctx: Context, session_id: str | None = None) -> dict:
         "price_per_share": result.price_per_share,
         "message": f"DCF '{entry['name']}' saved. Open {url} to view and download.",
     }
+
+
+@mcp.tool()
+def resolve_ticker(
+    ctx: Context,
+    company_name: str | None = None,
+    ticker: str | None = None,
+    session_id: str | None = None,
+) -> dict:
+    """
+    Resolve a US public company name or ticker symbol to SEC listing metadata.
+    Use when the user says a company name (e.g. "Apple", "Tesla") and you need the ticker.
+    At least one of company_name or ticker is required.
+    """
+    try:
+        sid = resolve_workspace_session(ctx, session_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    result = sec_resolve_ticker(company_name=company_name, ticker=ticker)
+    if "error" in result:
+        return _with_session(sid, result)
+    return _with_session(
+        sid,
+        {
+            **result,
+            "message": (
+                f"Resolved {result['entity_name']} as {result['ticker']} "
+                f"(CIK {result['cik']})."
+            ),
+        },
+    )
+
+
+@mcp.tool()
+def fetch_sec_financials(
+    ctx: Context,
+    company_name: str | None = None,
+    ticker: str | None = None,
+    fiscal_years: list[int] | None = None,
+    max_years: int = 5,
+    include_annual: bool = True,
+    include_quarterly: bool = True,
+    statements: list[str] | None = None,
+    session_id: str | None = None,
+) -> dict:
+    """
+    Fetch official SEC financial statements for a US public company and save to the
+    session Files panel on the dashboard.
+
+    Provide company_name (e.g. "Apple") and/or ticker (e.g. "AAPL").
+    fiscal_years=[2023] for a specific year only; omit for last max_years (default 5).
+    include_annual / include_quarterly control which period types are stored.
+    statements optional: income, balance, cashflow (default all three).
+  """
+    try:
+        sid = resolve_workspace_session(ctx, session_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    if not company_name and not ticker:
+        return _with_session(
+            sid,
+            {"error": "Provide company_name or ticker"},
+        )
+
+    stmt_list = statements or ["income", "balance", "cashflow"]
+    valid_stmts = [s for s in stmt_list if s in ("income", "balance", "cashflow")]
+    if not valid_stmts:
+        valid_stmts = ["income", "balance", "cashflow"]
+
+    resolved = sec_resolve_ticker(company_name=company_name, ticker=ticker)
+    if "error" in resolved:
+        return _with_session(sid, resolved)
+
+    sym = resolved["ticker"]
+    dedup_key = build_dedup_key(
+        sym,
+        fiscal_years=fiscal_years,
+        max_years=max_years,
+        include_annual=include_annual,
+        include_quarterly=include_quarterly,
+        statements=valid_stmts,
+    )
+
+    _touch_session_writes()
+    existing = find_file_by_dedup_key(sid, dedup_key)
+    if existing:
+        summary = financials_summary(
+            FinancialStatements.model_validate(existing["data"])
+        )
+        return _with_session(
+            sid,
+            {
+                **summary,
+                "file_id": existing["id"],
+                "file_name": existing["name"],
+                "deduplicated": True,
+                "message": (
+                    f"Financials already in Files panel as '{existing['name']}'. "
+                    f"Open {_view_url(sid)} to view."
+                ),
+            },
+        )
+
+    try:
+        financials = do_fetch_sec_financials(
+            company_name=company_name,
+            ticker=ticker,
+            fiscal_years=fiscal_years,
+            max_years=max_years,
+            include_annual=include_annual,
+            include_quarterly=include_quarterly,
+            statements=valid_stmts,
+        )
+    except ValueError as exc:
+        return _with_session(sid, {"error": str(exc)})
+
+    file_name = build_file_name(
+        sym,
+        fiscal_years=fiscal_years,
+        max_years=max_years,
+    )
+    entry = save_file_entry(
+        sid,
+        {
+            "name": file_name,
+            "type": "financials",
+            "dedup_key": dedup_key,
+            "data": financials.model_dump(),
+        },
+    )
+    summary = financials_summary(financials)
+    return _with_session(
+        sid,
+        {
+            **summary,
+            "file_id": entry["id"],
+            "file_name": entry["name"],
+            "deduplicated": False,
+            "message": (
+                f"Saved '{entry['name']}' to Files panel. "
+                f"Open {_view_url(sid)} to browse statements."
+            ),
+        },
+    )
 
 
 if __name__ == "__main__":
