@@ -12,9 +12,17 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from dotenv import load_dotenv
+
+load_dotenv(BACKEND_ROOT / ".env")
+
+from ingest.edgar_identity import ensure_edgar_identity
+
+ensure_edgar_identity()
+
 from mcp.server.fastmcp import Context, FastMCP
 
 from engine.dcf import compute_dcf
+from engine.dcf_prefill import dcf_still_required, suggest_dcf_inputs
 from ingest.normalize import FinancialStatements
 from services.sec_client import resolve_ticker as sec_resolve_ticker
 from services.sec_financials import (
@@ -23,6 +31,7 @@ from services.sec_financials import (
     fetch_sec_financials as do_fetch_sec_financials,
     financials_summary,
 )
+from services.comparative import handle_run_comparative_analysis, handle_set_comparative_inputs
 from session_binding import resolve_workspace_session
 from store import (
     REQUIRED_DCF_FIELDS,
@@ -33,44 +42,30 @@ from store import (
     merge_model_inputs,
     save_dcf_model,
     save_file_entry,
+    update_file_entry,
     summarize_input_bundle,
 )
-
-load_dotenv(BACKEND_ROOT / ".env")
 
 VIEW_BASE_URL = os.getenv("VIEW_BASE_URL", "http://localhost:5173").rstrip("/")
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
 MCP_PORT = int(os.getenv("MCP_PORT", "8080"))
 
 INSTRUCTIONS = """
-You help users build DCF (Discounted Cash Flow) valuation models and fetch SEC financials.
+You help users with financial modeling in a private workspace: DCF valuation, SEC financials,
+and peer comparative analysis.
 
-MANDATORY WORKFLOW — follow in order:
-1. start_session() — ALWAYS call this first for any workspace task (DCF or SEC fetch).
-   Immediately share the view_url with the user.
-2. For DCF: ask for missing assumptions → set_model_inputs(values={{...}}) → run_dcf() when ready=true.
-3. For SEC financials: call fetch_sec_financials when the user asks for filings, financials,
-   or company reports. Use company_name (e.g. "Apple") or ticker (e.g. "AAPL") from the user's words.
-   Optional resolve_ticker when you need to confirm a symbol before fetching.
+CAPABILITIES:
+1. DCF — set_model_inputs + run_dcf
+2. SEC filings — fetch_sec_financials (Files panel on dashboard)
+3. Peer comparison — set_comparative_inputs + fetch_sec_financials per company + run_comparative_analysis
 
-SEC FETCH RULES:
-- fetch_sec_financials is independent of DCF — no DCF inputs required.
-- fiscal_years=[2023] for a specific year; omit and use max_years=5 for "last 5 years".
-- include_annual / include_quarterly default true; set false only if user asks for one period type.
-- statements can filter to income, balance, or cashflow subsets.
-- Never invent tickers — resolve from what the user said.
+UNIVERSAL RULES:
+1. start_session() — ALWAYS first for any workspace task. Share view_url after EVERY tool call.
+2. Python computes all math — never calculate valuations or ratios in prose.
+3. Never invent numbers or tickers — use only what the user stated or tools returned.
+4. Always tell the user the next step from the latest tool response message.
 
-DCF RULES:
-- set_model_inputs — ONLY include fields the user explicitly stated. Never guess defaults.
-- NEVER call run_dcf until set_model_inputs reports ready=true.
-- NEVER build a DCF in prose or do arithmetic yourself — use tools only.
-
-CRITICAL:
-- After EVERY tool call, show the user their view_url dashboard link.
-- NEVER invent numbers for DCF (no default WACC, tax rate, growth, margins, etc.).
-
-Required DCF fields: """ + ", ".join(REQUIRED_DCF_FIELDS) + """
-Optional DCF: net_debt, shares_outstanding, company_name
+Workflow details live in each tool's docstring — read the tool you are about to call.
 """
 
 mcp = FastMCP(
@@ -100,9 +95,8 @@ def _touch_session_writes() -> None:
 @mcp.tool()
 def start_session(ctx: Context) -> dict:
     """
-    REQUIRED first step for any new DCF build. Creates or reuses this chat's workspace.
-    Always call this before collecting inputs. Returns view_url — share it with the user
-    immediately so they can open their private dashboard.
+    REQUIRED first step for any workspace task. Creates or reuses this chat's workspace.
+    Returns view_url — share it immediately so the user can open their private dashboard.
     """
     session_id = resolve_workspace_session(ctx)
     _touch_session_writes()
@@ -112,8 +106,8 @@ def start_session(ctx: Context) -> dict:
         "view_url": url,
         "message": (
             f"Workspace ready. Open your dashboard: {url} "
-            "Next: ask the user for DCF assumptions, then call set_model_inputs "
-            "with ONLY values they stated."
+            "What would you like to do — build a DCF, fetch SEC financials, "
+            "or run a peer comparison?"
         ),
     }
 
@@ -127,11 +121,12 @@ def set_model_inputs(
     """
     Record user-stated DCF assumptions on the server. Call after the user provides numbers.
 
-    RULES:
+    DCF RULES:
     - Pass ONLY keys the user explicitly gave you in chat. Do not fill missing fields.
     - Allowed keys: base_revenue, revenue_growth, ebitda_margin, tax_rate, capex_pct,
       nwc_pct, wacc, terminal_growth, projection_years, net_debt, shares_outstanding,
       company_name
+    - Required fields: """ + ", ".join(REQUIRED_DCF_FIELDS) + """
     - Returns missing_required and ready. If ready=false, ask the user for missing fields.
     - Do NOT call run_dcf until ready=true.
     """
@@ -264,10 +259,14 @@ def fetch_sec_financials(
     Fetch official SEC financial statements for a US public company and save to the
     session Files panel on the dashboard.
 
-    Provide company_name (e.g. "Apple") and/or ticker (e.g. "AAPL").
-    fiscal_years=[2023] for a specific year only; omit for last max_years (default 5).
-    include_annual / include_quarterly control which period types are stored.
-    statements optional: income, balance, cashflow (default all three).
+    SEC RULES:
+    - Independent of DCF and comparative — no other inputs required.
+    - For peer comparison: call once per target and each peer so files appear on dashboard.
+    - Provide company_name (e.g. "Apple") and/or ticker (e.g. "AAPL").
+    - fiscal_years=[2023] for a specific year; omit for last max_years (default 5).
+    - include_annual / include_quarterly default true.
+    - statements optional: income, balance, cashflow (default all three).
+    - Returns file_id — link it via set_comparative_inputs(link={{ticker, file_id}}).
   """
     try:
         sid = resolve_workspace_session(ctx, session_id)
@@ -301,23 +300,6 @@ def fetch_sec_financials(
 
     _touch_session_writes()
     existing = find_file_by_dedup_key(sid, dedup_key)
-    if existing:
-        summary = financials_summary(
-            FinancialStatements.model_validate(existing["data"])
-        )
-        return _with_session(
-            sid,
-            {
-                **summary,
-                "file_id": existing["id"],
-                "file_name": existing["name"],
-                "deduplicated": True,
-                "message": (
-                    f"Financials already in Files panel as '{existing['name']}'. "
-                    f"Open {_view_url(sid)} to view."
-                ),
-            },
-        )
 
     try:
         financials = do_fetch_sec_financials(
@@ -332,11 +314,51 @@ def fetch_sec_financials(
     except ValueError as exc:
         return _with_session(sid, {"error": str(exc)})
 
+    dcf_suggested = suggest_dcf_inputs(financials)
+    dcf_prefilled: dict = {}
+    if dcf_suggested:
+        summary_bundle = merge_model_inputs(sid, dcf_suggested)
+        dcf_prefilled = summary_bundle.get("filled") or {}
+
+    dcf_response = {
+        "dcf_prefilled": dcf_prefilled,
+        "dcf_still_required": dcf_still_required(dcf_prefilled),
+    }
+
     file_name = build_file_name(
         sym,
         fiscal_years=fiscal_years,
         max_years=max_years,
     )
+
+    if existing:
+        entry = update_file_entry(
+            sid,
+            existing["id"],
+            {
+                "name": file_name,
+                "type": "financials",
+                "dedup_key": dedup_key,
+                "data": financials.model_dump(),
+            },
+        )
+        summary = financials_summary(financials)
+        return _with_session(
+            sid,
+            {
+                **summary,
+                **dcf_response,
+                "file_id": entry["id"],
+                "file_name": entry["name"],
+                "deduplicated": True,
+                "refreshed": True,
+                "message": (
+                    f"Refreshed '{entry['name']}' from SEC (updated normalization). "
+                    f"Open {_view_url(sid)} to view."
+                ),
+            },
+        )
+
     entry = save_file_entry(
         sid,
         {
@@ -351,6 +373,7 @@ def fetch_sec_financials(
         sid,
         {
             **summary,
+            **dcf_response,
             "file_id": entry["id"],
             "file_name": entry["name"],
             "deduplicated": False,
@@ -360,6 +383,54 @@ def fetch_sec_financials(
             ),
         },
     )
+
+
+@mcp.tool()
+def set_comparative_inputs(
+    values: dict[str, Any],
+    ctx: Context,
+    session_id: str | None = None,
+) -> dict:
+    """
+    Set up a peer comparison: target company + 1–10 peers.
+
+    COMPARATIVE RULES:
+    - values.target: {{ticker, company_name?}}
+    - values.peers: list of {{ticker, company_name?}} (1–10)
+    - values.fiscal_year: optional int; omit to auto-pick latest FY common to all companies
+    - values.link: {{ticker, file_id, company_name?}} after fetch_sec_financials
+    - Call fetch_sec_financials for EACH company first so files appear on dashboard.
+    - Do NOT call run_comparative_analysis until ready=true.
+    """
+    try:
+        sid = resolve_workspace_session(ctx, session_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    _touch_session_writes()
+    result = handle_set_comparative_inputs(sid, values)
+    if "error" in result and "session_id" not in result:
+        return _with_session(sid, result)
+    return _with_session(sid, result)
+
+
+@mcp.tool()
+def run_comparative_analysis(ctx: Context, session_id: str | None = None) -> dict:
+    """
+    Build comparative report when set_comparative_inputs reports ready=true.
+
+    Fetches Finnhub market data (price, market cap) and computes fundamentals + multiples
+    from linked SEC files. Saves type=comparative model to dashboard.
+    """
+    try:
+        sid = resolve_workspace_session(ctx, session_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    _touch_session_writes()
+    result = handle_run_comparative_analysis(sid)
+    url = _view_url(sid)
+    return {**result, "session_id": sid, "view_url": url}
 
 
 if __name__ == "__main__":

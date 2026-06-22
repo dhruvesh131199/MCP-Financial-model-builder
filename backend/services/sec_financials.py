@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
-from ingest.normalize import FinancialStatements, StatementPeriod, StatementSlice, normalize_company_facts
+import logging
+
+from ingest.edgar_adapter import adapt_edgar_to_financials
+from ingest.edgar_fetch import EdgarFetchError, fetch_edgar_frames
+from ingest.normalize import FinancialStatements, StatementSlice, normalize_company_facts
 from services.sec_client import fetch_company_facts, resolve_ticker
+
+logger = logging.getLogger(__name__)
 
 ALL_STATEMENTS = ("income", "balance", "cashflow")
 
@@ -35,7 +41,7 @@ def build_dedup_key(
         period_flags.append("quarterly")
     period_part = "+".join(period_flags) or "none"
     stmt_part = "+".join(sorted(statements))
-    return f"{ticker.upper()}|{years_part}|{period_part}|{stmt_part}"
+    return f"{ticker.upper()}|{years_part}|{period_part}|{stmt_part}|ingest=edgartools|periods=v3|xbrl_only"
 
 
 def build_file_name(
@@ -53,19 +59,13 @@ def build_file_name(
     return f"{sym} — {max_years}Y Financials"
 
 
-def _collect_fiscal_years(financials: FinancialStatements) -> list[int]:
+def _collect_annual_fiscal_years(financials: FinancialStatements) -> list[int]:
+    """Distinct fiscal years from annual periods only (ignore quarterly spillover)."""
     years: set[int] = set()
     for slice_ in financials.statements.values():
-        for period in slice_.annual + slice_.quarterly:
+        for period in slice_.annual:
             years.add(period.fiscal_year)
     return sorted(years, reverse=True)
-
-
-def _filter_periods_by_years(
-    periods: list[StatementPeriod],
-    allowed_years: set[int],
-) -> list[StatementPeriod]:
-    return [p for p in periods if p.fiscal_year in allowed_years]
 
 
 def filter_financials(
@@ -76,16 +76,16 @@ def filter_financials(
     include_annual: bool = True,
     include_quarterly: bool = True,
     statements: list[str] | None = None,
-    max_quarterly_periods: int = 20,
+    max_quarterly_periods: int | None = None,
 ) -> FinancialStatements:
     """Filter statements and trim periods for session storage / dashboard."""
     requested = _normalize_statement_list(statements)
+    quarterly_cap = max_quarterly_periods if max_quarterly_periods is not None else max_years * 4
 
     if fiscal_years:
-        allowed_years = set(fiscal_years)
+        allowed_annual_years = set(fiscal_years)
     else:
-        all_years = _collect_fiscal_years(financials)
-        allowed_years = set(all_years[:max_years])
+        allowed_annual_years = set(_collect_annual_fiscal_years(financials)[:max_years])
 
     trimmed: dict[str, StatementSlice] = {}
     for key in requested:
@@ -95,17 +95,52 @@ def filter_financials(
             continue
 
         annual = (
-            _filter_periods_by_years(slice_.annual, allowed_years)
+            [p for p in slice_.annual if p.fiscal_year in allowed_annual_years]
             if include_annual
             else []
         )
-        quarterly = slice_.quarterly[:max_quarterly_periods] if include_quarterly else []
-        quarterly = _filter_periods_by_years(quarterly, allowed_years)
+        annual.sort(key=lambda p: (p.fiscal_year, p.fiscal_period), reverse=True)
+        annual = annual[:max_years]
+
+        quarterly = slice_.quarterly[:quarterly_cap] if include_quarterly else []
+        if include_quarterly and fiscal_years:
+            quarterly = [p for p in quarterly if p.fiscal_year in allowed_annual_years]
 
         trimmed[key] = StatementSlice(annual=annual, quarterly=quarterly)
 
     return financials.model_copy(
         update={"statements": trimmed, "fetch_scope": requested}
+    )
+
+
+def _fetch_via_companyfacts(
+    resolved: dict,
+    *,
+    fiscal_years: list[int] | None,
+    max_years: int,
+    include_annual: bool,
+    include_quarterly: bool,
+    statements: list[str] | None,
+) -> FinancialStatements:
+    raw = fetch_company_facts(resolved["cik"])
+    financials = normalize_company_facts(
+        raw,
+        ticker=resolved["ticker"],
+        cik=resolved["cik"],
+        derive=False,
+    )
+    if resolved.get("entity_name"):
+        financials = financials.model_copy(
+            update={"entity_name": resolved["entity_name"]}
+        )
+    return filter_financials(
+        financials,
+        fiscal_years=fiscal_years,
+        max_years=max_years,
+        include_annual=include_annual,
+        include_quarterly=include_quarterly,
+        statements=statements,
+        max_quarterly_periods=max_years * 4,
     )
 
 
@@ -119,43 +154,57 @@ def fetch_sec_financials(
     include_quarterly: bool = True,
     statements: list[str] | None = None,
 ) -> FinancialStatements:
-    """Resolve ticker, fetch from SEC, normalize, and filter."""
+    """Resolve ticker, fetch via edgartools XBRLS, fallback to companyfacts."""
     resolved = resolve_ticker(company_name=company_name, ticker=ticker)
     if "error" in resolved:
         raise ValueError(resolved["error"])
 
+    stmt_list = _normalize_statement_list(statements)
+    sym = resolved["ticker"]
+
     try:
-        raw = fetch_company_facts(resolved["cik"])
-    except Exception as exc:
-        sym = resolved["ticker"]
-        raise ValueError(f"SEC fetch failed for {sym}: {exc}") from exc
-
-    financials = normalize_company_facts(
-        raw,
-        ticker=resolved["ticker"],
-        cik=resolved["cik"],
-    )
-    if resolved.get("entity_name"):
-        financials = financials.model_copy(
-            update={"entity_name": resolved["entity_name"]}
+        edgar = fetch_edgar_frames(
+            ticker=sym,
+            cik=resolved["cik"],
+            entity_name=resolved.get("entity_name"),
+            max_years=max_years,
+            max_quarterly_periods=max_years * 4,
+            include_annual=include_annual,
+            include_quarterly=include_quarterly,
+            statements=stmt_list,
         )
+        financials = adapt_edgar_to_financials(edgar, fetch_scope=stmt_list)
+        if resolved.get("entity_name"):
+            financials = financials.model_copy(
+                update={"entity_name": resolved["entity_name"]}
+            )
+        return filter_financials(
+            financials,
+            fiscal_years=fiscal_years,
+            max_years=max_years,
+            include_annual=include_annual,
+            include_quarterly=include_quarterly,
+            statements=stmt_list,
+            max_quarterly_periods=max_years * 4,
+        )
+    except (EdgarFetchError, Exception) as exc:
+        logger.warning("edgartools fetch failed for %s, using companyfacts: %s", sym, exc)
 
-    return filter_financials(
-        financials,
-        fiscal_years=fiscal_years,
-        max_years=max_years,
-        include_annual=include_annual,
-        include_quarterly=include_quarterly,
-        statements=statements,
-    )
+    try:
+        return _fetch_via_companyfacts(
+            resolved,
+            fiscal_years=fiscal_years,
+            max_years=max_years,
+            include_annual=include_annual,
+            include_quarterly=include_quarterly,
+            statements=stmt_list,
+        )
+    except Exception as exc:
+        raise ValueError(f"SEC fetch failed for {sym}: {exc}") from exc
 
 
 def included_fiscal_years(financials: FinancialStatements) -> list[int]:
-    years: set[int] = set()
-    for slice_ in financials.statements.values():
-        for period in slice_.annual + slice_.quarterly:
-            years.add(period.fiscal_year)
-    return sorted(years)
+    return _collect_annual_fiscal_years(financials)
 
 
 def financials_summary(financials: FinancialStatements) -> dict:
@@ -175,6 +224,7 @@ def financials_summary(financials: FinancialStatements) -> dict:
         "entity_name": financials.entity_name,
         "cik": financials.cik,
         "fetched_at": financials.fetched_at,
+        "ingest_source": financials.ingest_source,
         "fiscal_years_included": included_fiscal_years(financials),
         "fetch_scope": financials.fetch_scope,
         "annual_periods": {

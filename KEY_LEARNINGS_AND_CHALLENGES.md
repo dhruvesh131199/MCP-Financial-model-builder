@@ -77,6 +77,15 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-06-22 | Fix | SEC Files: XBRL-only (no EBITDA/FCF/etc. derivations); AMD COGS was sum of duplicate CostOfGoodsAndServicesSold lines — now pick best tag; dedup `xbrl_only`. |
+| 2026-06-22 | Bugfix | 5Y annual showed 4 cols: `filter_financials` used fiscal years from quarterly (e.g. FY2026 Q1), dropping oldest annual year. Annual filter now uses annual periods only; quarterly cap = max_years×4; dedup key `periods=v2`. |
+| 2026-06-22 | Feature | EdgarTools XBRLS ingest: `standard_concept` → canonical file fields; companyfacts fallback; DCF auto-prefill from SEC; dedup key `ingest=edgartools`. |
+| 2026-06-22 | Bugfix | SEC period bucketing: bucket by `end` date not filing `fy`; latest filed wins (not largest value). Fixes AMD FY2023+ mis-assignment; rules in `ingest/SEC_NORMALIZE_RULES.md`. |
+| 2026-06-22 | Feature | SEC metric catalog + coverage reports: us-gaap/dei aliases, ProfitLoss→net_income, derivations, field_status reasons; Finnhub lazy env fix; canonical statement UI. |
+| 2026-06-22 | Fix | Dashboard poll missed in-place file refresh — `update_file_entry` now sets `updated_at`; workspace `updated_at` uses max(created_at, updated_at). |
+| 2026-06-22 | Fix | SEC dedup refresh: re-fetch + `update_file_entry` on duplicate scope (stale AMD revenue after normalize fix); Finnhub via `httpx` (SSL on macOS). |
+| 2026-06-22 | Fix | SEC normalize: try all XBRL aliases per FY bucket (AMD revenue); pick best duplicate fact; derive revenue/EBITDA/FCF with `source` metadata; subtle † in StatementViewer. |
+| 2026-06-21 | Feature | Phase 3: model-agnostic MCP instructions; comparative analysis + Finnhub; comps dashboard. |
 | 2026-06-18 | Feature | Phase 2 SEC: `resolve_ticker` + `fetch_sec_financials` MCP tools; XBRL normalize; session-scoped files with dedup; 1h TTL; StatementViewer in dashboard. |
 | 2026-06-18 | Decision | SEC data source: EDGAR `companyfacts` API (not Yahoo); session folders only — no global ticker cache on disk. |
 | 2026-06-18 | Decision | File dedup by scope key (`ticker|years|periods|statements`) — repeat fetch returns existing sidebar entry. |
@@ -94,6 +103,7 @@ Newest first. Add a row when something interview-worthy happens.
 
 ## Not yet done (honest gaps)
 
-- Model-agnostic SEC → input prefill (per model type)
+- SEC → DCF input prefill (Phase 4)
+- LTM/TTM rolling multiples for comps
 - Filing HTML/PDF narrative viewer
 - Auth for public MCP endpoint

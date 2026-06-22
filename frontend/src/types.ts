@@ -3,11 +3,32 @@ export interface LineItem {
   label: string;
   value: number;
   unit: string;
+  source?: "xbrl" | "derived";
+  xbrl_tag?: string | null;
+  derived_from?: string[] | null;
+}
+
+export interface CoverageEntry {
+  key: string;
+  label: string;
+  status: "present" | "derived" | "missing" | "not_applicable";
+  value?: number | null;
+  reason?: string | null;
+  xbrl_tag?: string | null;
+  derived_from?: string[] | null;
+  statement?: string | null;
+}
+
+export interface FieldStatus {
+  status: "present" | "derived" | "missing" | "not_applicable";
+  value?: number | null;
+  reason?: string | null;
 }
 
 export interface StatementPeriod {
   fiscal_year: number;
   fiscal_period: string;
+  period_end?: string | null;
   filed?: string | null;
   form?: string | null;
   line_items: LineItem[];
@@ -25,6 +46,7 @@ export interface FinancialStatements {
   fetched_at: string;
   statements: Record<string, StatementSlice>;
   fetch_scope?: string[];
+  coverage?: Record<string, CoverageEntry> | null;
 }
 
 export interface FileEntry {
@@ -77,10 +99,80 @@ export interface DcfModelEntry {
   data: DcfResult;
 }
 
+export interface ComparativeFundamentals {
+  fiscal_year?: number;
+  revenue?: number | null;
+  net_income?: number | null;
+  gross_margin?: number | null;
+  operating_margin?: number | null;
+  net_margin?: number | null;
+  roe?: number | null;
+  roa?: number | null;
+  net_debt?: number | null;
+  revenue_growth_yoy?: number | null;
+  free_cash_flow?: number | null;
+  fcf_margin?: number | null;
+  book_value_per_share?: number | null;
+  ebitda?: number | null;
+  eps_diluted?: number | null;
+  shares_outstanding?: number | null;
+  missing_metrics?: string[];
+  field_status?: Record<string, FieldStatus>;
+}
+
+export interface ComparativeMultiples {
+  stock_price?: number | null;
+  market_cap_usd?: number | null;
+  market_enterprise_value?: number | null;
+  pe_ratio?: number | null;
+  pb_ratio?: number | null;
+  ev_to_sales?: number | null;
+  ev_to_ebitda?: number | null;
+}
+
+export interface ComparativeCompanyRow {
+  ticker: string;
+  company_name?: string | null;
+  is_target: boolean;
+  fundamentals: ComparativeFundamentals;
+  market_data: {
+    stock_price?: number | null;
+    market_cap_usd?: number | null;
+    as_of?: string | null;
+    source?: string | null;
+    exchange?: string | null;
+    industry?: string | null;
+    errors?: string[];
+    ok?: boolean;
+  };
+  multiples: ComparativeMultiples;
+}
+
+export interface ComparativeReport {
+  model_type: "comparative";
+  fiscal_year_used: number;
+  fiscal_year_note?: string | null;
+  target: { ticker?: string; company_name?: string | null };
+  peers: { ticker?: string; company_name?: string | null }[];
+  companies: ComparativeCompanyRow[];
+  summary: Record<string, number | null | undefined>;
+  market_data_errors?: string[];
+}
+
+export interface ComparativeModelEntry {
+  id: string;
+  name: string;
+  type: "comparative";
+  created_at: string;
+  data: ComparativeReport;
+}
+
+export type ModelEntry = DcfModelEntry | ComparativeModelEntry;
+
 export interface Workspace {
   session_id: string;
   updated_at: string | null;
-  models: DcfModelEntry[];
+  models: ModelEntry[];
   files: FileEntry[];
 }
 

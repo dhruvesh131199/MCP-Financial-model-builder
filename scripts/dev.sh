@@ -32,6 +32,7 @@ uvicorn api.main:app --reload --port 8000 >"$LOG_DIR/api.log" 2>&1 &
 API_PID=$!
 
 echo "Starting MCP on      http://localhost:8080/mcp"
+# MCP has no --reload; restart dev.sh after backend changes to this process.
 python mcp/server.py >"$LOG_DIR/mcp.log" 2>&1 &
 MCP_PID=$!
 

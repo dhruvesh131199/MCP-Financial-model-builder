@@ -51,6 +51,7 @@ def create_session() -> str:
     session_dir.mkdir(parents=True, exist_ok=False)
     (session_dir / "models").mkdir(exist_ok=True)
     (session_dir / "files").mkdir(exist_ok=True)
+    (session_dir / "inputs").mkdir(exist_ok=True)
     meta = {"session_id": session_id, "created_at": _utc_now()}
     (session_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return session_id
@@ -171,11 +172,37 @@ def save_file_entry(session_id: str, entry: dict) -> dict:
     return record
 
 
+def update_file_entry(session_id: str, file_id: str, updates: dict) -> dict:
+    """Update an existing file entry in place (same id, refreshes data)."""
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+
+    path = session_dir / "files" / f"{file_id}.json"
+    if not path.exists():
+        raise KeyError("File not found")
+
+    record = json.loads(path.read_text(encoding="utf-8"))
+    record.update(updates)
+    record["id"] = file_id
+    record["updated_at"] = _utc_now()
+    path.write_text(json.dumps(record, indent=2), encoding="utf-8")
+    return record
+
+
+def _entry_timestamp(entry: dict) -> str | None:
+    """Latest activity time for a model or file entry."""
+    candidates = [entry.get("updated_at"), entry.get("created_at")]
+    valid = [t for t in candidates if t]
+    return max(valid) if valid else None
+
+
 def _workspace_updated_at(models: list[dict], files: list[dict]) -> str | None:
     timestamps = [
-        *(m.get("created_at") for m in models if m.get("created_at")),
-        *(f.get("created_at") for f in files if f.get("created_at")),
+        *(_entry_timestamp(m) for m in models),
+        *(_entry_timestamp(f) for f in files),
     ]
+    timestamps = [t for t in timestamps if t]
     return max(timestamps) if timestamps else None
 
 
@@ -247,13 +274,44 @@ OPTIONAL_DCF_FIELDS = ["net_debt", "shares_outstanding", "company_name"]
 
 ALL_DCF_FIELDS = REQUIRED_DCF_FIELDS + OPTIONAL_DCF_FIELDS
 
+MAX_COMPARATIVE_PEERS = 10
 
-def _inputs_path(session_id: str) -> Path:
-    return _session_dir(session_id) / "inputs.json"
+
+def _inputs_dir(session_id: str) -> Path:
+    return _session_dir(session_id) / "inputs"
+
+
+def _migrate_legacy_inputs(session_dir: Path) -> None:
+    """Move legacy inputs.json at session root into inputs/dcf.json."""
+    legacy = session_dir / "inputs.json"
+    if not legacy.exists():
+        return
+    inputs_dir = session_dir / "inputs"
+    inputs_dir.mkdir(exist_ok=True)
+    target = inputs_dir / "dcf.json"
+    if not target.exists():
+        target.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
+    legacy.unlink(missing_ok=True)
+
+
+def _dcf_inputs_path(session_id: str) -> Path:
+    session_dir = _session_dir(session_id)
+    _migrate_legacy_inputs(session_dir)
+    inputs_dir = session_dir / "inputs"
+    inputs_dir.mkdir(exist_ok=True)
+    return inputs_dir / "dcf.json"
+
+
+def _comparative_inputs_path(session_id: str) -> Path:
+    session_dir = _session_dir(session_id)
+    _migrate_legacy_inputs(session_dir)
+    inputs_dir = session_dir / "inputs"
+    inputs_dir.mkdir(exist_ok=True)
+    return inputs_dir / "comparative.json"
 
 
 def load_input_bundle(session_id: str) -> dict:
-    path = _inputs_path(session_id)
+    path = _dcf_inputs_path(session_id)
     if not path.exists():
         return {"values": {}, "updated_at": None}
     return json.loads(path.read_text(encoding="utf-8"))
@@ -272,7 +330,7 @@ def merge_model_inputs(session_id: str, values: dict) -> dict:
             current[key] = val
 
     record = {"values": current, "updated_at": _utc_now()}
-    _inputs_path(session_id).write_text(json.dumps(record, indent=2), encoding="utf-8")
+    _dcf_inputs_path(session_id).write_text(json.dumps(record, indent=2), encoding="utf-8")
     return summarize_input_bundle(session_id)
 
 
@@ -317,3 +375,285 @@ def company_name_from_bundle(session_id: str) -> str | None:
     values = load_input_bundle(session_id).get("values") or {}
     name = values.get("company_name")
     return str(name).strip() if name else None
+
+
+# --- Comparative input bundle ---
+
+
+def _empty_comparative_bundle() -> dict:
+    return {
+        "model_type": "comparative",
+        "fiscal_year": None,
+        "target": None,
+        "peers": [],
+        "updated_at": None,
+    }
+
+
+def load_comparative_bundle(session_id: str) -> dict:
+    path = _comparative_inputs_path(session_id)
+    if not path.exists():
+        return _empty_comparative_bundle()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {**_empty_comparative_bundle(), **data}
+
+
+def _save_comparative_bundle(session_id: str, bundle: dict) -> None:
+    record = {**bundle, "updated_at": _utc_now()}
+    _comparative_inputs_path(session_id).write_text(
+        json.dumps(record, indent=2), encoding="utf-8"
+    )
+
+
+def get_file_entry(session_id: str, file_id: str) -> dict | None:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        return None
+    for entry in _load_file_entries(session_dir):
+        if entry.get("id") == file_id:
+            return entry
+    return None
+
+
+def latest_annual_fiscal_year(financials_data: dict) -> int | None:
+    """Latest FY with annual income data; prefer 10-K when tagged."""
+    statements = financials_data.get("statements") or {}
+    income = statements.get("income") or {}
+    annual = income.get("annual") or []
+    if not annual:
+        return None
+    ten_k = [p for p in annual if p.get("form") == "10-K"]
+    periods = ten_k if ten_k else annual
+    return max(int(p["fiscal_year"]) for p in periods)
+
+
+def has_annual_fiscal_year(financials_data: dict, fiscal_year: int) -> bool:
+    statements = financials_data.get("statements") or {}
+    income = statements.get("income") or {}
+    for period in income.get("annual") or []:
+        if int(period.get("fiscal_year", 0)) == fiscal_year:
+            return True
+    return False
+
+
+def _normalize_company_slot(raw: dict | None) -> dict | None:
+    if not raw:
+        return None
+    slot: dict = {}
+    if raw.get("company_name"):
+        slot["company_name"] = str(raw["company_name"]).strip()
+    if raw.get("ticker"):
+        slot["ticker"] = str(raw["ticker"]).strip().upper()
+    if raw.get("file_id"):
+        slot["file_id"] = str(raw["file_id"]).strip()
+    return slot or None
+
+
+def _merge_company_slot(existing: dict | None, update: dict) -> dict:
+    base = dict(existing or {})
+    merged = _normalize_company_slot({**base, **update})
+    return merged or {}
+
+
+def merge_comparative_inputs(session_id: str, values: dict) -> dict:
+    """Merge comparative target/peers/fiscal_year. Partial updates supported."""
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+
+    bundle = load_comparative_bundle(session_id)
+
+    if "fiscal_year" in values:
+        fy = values["fiscal_year"]
+        bundle["fiscal_year"] = int(fy) if fy is not None else None
+
+    if values.get("target") is not None:
+        bundle["target"] = _merge_company_slot(bundle.get("target"), values["target"])
+
+    if values.get("peers") is not None:
+        peers_in = values["peers"]
+        if not isinstance(peers_in, list):
+            raise ValueError("peers must be a list")
+        if len(peers_in) > MAX_COMPARATIVE_PEERS:
+            raise ValueError(f"At most {MAX_COMPARATIVE_PEERS} peers allowed")
+        bundle["peers"] = [
+            slot
+            for slot in (_normalize_company_slot(p) for p in peers_in)
+            if slot is not None
+        ]
+
+    if values.get("link"):
+        link = values["link"]
+        ticker = str(link.get("ticker", "")).strip().upper()
+        file_id = link.get("file_id")
+        if not ticker or not file_id:
+            raise ValueError("link requires ticker and file_id")
+        name = link.get("company_name")
+        updated = False
+        target = bundle.get("target")
+        if target and target.get("ticker") == ticker:
+            bundle["target"] = _merge_company_slot(
+                target, {"file_id": file_id, **({"company_name": name} if name else {})}
+            )
+            updated = True
+        for i, peer in enumerate(bundle.get("peers") or []):
+            if peer.get("ticker") == ticker:
+                bundle["peers"][i] = _merge_company_slot(
+                    peer, {"file_id": file_id, **({"company_name": name} if name else {})}
+                )
+                updated = True
+        if not updated:
+            raise ValueError(f"No company slot found for ticker {ticker}")
+
+    _save_comparative_bundle(session_id, bundle)
+    return summarize_comparative_bundle(session_id)
+
+
+def resolve_comparative_fiscal_year(
+    session_id: str, bundle: dict, companies: list[dict]
+) -> tuple[int | None, str | None]:
+    """Pick fiscal year: user override or min of each company's latest annual FY."""
+    explicit = bundle.get("fiscal_year")
+    if explicit is not None:
+        fy = int(explicit)
+        for company in companies:
+            file_id = company.get("file_id")
+            if not file_id:
+                continue
+            entry = get_file_entry(session_id, file_id)
+            if not entry or not has_annual_fiscal_year(entry.get("data") or {}, fy):
+                return None, f"FY{fy} not available for {company.get('ticker', '?')}"
+        return fy, f"Using user-selected FY{fy}."
+
+    latest_years: list[int] = []
+    for company in companies:
+        file_id = company.get("file_id")
+        if not file_id:
+            return None, None
+        entry = get_file_entry(session_id, file_id)
+        if not entry:
+            return None, None
+        latest = latest_annual_fiscal_year(entry.get("data") or {})
+        if latest is None:
+            return None, None
+        latest_years.append(latest)
+
+    if not latest_years:
+        return None, None
+
+    chosen = min(latest_years)
+    return chosen, (
+        f"Using FY{chosen} — latest fiscal year with annual data common to all companies."
+    )
+
+
+def summarize_comparative_bundle(session_id: str) -> dict:
+    bundle = load_comparative_bundle(session_id)
+    missing: list[str] = []
+    target = bundle.get("target")
+
+    if not target or not target.get("ticker"):
+        missing.append("target.ticker")
+    peers = bundle.get("peers") or []
+    if len(peers) < 1:
+        missing.append("peers (need 1–10)")
+    if len(peers) > MAX_COMPARATIVE_PEERS:
+        missing.append(f"peers (max {MAX_COMPARATIVE_PEERS})")
+
+    companies: list[dict] = []
+    if target and target.get("ticker"):
+        companies.append({**target, "role": "target"})
+    for i, peer in enumerate(peers):
+        if not peer.get("ticker"):
+            missing.append(f"peers[{i}].ticker")
+        else:
+            companies.append({**peer, "role": "peer"})
+
+    for company in companies:
+        ticker = company.get("ticker", "?")
+        if not company.get("file_id"):
+            missing.append(f"{ticker}.file_id")
+            continue
+        entry = get_file_entry(session_id, company["file_id"])
+        if not entry:
+            missing.append(f"{ticker}.file_id (not found)")
+
+    fiscal_year_used: int | None = None
+    fiscal_year_note: str | None = None
+    if not any(m.endswith(".file_id") or "file_id" in m for m in missing):
+        ready_files = all(
+            company.get("file_id") and get_file_entry(session_id, company["file_id"])
+            for company in companies
+        )
+        if ready_files and companies:
+            fiscal_year_used, fiscal_year_note = resolve_comparative_fiscal_year(
+                session_id, bundle, companies
+            )
+            if fiscal_year_used is None and bundle.get("fiscal_year") is not None:
+                missing.append("fiscal_year (not available for all companies)")
+
+    ready = len(missing) == 0 and fiscal_year_used is not None
+
+    next_step = "Call run_comparative_analysis()."
+    if not target or not target.get("ticker"):
+        next_step = "Set target company (ticker or name) via set_comparative_inputs."
+    elif len(peers) < 1:
+        next_step = "Add 1–10 peer companies via set_comparative_inputs."
+    elif any(not c.get("file_id") for c in companies):
+        next_step = (
+            "Call fetch_sec_financials for each company, then link file_id "
+            "via set_comparative_inputs(link={ticker, file_id})."
+        )
+    elif fiscal_year_used is None:
+        next_step = "Ensure SEC files include annual data for the chosen fiscal year."
+    elif not ready:
+        next_step = f"Still missing: {', '.join(missing)}"
+
+    return {
+        "session_id": session_id,
+        "model_type": "comparative",
+        "target": target,
+        "peers": peers,
+        "fiscal_year": bundle.get("fiscal_year"),
+        "fiscal_year_used": fiscal_year_used,
+        "fiscal_year_note": fiscal_year_note,
+        "missing": missing,
+        "ready": ready,
+        "updated_at": bundle.get("updated_at"),
+        "next_step": next_step,
+    }
+
+
+def _build_comparative_name(target_ticker: str | None, peer_count: int, existing: list[str]) -> str:
+    slug = _slugify(target_ticker or "none")
+    base = f"{slug}_comps_{peer_count}p"
+    if base not in existing:
+        return base
+    n = 2
+    while f"{base}_{n}" in existing:
+        n += 1
+    return f"{base}_{n}"
+
+
+def save_comparative_model(session_id: str, payload: dict) -> dict:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+
+    models_dir = session_dir / "models"
+    models_dir.mkdir(exist_ok=True)
+    _migrate_legacy_model(session_dir)
+
+    existing_names = [m["name"] for m in _load_model_entries(session_dir)]
+    target_ticker = (payload.get("target") or {}).get("ticker")
+    peer_count = len(payload.get("peers") or [])
+    model_id = str(uuid.uuid4())
+    entry = {
+        "id": model_id,
+        "name": _build_comparative_name(target_ticker, peer_count, existing_names),
+        "type": "comparative",
+        "created_at": _utc_now(),
+        "data": payload,
+    }
+    (models_dir / f"{model_id}.json").write_text(json.dumps(entry, indent=2), encoding="utf-8")
+    return entry

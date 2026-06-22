@@ -16,6 +16,7 @@ from store import (
     save_file_entry,
     session_exists,
     summarize_input_bundle,
+    update_file_entry,
 )
 
 
@@ -119,6 +120,52 @@ def test_save_file_and_dedup():
     found = find_file_by_dedup_key(sid, entry["dedup_key"])
     assert found is not None
     assert found["id"] == entry["id"]
+
+
+def test_update_file_entry_refreshes_data():
+    sid = create_session()
+    entry = save_file_entry(
+        sid,
+        {
+            "name": "AMD — 5Y",
+            "type": "financials",
+            "dedup_key": "AMD|test",
+            "data": {"ticker": "AMD", "statements": {}},
+        },
+    )
+    created_at = entry["created_at"]
+    updated = update_file_entry(
+        sid,
+        entry["id"],
+        {"data": {"ticker": "AMD", "statements": {"income": {"annual": []}}}},
+    )
+    assert updated["id"] == entry["id"]
+    assert updated["created_at"] == created_at
+    assert updated.get("updated_at")
+    assert updated["updated_at"] >= created_at
+    found = find_file_by_dedup_key(sid, "AMD|test")
+    assert found["data"]["statements"]["income"]["annual"] == []
+
+
+def test_workspace_updated_at_bumps_on_file_refresh():
+    sid = create_session()
+    entry = save_file_entry(
+        sid,
+        {
+            "name": "AMD — 5Y",
+            "type": "financials",
+            "dedup_key": "AMD|bump",
+            "data": {"ticker": "AMD", "statements": {}},
+        },
+    )
+    ws_before = load_workspace(sid)
+    update_file_entry(
+        sid,
+        entry["id"],
+        {"data": {"ticker": "AMD", "statements": {"income": {"annual": [{"fiscal_year": 2025, "line_items": []}]}}}},
+    )
+    ws_after = load_workspace(sid)
+    assert ws_after["updated_at"] >= ws_before["updated_at"]
 
 
 def test_workspace_updated_at_includes_files():

@@ -2,18 +2,21 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { fetchSessionWorkspace, API_BASE } from "../api";
 import DashboardPanel from "../components/DashboardPanel";
-import type { DashboardSelection, DcfModelEntry, FileEntry } from "../types";
+import SessionGuideModal, { SessionGuideButton } from "../components/SessionGuideModal";
+import type { DashboardSelection, FileEntry, ModelEntry } from "../types";
 
 const POLL_MS = 3000;
+const guideSeenKey = (sessionId: string) => `session-guide-seen:${sessionId}`;
 
 export default function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [files, setFiles] = useState<FileEntry[]>([]);
-  const [models, setModels] = useState<DcfModelEntry[]>([]);
+  const [models, setModels] = useState<ModelEntry[]>([]);
   const [selection, setSelection] = useState<DashboardSelection>({ kind: "none" });
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const modelCountRef = useRef(0);
   const fileCountRef = useRef(0);
 
@@ -22,6 +25,14 @@ export default function SessionPage() {
     setPulseId(id);
     window.setTimeout(() => setPulseId(null), 3200);
   }, []);
+
+  useEffect(() => {
+    if (!sessionId) return;
+    if (!sessionStorage.getItem(guideSeenKey(sessionId))) {
+      setGuideOpen(true);
+      sessionStorage.setItem(guideSeenKey(sessionId), "1");
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -73,11 +84,18 @@ export default function SessionPage() {
 
   return (
     <div className="flex h-screen flex-col">
+      <SessionGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} />
+
       <header className="shrink-0 border-b border-[var(--border-soft)] bg-white px-4 py-3">
-        <h1 className="text-base font-semibold text-gray-900">Workspace</h1>
-        <p className="text-xs text-gray-500">
-          Private link — files and models update as you chat in Cursor
-        </p>
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="text-base font-semibold text-gray-900">Workspace</h1>
+            <p className="text-xs text-gray-500">
+              Private link — files and models update as you chat in Cursor
+            </p>
+          </div>
+          <SessionGuideButton onClick={() => setGuideOpen(true)} />
+        </div>
       </header>
 
       <div className="min-h-0 flex-1">
@@ -94,9 +112,9 @@ export default function SessionPage() {
         )}
 
         {!notFound && !error && !hasContent && (
-          <div className="flex h-full items-center justify-center">
+          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <p className="text-sm text-gray-500">
-              No files or models yet — ask Cursor to fetch SEC financials or build a DCF
+              No files or models yet — use the button above for example prompts to try in Cursor.
             </p>
           </div>
         )}

@@ -1,13 +1,15 @@
-import { useState, type ReactNode } from "react";
-import type { DashboardSelection, DcfModelEntry, FileEntry } from "../types";
+import type { DashboardSelection, FileEntry, ModelEntry } from "../types";
+import { exportComparativeToExcel } from "../utils/exportComparativeExcel";
 import { exportDcfToExcel } from "../utils/exportDcfExcel";
 import { exportFinancialsToExcel } from "../utils/exportFinancialsExcel";
+import ComparativeTable from "./ComparativeTable";
 import DcfTable from "./DcfTable";
 import FileViewer from "./FileViewer";
+import { useState, type ReactNode } from "react";
 
 interface DashboardPanelProps {
   files: FileEntry[];
-  models: DcfModelEntry[];
+  models: ModelEntry[];
   selection: DashboardSelection;
   pulseId: string | null;
   onSelect: (selection: DashboardSelection) => void;
@@ -32,10 +34,19 @@ export default function DashboardPanel({
       : undefined;
 
   async function handleDownload() {
-    if (activeModel) {
+    if (activeModel?.type === "dcf") {
       setDownloading(true);
       try {
         await exportDcfToExcel(activeModel.data, activeModel.name);
+      } finally {
+        setDownloading(false);
+      }
+      return;
+    }
+    if (activeModel?.type === "comparative") {
+      setDownloading(true);
+      try {
+        await exportComparativeToExcel(activeModel.data, activeModel.name);
       } finally {
         setDownloading(false);
       }
@@ -90,44 +101,23 @@ export default function DashboardPanel({
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col bg-white">
-        {activeModel ? (
+        {activeModel?.type === "dcf" ? (
           <>
-            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-soft)] bg-gradient-to-r from-white to-indigo-50/30 px-4 py-2.5">
-              <span className="text-sm font-medium text-indigo-900/80">
-                {activeModel.name}
-              </span>
-              {showDownload && (
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  disabled={downloading}
-                  className="rounded-lg border border-indigo-200/80 bg-white px-3 py-1.5 text-xs font-medium text-indigo-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
-                >
-                  {downloading ? "Exporting…" : "Download .xlsx"}
-                </button>
-              )}
-            </div>
+            <ModelHeader name={activeModel.name} showDownload={showDownload} downloading={downloading} onDownload={handleDownload} />
             <div className="min-h-0 flex-1 overflow-hidden">
               <DcfTable model={activeModel.data} />
             </div>
           </>
+        ) : activeModel?.type === "comparative" ? (
+          <>
+            <ModelHeader name={activeModel.name} showDownload={showDownload} downloading={downloading} onDownload={handleDownload} />
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <ComparativeTable report={activeModel.data} />
+            </div>
+          </>
         ) : activeFile ? (
           <>
-            <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-soft)] bg-gradient-to-r from-white to-indigo-50/30 px-4 py-2.5">
-              <span className="text-sm font-medium text-indigo-900/80">
-                {activeFile.name}
-              </span>
-              {showDownload && (
-                <button
-                  type="button"
-                  onClick={handleDownload}
-                  disabled={downloading}
-                  className="rounded-lg border border-indigo-200/80 bg-white px-3 py-1.5 text-xs font-medium text-indigo-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
-                >
-                  {downloading ? "Exporting…" : "Download .xlsx"}
-                </button>
-              )}
-            </div>
+            <ModelHeader name={activeFile.name} showDownload={showDownload} downloading={downloading} onDownload={handleDownload} />
             <div className="min-h-0 flex-1 overflow-hidden">
               <FileViewer file={activeFile} />
             </div>
@@ -138,6 +128,34 @@ export default function DashboardPanel({
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function ModelHeader({
+  name,
+  showDownload,
+  downloading,
+  onDownload,
+}: {
+  name: string;
+  showDownload: boolean;
+  downloading: boolean;
+  onDownload: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center justify-between border-b border-[var(--border-soft)] bg-gradient-to-r from-white to-indigo-50/30 px-4 py-2.5">
+      <span className="text-sm font-medium text-indigo-900/80">{name}</span>
+      {showDownload && (
+        <button
+          type="button"
+          onClick={onDownload}
+          disabled={downloading}
+          className="rounded-lg border border-indigo-200/80 bg-white px-3 py-1.5 text-xs font-medium text-indigo-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
+        >
+          {downloading ? "Exporting…" : "Download .xlsx"}
+        </button>
+      )}
     </div>
   );
 }

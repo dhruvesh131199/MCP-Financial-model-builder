@@ -1,5 +1,20 @@
 import { useMemo, useState } from "react";
-import type { FinancialStatements, StatementPeriod } from "../types";
+import type { CoverageEntry, FinancialStatements, LineItem, StatementPeriod } from "../types";
+import { METRIC_LABELS, STATEMENT_METRIC_ORDER } from "../utils/metricOrder";
+
+const MAX_ANNUAL_PERIODS = 5;
+const MAX_QUARTERLY_PERIODS = 20;
+
+function periodHeader(p: StatementPeriod): string {
+  if (p.period_end) {
+    const d = new Date(`${p.period_end}T12:00:00`);
+    const short = Number.isNaN(d.getTime())
+      ? p.period_end
+      : d.toLocaleDateString(undefined, { month: "short", year: "numeric" });
+    return `${p.fiscal_period} ${short}`;
+  }
+  return `FY${p.fiscal_year} ${p.fiscal_period}`;
+}
 
 type StatementKey = "income" | "balance" | "cashflow";
 type PeriodType = "annual" | "quarterly";
@@ -39,23 +54,38 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
     const slice = financials.statements[statement];
     if (!slice) return [];
     const list = periodType === "annual" ? slice.annual : slice.quarterly;
-    return list.slice(0, periodType === "annual" ? 5 : 8);
+    const cap = periodType === "annual" ? MAX_ANNUAL_PERIODS : MAX_QUARTERLY_PERIODS;
+    return list.slice(0, cap);
   }, [financials, statement, periodType]);
 
   const activePeriod: StatementPeriod | undefined = periods[periodIndex];
 
   const comparison = useMemo(() => {
-    if (!periods.length) return { labels: [] as string[], cells: [] as string[][] };
-    const keys = periods[0].line_items.map((li) => li.key);
-    const labels = periods[0].line_items.map((li) => li.label);
-    const cells = keys.map((key) =>
-      periods.map((p) => {
-        const item = p.line_items.find((li) => li.key === key);
-        return item ? fmtDisplay(item.value, item.unit) : "—";
-      }),
+    if (!periods.length) {
+      return {
+        labels: [] as string[],
+        cells: [] as string[][],
+        items: [] as (LineItem | undefined)[][],
+        keys: [] as string[],
+      };
+    }
+    const order = STATEMENT_METRIC_ORDER[statement] ?? [];
+    const presentKeys = new Set(
+      periods.flatMap((p) => p.line_items.map((li) => li.key)),
     );
-    return { labels, cells };
-  }, [periods]);
+    const keys = [
+      ...order,
+      ...[...presentKeys].filter((k) => !order.includes(k)),
+    ];
+    const labels = keys.map((k) => METRIC_LABELS[k] ?? k);
+    const itemsByRow = keys.map((key) =>
+      periods.map((p) => p.line_items.find((li) => li.key === key)),
+    );
+    const cells = itemsByRow.map((row) =>
+      row.map((item) => (item ? fmtDisplay(item.value, item.unit) : "—")),
+    );
+    return { labels, cells, items: itemsByRow, keys };
+  }, [periods, statement]);
 
   function handleStatement(next: StatementKey) {
     setStatement(next);
@@ -65,12 +95,14 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
   function handlePeriodType(next: PeriodType) {
     setPeriodType(next);
     setPeriodIndex(0);
-    setViewMode(next === "annual" ? "compare" : "single");
+    setViewMode("compare");
   }
 
-  const periodHeaders = periods.map(
-    (p) => `FY${p.fiscal_year} ${p.fiscal_period}`,
-  );
+  const periodHeaders = periods.map(periodHeader);
+  const compareLabel =
+    periodType === "annual"
+      ? `${Math.min(periods.length, MAX_ANNUAL_PERIODS)}Y Compare`
+      : `${Math.min(periods.length, MAX_QUARTERLY_PERIODS)}Q Compare`;
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-white">
@@ -119,7 +151,7 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
             Quarterly
           </TabButton>
         </TabGroup>
-        {periodType === "annual" && periods.length > 1 && (
+        {periods.length > 1 && (
           <>
             <span className="mx-1 text-gray-300">|</span>
             <TabGroup>
@@ -127,7 +159,7 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
                 active={viewMode === "compare"}
                 onClick={() => setViewMode("compare")}
               >
-                5Y Compare
+                {compareLabel}
               </TabButton>
               <TabButton
                 active={viewMode === "single"}
@@ -147,8 +179,8 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
               className="rounded-lg border border-indigo-100 bg-white px-2 py-1 text-xs text-indigo-800 focus:border-indigo-300 focus:outline-none"
             >
               {periods.map((p, i) => (
-                <option key={`${p.fiscal_year}-${p.fiscal_period}`} value={i}>
-                  FY{p.fiscal_year} {p.fiscal_period}
+                <option key={p.period_end ?? `${p.fiscal_year}-${p.fiscal_period}`} value={i}>
+                  {periodHeader(p)}
                 </option>
               ))}
             </select>
@@ -161,15 +193,23 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
           <p className="text-sm text-gray-400">
             No {periodType} data for this statement.
           </p>
-        ) : viewMode === "compare" && periodType === "annual" ? (
+        ) : viewMode === "compare" ? (
           <ComparisonTable
             headers={periodHeaders}
             labels={comparison.labels}
             cells={comparison.cells}
+            rowItems={comparison.items}
+            rowKeys={comparison.keys}
             periods={periods}
+            coverage={financials.coverage ?? undefined}
+            periodType={periodType}
           />
-        ) : activePeriod && activePeriod.line_items.length > 0 ? (
-          <SinglePeriodTable period={activePeriod} />
+        ) : activePeriod ? (
+          <SinglePeriodTable
+            period={activePeriod}
+            statement={statement}
+            coverage={financials.coverage ?? undefined}
+          />
         ) : (
           <p className="text-sm text-gray-400">No line items for this period.</p>
         )}
@@ -178,19 +218,101 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
   );
 }
 
+function coverageHint(
+  key: string,
+  item: LineItem | undefined,
+  coverage?: Record<string, CoverageEntry>,
+): string | undefined {
+  const derived = sourceHint(item);
+  if (derived) return derived;
+  const cov = coverage?.[key];
+  if (!item && cov?.reason) return cov.reason;
+  if (cov?.status === "not_applicable") return cov.reason ?? "Not applicable for this filer";
+  return undefined;
+}
+
+function CellValue({
+  display,
+  hint,
+  missing,
+}: {
+  display: string;
+  hint?: string;
+  missing?: boolean;
+}) {
+  if (display !== "—") {
+    return (
+      <span title={hint} className="tabular-nums">
+        {display}
+      </span>
+    );
+  }
+  return (
+    <span
+      title={hint ?? "Not in SEC filing for this period"}
+      className={`tabular-nums ${missing ? "text-gray-300" : "text-amber-500/80"}`}
+    >
+      {missing ? "N/A" : "—"}
+    </span>
+  );
+}
+function sourceHint(item: LineItem | undefined): string | undefined {
+  if (!item || item.source !== "derived") return undefined;
+  const parts = item.derived_from?.join(" + ") ?? "components";
+  return `Calculated from SEC line items: ${parts}`;
+}
+
+function LineItemLabel({
+  label,
+  item,
+  coverageKey,
+  coverage,
+}: {
+  label: string;
+  item?: LineItem;
+  coverageKey?: string;
+  coverage?: Record<string, CoverageEntry>;
+}) {
+  const hint =
+    sourceHint(item) ??
+    (coverageKey ? coverageHint(coverageKey, item, coverage) : undefined);
+  return (
+    <span className="inline-flex items-center gap-1">
+      {label}
+      {hint && item?.source === "derived" && (
+        <span
+          className="cursor-help rounded px-0.5 text-[10px] font-normal text-violet-500"
+          title={hint}
+        >
+          †
+        </span>
+      )}
+    </span>
+  );
+}
+
 function ComparisonTable({
   headers,
   labels,
   cells,
+  rowItems,
+  rowKeys,
   periods,
+  coverage,
+  periodType,
 }: {
   headers: string[];
   labels: string[];
   cells: string[][];
+  rowItems: (LineItem | undefined)[][];
+  rowKeys: string[];
   periods: StatementPeriod[];
+  coverage?: Record<string, CoverageEntry>;
+  periodType: PeriodType;
 }) {
   return (
     <>
+      <div className="overflow-x-auto">
       <table className="w-full min-w-[480px] border-collapse text-sm">
         <thead>
           <tr className="border-b-2 border-indigo-100 text-left text-xs font-semibold uppercase tracking-wide text-indigo-400">
@@ -203,36 +325,72 @@ function ComparisonTable({
           </tr>
         </thead>
         <tbody>
-          {labels.map((label, ri) => (
-            <tr
-              key={label}
-              className="border-b border-gray-50 hover:bg-indigo-50/30"
-            >
-              <td className="sticky left-0 z-10 bg-white py-2 pr-4 text-gray-700">
-                {label}
-              </td>
-              {cells[ri].map((cell, ci) => (
-                <td
-                  key={ci}
-                  className="px-2 py-2 text-right font-medium tabular-nums text-gray-900"
-                >
-                  {cell}
+          {labels.map((label, ri) => {
+            const key = rowKeys[ri];
+            const cov = coverage?.[key];
+            const isNa = cov?.status === "not_applicable";
+            return (
+              <tr
+                key={label}
+                className="border-b border-gray-50 hover:bg-indigo-50/30"
+              >
+                <td className="sticky left-0 z-10 bg-white py-2 pr-4 text-gray-700">
+                  <LineItemLabel
+                    label={label}
+                    item={rowItems[ri]?.[0]}
+                    coverageKey={key}
+                    coverage={coverage}
+                  />
                 </td>
-              ))}
-            </tr>
-          ))}
+                {cells[ri].map((cell, ci) => (
+                  <td key={ci} className="px-2 py-2 text-right font-medium text-gray-900">
+                    <CellValue
+                      display={cell}
+                      hint={coverageHint(key, rowItems[ri]?.[ci], coverage)}
+                      missing={isNa}
+                    />
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+      </div>
       {periods[0]?.filed && (
         <p className="mt-4 text-xs text-gray-400">
-          Annual comparison · up to {periods.length} years · SEC XBRL
+          {periodType === "annual" ? "Annual" : "Quarterly"} comparison · {periods.length}{" "}
+          {periodType === "annual" ? "years" : "quarters"} · SEC XBRL
+          <span className="text-violet-400"> · † calculated from filed components</span>
+        </p>
+      )}
+      {!periods[0]?.filed && periods.length > 0 && (
+        <p className="mt-4 text-xs text-gray-400">
+          {periodType === "annual" ? "Annual" : "Quarterly"} comparison · {periods.length}{" "}
+          {periodType === "annual" ? "years" : "quarters"} · SEC XBRL
+          <span className="text-violet-400"> · † calculated from filed components</span>
         </p>
       )}
     </>
   );
 }
 
-function SinglePeriodTable({ period }: { period: StatementPeriod }) {
+function SinglePeriodTable({
+  period,
+  statement,
+  coverage,
+}: {
+  period: StatementPeriod;
+  statement: StatementKey;
+  coverage?: Record<string, CoverageEntry>;
+}) {
+  const order = STATEMENT_METRIC_ORDER[statement] ?? [];
+  const itemMap = Object.fromEntries(period.line_items.map((li) => [li.key, li]));
+  const keys = [
+    ...order,
+    ...period.line_items.map((li) => li.key).filter((k) => !order.includes(k)),
+  ];
+
   return (
     <>
       <table className="w-full max-w-lg border-collapse text-sm">
@@ -245,17 +403,37 @@ function SinglePeriodTable({ period }: { period: StatementPeriod }) {
           </tr>
         </thead>
         <tbody>
-          {period.line_items.map((item) => (
-            <tr
-              key={item.key}
-              className="border-b border-gray-50 hover:bg-indigo-50/30"
-            >
-              <td className="py-2 pr-4 text-gray-700">{item.label}</td>
-              <td className="py-2 text-right font-medium tabular-nums text-gray-900">
-                {fmtDisplay(item.value, item.unit)}
-              </td>
-            </tr>
-          ))}
+          {keys.map((key) => {
+            const item = itemMap[key];
+            const label = item?.label ?? METRIC_LABELS[key] ?? key;
+            const cov = coverage?.[key];
+            const isNa = cov?.status === "not_applicable";
+            return (
+              <tr key={key} className="border-b border-gray-50 hover:bg-indigo-50/30">
+                <td className="py-2 pr-4 text-gray-700">
+                  <LineItemLabel
+                    label={label}
+                    item={item}
+                    coverageKey={key}
+                    coverage={coverage}
+                  />
+                </td>
+                <td className="py-2 text-right font-medium text-gray-900">
+                  {item ? (
+                    <span title={sourceHint(item)} className="tabular-nums">
+                      {fmtDisplay(item.value, item.unit)}
+                    </span>
+                  ) : (
+                    <CellValue
+                      display="—"
+                      hint={coverageHint(key, undefined, coverage)}
+                      missing={isNa}
+                    />
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {period.filed && (
