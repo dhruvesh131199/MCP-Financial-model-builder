@@ -59,6 +59,11 @@ CAPABILITIES:
 2. SEC filings — fetch_sec_financials (Files panel on dashboard)
 3. Peer comparison — set_comparative_inputs + fetch_sec_financials per company + run_comparative_analysis
 
+SEC FETCH PERF:
+- Default is latest fiscal year only (max_years=1, annual, no quarterly) unless the user asks for more.
+- For peer comparison: fetch ONE company per tool call, sequentially — never parallel SEC fetches.
+- Use max_years=1 and include_quarterly=false for comparative analysis (comps use latest common FY).
+
 UNIVERSAL RULES:
 1. start_session() — ALWAYS first for any workspace task. Share view_url after EVERY tool call.
 2. Python computes all math — never calculate valuations or ratios in prose.
@@ -249,9 +254,9 @@ def fetch_sec_financials(
     company_name: str | None = None,
     ticker: str | None = None,
     fiscal_years: list[int] | None = None,
-    max_years: int = 5,
+    max_years: int = 1,
     include_annual: bool = True,
-    include_quarterly: bool = True,
+    include_quarterly: bool = False,
     statements: list[str] | None = None,
     session_id: str | None = None,
 ) -> dict:
@@ -261,10 +266,12 @@ def fetch_sec_financials(
 
     SEC RULES:
     - Independent of DCF and comparative — no other inputs required.
-    - For peer comparison: call once per target and each peer so files appear on dashboard.
+    - Default: latest fiscal year only (max_years=1, include_quarterly=false). Use max_years=5
+      or include_quarterly=true ONLY when the user explicitly asks.
+    - For peer comparison: fetch ONE company at a time (sequential, not parallel) with
+      max_years=1 and include_quarterly=false — comps only need the latest annual filing.
     - Provide company_name (e.g. "Apple") and/or ticker (e.g. "AAPL").
-    - fiscal_years=[2023] for a specific year; omit for last max_years (default 5).
-    - include_annual / include_quarterly default true.
+    - fiscal_years=[2023] for a specific year; omit for the most recent max_years (default 1).
     - statements optional: income, balance, cashflow (default all three).
     - Returns file_id — link it via set_comparative_inputs(link={{ticker, file_id}}).
   """
@@ -313,6 +320,14 @@ def fetch_sec_financials(
         )
     except ValueError as exc:
         return _with_session(sid, {"error": str(exc)})
+    except Exception as exc:
+        return _with_session(
+            sid,
+            {
+                "error": f"SEC fetch failed for {sym}: {exc}",
+                "hint": "Retry one company at a time; on small EC2 try include_quarterly=false.",
+            },
+        )
 
     dcf_suggested = suggest_dcf_inputs(financials)
     dcf_prefilled: dict = {}
@@ -397,9 +412,10 @@ def set_comparative_inputs(
     COMPARATIVE RULES:
     - values.target: {{ticker, company_name?}}
     - values.peers: list of {{ticker, company_name?}} (1–10)
-    - values.fiscal_year: optional int; omit to auto-pick latest FY common to all companies
+    - values.fiscal_year: optional int; omit to auto-pick earliest latest FY across all companies
     - values.link: {{ticker, file_id, company_name?}} after fetch_sec_financials
-    - Call fetch_sec_financials for EACH company first so files appear on dashboard.
+    - Call fetch_sec_financials for EACH company first (one at a time, max_years=1,
+      include_quarterly=false). Then link each file_id.
     - Do NOT call run_comparative_analysis until ready=true.
     """
     try:

@@ -543,7 +543,7 @@ def resolve_comparative_fiscal_year(
 
     chosen = min(latest_years)
     return chosen, (
-        f"Using FY{chosen} — latest fiscal year with annual data common to all companies."
+        f"Using FY{chosen} — earliest latest fiscal year across target and peers."
     )
 
 

@@ -41,7 +41,7 @@ def build_dedup_key(
         period_flags.append("quarterly")
     period_part = "+".join(period_flags) or "none"
     stmt_part = "+".join(sorted(statements))
-    return f"{ticker.upper()}|{years_part}|{period_part}|{stmt_part}|ingest=edgartools|periods=v3|xbrl_only"
+    return f"{ticker.upper()}|{years_part}|{period_part}|{stmt_part}|ingest=edgartools|periods=v3|xbrl_only|default=1y"
 
 
 def build_file_name(
@@ -56,6 +56,8 @@ def build_file_name(
         if len(ys) == 1:
             return f"{sym} — FY{ys[0]}"
         return f"{sym} — FY{ys[0]}-{ys[-1]}"
+    if max_years == 1:
+        return f"{sym} — Latest Financials"
     return f"{sym} — {max_years}Y Financials"
 
 
@@ -72,9 +74,9 @@ def filter_financials(
     financials: FinancialStatements,
     *,
     fiscal_years: list[int] | None = None,
-    max_years: int = 5,
+    max_years: int = 1,
     include_annual: bool = True,
-    include_quarterly: bool = True,
+    include_quarterly: bool = False,
     statements: list[str] | None = None,
     max_quarterly_periods: int | None = None,
 ) -> FinancialStatements:
@@ -149,9 +151,9 @@ def fetch_sec_financials(
     company_name: str | None = None,
     ticker: str | None = None,
     fiscal_years: list[int] | None = None,
-    max_years: int = 5,
+    max_years: int = 1,
     include_annual: bool = True,
-    include_quarterly: bool = True,
+    include_quarterly: bool = False,
     statements: list[str] | None = None,
 ) -> FinancialStatements:
     """Resolve ticker, fetch via edgartools XBRLS, fallback to companyfacts."""

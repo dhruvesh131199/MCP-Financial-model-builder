@@ -77,6 +77,7 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-06-21 | Perf | SEC fetch default `max_years=1`, `include_quarterly=false`; comps fetch latest FY only; MCP instructs sequential one-company fetches; dedup `default=1y`; 1 10-K when max_years≤1. |
 | 2026-06-22 | Fix | SEC Files: XBRL-only (no EBITDA/FCF/etc. derivations); AMD COGS was sum of duplicate CostOfGoodsAndServicesSold lines — now pick best tag; dedup `xbrl_only`. |
 | 2026-06-22 | Bugfix | 5Y annual showed 4 cols: `filter_financials` used fiscal years from quarterly (e.g. FY2026 Q1), dropping oldest annual year. Annual filter now uses annual periods only; quarterly cap = max_years×4; dedup key `periods=v2`. |
 | 2026-06-22 | Feature | EdgarTools XBRLS ingest: `standard_concept` → canonical file fields; companyfacts fallback; DCF auto-prefill from SEC; dedup key `ingest=edgartools`. |

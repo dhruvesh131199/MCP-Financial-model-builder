@@ -22,6 +22,14 @@ def test_filter_fiscal_year_2023():
     assert included_fiscal_years(filtered) == [2023]
 
 
+def test_filter_max_years_default_one():
+    financials = _sample_financials()
+    filtered = filter_financials(financials)
+    years = included_fiscal_years(filtered)
+    assert len(years) == 1
+    assert years[0] == 2024
+
+
 def test_filter_max_years_5():
     financials = _sample_financials()
     filtered = filter_financials(financials, max_years=5)
@@ -47,7 +55,7 @@ def test_build_dedup_key_includes_ingest_source():
         include_quarterly=True,
         statements=["income"],
     )
-    assert "|ingest=edgartools|periods=v3|xbrl_only" in key
+    assert "|ingest=edgartools|periods=v3|xbrl_only|default=1y" in key
 
 
 def test_filter_max_years_keeps_five_annual_despite_future_quarterly():
@@ -74,7 +82,12 @@ def test_filter_max_years_keeps_five_annual_despite_future_quarterly():
             )
         },
     )
-    filtered = filter_financials(financials, max_years=5, max_quarterly_periods=20)
+    filtered = filter_financials(
+        financials,
+        max_years=5,
+        include_quarterly=True,
+        max_quarterly_periods=20,
+    )
     years = [p.fiscal_year for p in filtered.statements["income"].annual]
     assert years == [2025, 2024, 2023, 2022, 2021]
     assert len(filtered.statements["income"].quarterly) == 3
@@ -102,4 +115,5 @@ def test_build_dedup_key_differs_by_scope():
 
 def test_build_file_name():
     assert build_file_name("aapl", fiscal_years=[2023], max_years=5) == "AAPL — FY2023"
+    assert build_file_name("tsla", fiscal_years=None, max_years=1) == "TSLA — Latest Financials"
     assert build_file_name("tsla", fiscal_years=None, max_years=5) == "TSLA — 5Y Financials"

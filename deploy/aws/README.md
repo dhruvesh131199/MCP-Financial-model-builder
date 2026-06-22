@@ -259,6 +259,9 @@ sudo systemctl restart financial-models-api financial-models-mcp
 | Symptom | Likely fix |
 |---------|------------|
 | `curl 127.0.0.1:8000` fails | Start API (uvicorn) |
+| `curl 127.0.0.1:8000` OK but `https://myfmdc-api…` times out | DuckDNS IP wrong; security group missing **443**; Caddy down — run `bash deploy/aws/diagnose-ec2.sh` |
+| Claude fetch works but dashboard empty | API unreachable from browser — fix HTTPS above (MCP and API are separate URLs) |
+| Microsoft/Google “server error” after Apple OK | SEC fetch is slow (~15s/company); EC2 may OOM or Claude times out — fetch **one ticker per call**, try `include_quarterly=false` |
 | MCP curl fails | Start `python mcp/server.py` |
 | HTTPS fails, local OK | DuckDNS wrong IP; security group missing 80/443 |
 | Caddy errors | `sudo journalctl -u caddy -n 50 -l` |
@@ -290,5 +293,6 @@ curl -s http://checkip.amazonaws.com
 | `Caddyfile.example` | HTTPS config template |
 | `install-systemd.sh` | One-time: API + MCP run in background |
 | `update-ec2.sh` | After `git push`: pull + restart on EC2 |
+| `diagnose-ec2.sh` | Local + HTTPS troubleshooting on the VM |
 
 Oracle deploy (alternative backend): `deploy/oracle/`

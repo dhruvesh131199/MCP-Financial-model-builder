@@ -19,4 +19,18 @@ else
   echo "systemd services not installed. Run: bash deploy/aws/install-systemd.sh"
 fi
 
-curl -sf http://127.0.0.1:8000/health && echo " API OK" || echo " API not responding"
+api_ok=0
+for i in 1 2 3 4 5; do
+  if curl -sf http://127.0.0.1:8000/health >/dev/null 2>&1; then
+    api_ok=1
+    break
+  fi
+  sleep 2
+done
+
+if [ "$api_ok" = 1 ]; then
+  echo " API OK"
+else
+  echo " API not responding — run: bash deploy/aws/diagnose-ec2.sh"
+  journalctl -u financial-models-api -n 20 --no-pager 2>/dev/null || true
+fi

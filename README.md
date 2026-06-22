@@ -72,9 +72,9 @@ The model appears on your dashboard within a few seconds.
 
 ### SEC financials
 
-> Fetch 2023 reports for Apple.
+> Fetch Apple SEC financial reports.
 
-or
+or, for more history:
 
 > Pull Tesla financials for the last 5 years — annual and quarterly.
 

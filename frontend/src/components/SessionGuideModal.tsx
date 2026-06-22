@@ -10,7 +10,7 @@ const EXAMPLES = [
     id: "fetch",
     title: "Fetch SEC financials",
     description: "Pull official 10-K / 10-Q data into your workspace. Results appear in Files.",
-    prompt: "Fetch Apple SEC financial reports for the last 5 years.",
+    prompt: "Fetch Apple SEC financial reports.",
     accent: "from-emerald-500/15 to-teal-500/5",
     icon: (
       <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>

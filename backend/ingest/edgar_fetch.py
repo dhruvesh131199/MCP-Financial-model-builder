@@ -43,7 +43,10 @@ def _annual_filing_count(max_years: int) -> int:
     Each 10-K carries comparative prior-year columns; stitching N filings
     typically produces N-1 distinct fiscal year-ends (e.g. 5 filings → 4 cols).
     Fetch one extra filing, then cap display with ``max_periods=max_years``.
+    For a single latest year, one 10-K is enough.
     """
+    if max_years <= 1:
+        return 1
     return max(1, max_years + 1)
 
 
@@ -81,10 +84,10 @@ def fetch_edgar_frames(
     ticker: str,
     cik: str | None = None,
     entity_name: str | None = None,
-    max_years: int = 5,
-    max_quarterly_periods: int = 20,
+    max_years: int = 1,
+    max_quarterly_periods: int = 4,
     include_annual: bool = True,
-    include_quarterly: bool = True,
+    include_quarterly: bool = False,
     statements: list[str] | None = None,
 ) -> EdgarFetchResult:
     """Download and stitch 10-K / 10-Q XBRL via edgartools."""
