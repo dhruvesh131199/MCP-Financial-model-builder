@@ -28,6 +28,7 @@ from services.sec_client import resolve_ticker as sec_resolve_ticker
 from services.sec_financials import (
     build_dedup_key,
     build_file_name,
+    build_scope_applied,
     fetch_sec_financials as do_fetch_sec_financials,
     financials_summary,
 )
@@ -59,10 +60,21 @@ CAPABILITIES:
 2. SEC filings — fetch_sec_financials (Files panel on dashboard)
 3. Peer comparison — set_comparative_inputs + fetch_sec_financials per company + run_comparative_analysis
 
-SEC FETCH PERF:
-- Default is latest fiscal year only (max_years=1, annual, no quarterly) unless the user asks for more.
-- For peer comparison: fetch ONE company per tool call, sequentially — never parallel SEC fetches.
-- Use max_years=1 and include_quarterly=false for comparative analysis (comps use latest common FY).
+SEC FETCH — map user words to fetch_sec_financials parameters:
+| User says | Parameters |
+|-----------|------------|
+| "Fetch Apple reports" / latest financials | defaults (max_years=1, include_annual=true, include_quarterly=false) |
+| "Apple 2023" / "FY2023 report" | fiscal_years=[2023], include_annual=true, include_quarterly=false |
+| "Last 5 years" | max_years=5, include_annual=true; add include_quarterly=true only if user asks quarterly |
+| "Quarterly" / "last 4 quarters" | include_annual=false, include_quarterly=true, max_years=1 |
+| "Apple 2023 quarterly" | fiscal_years=[2023], include_annual=false, include_quarterly=true |
+| Peer comparison (each company) | max_years=1, include_quarterly=false — ONE company per call, sequentially |
+
+SEC FETCH RULES:
+- Use fiscal_years=[...] when the user names specific years. Use max_years=N for "last N years".
+- Do not pass both unless intentional. When fiscal_years is set, max_years does not pick the year.
+- After fetch, read scope_applied in the response to confirm the right periods were stored.
+- Fiscal year is the company's FY (e.g. Apple FY2025 ends ~Sep 2025), not always calendar year.
 
 UNIVERSAL RULES:
 1. start_session() — ALWAYS first for any workspace task. Share view_url after EVERY tool call.
@@ -264,16 +276,29 @@ def fetch_sec_financials(
     Fetch official SEC financial statements for a US public company and save to the
     session Files panel on the dashboard.
 
+    PARAMETER GUIDE (max_years default 1, include_quarterly default false):
+    - Latest annual only: omit optional scope args (or max_years=1).
+    - Specific FY: fiscal_years=[2023] — targeted 10-K, not latest year.
+    - Last N years: max_years=N — do not use when user named a specific year.
+    - Quarterly only (last 4 quarters): include_annual=false, include_quarterly=true.
+    - Named year quarterly: fiscal_years=[2023], include_annual=false, include_quarterly=true.
+    - Annual + quarterly history: max_years=N, include_annual=true, include_quarterly=true.
+
+    USER PHRASE → CALL EXAMPLES:
+    | User says | Call |
+    | "Fetch Apple reports" | company_name="Apple" |
+    | "Apple 2023 report" | ticker="AAPL", fiscal_years=[2023] |
+    | "Last 5 years annual" | ticker="AAPL", max_years=5 |
+    | "Last 4 quarters" | ticker="AAPL", include_annual=false, include_quarterly=true |
+    | "AMD FY2023 quarterly" | ticker="AMD", fiscal_years=[2023], include_annual=false, include_quarterly=true |
+
     SEC RULES:
     - Independent of DCF and comparative — no other inputs required.
-    - Default: latest fiscal year only (max_years=1, include_quarterly=false). Use max_years=5
-      or include_quarterly=true ONLY when the user explicitly asks.
-    - For peer comparison: fetch ONE company at a time (sequential, not parallel) with
-      max_years=1 and include_quarterly=false — comps only need the latest annual filing.
-    - Provide company_name (e.g. "Apple") and/or ticker (e.g. "AAPL").
-    - fiscal_years=[2023] for a specific year; omit for the most recent max_years (default 1).
+    - Peer comparison: ONE company per call, max_years=1, include_quarterly=false.
     - statements optional: income, balance, cashflow (default all three).
-    - Returns file_id — link it via set_comparative_inputs(link={{ticker, file_id}}).
+    - Values are SEC XBRL only in Files — host must not calculate or invent figures.
+    - Response includes scope_applied — verify fiscal_years_included matches user intent.
+    - Returns file_id — link via set_comparative_inputs(link={{ticker, file_id}}).
   """
     try:
         sid = resolve_workspace_session(ctx, session_id)
@@ -345,6 +370,15 @@ def fetch_sec_financials(
         fiscal_years=fiscal_years,
         max_years=max_years,
     )
+    scope = build_scope_applied(
+        fiscal_years=fiscal_years,
+        max_years=max_years,
+        include_annual=include_annual,
+        include_quarterly=include_quarterly,
+        statements=valid_stmts,
+        financials=financials,
+    )
+    summary = financials_summary(financials, scope_applied=scope)
 
     if existing:
         entry = update_file_entry(
@@ -357,7 +391,6 @@ def fetch_sec_financials(
                 "data": financials.model_dump(),
             },
         )
-        summary = financials_summary(financials)
         return _with_session(
             sid,
             {
@@ -368,7 +401,8 @@ def fetch_sec_financials(
                 "deduplicated": True,
                 "refreshed": True,
                 "message": (
-                    f"Refreshed '{entry['name']}' from SEC (updated normalization). "
+                    f"Refreshed '{entry['name']}' from SEC. "
+                    f"FY included: {scope['fiscal_years_included']}. "
                     f"Open {_view_url(sid)} to view."
                 ),
             },
@@ -383,7 +417,6 @@ def fetch_sec_financials(
             "data": financials.model_dump(),
         },
     )
-    summary = financials_summary(financials)
     return _with_session(
         sid,
         {
@@ -393,8 +426,10 @@ def fetch_sec_financials(
             "file_name": entry["name"],
             "deduplicated": False,
             "message": (
-                f"Saved '{entry['name']}' to Files panel. "
-                f"Open {_view_url(sid)} to browse statements."
+                f"Saved '{entry['name']}' to Files. "
+                f"FY included: {scope['fiscal_years_included']}; "
+                f"quarterly FYs: {scope['quarterly_fiscal_years_included'] or 'none'}. "
+                f"Open {_view_url(sid)} to browse."
             ),
         },
     )
@@ -409,13 +444,17 @@ def set_comparative_inputs(
     """
     Set up a peer comparison: target company + 1–10 peers.
 
+    WORKFLOW (in order):
+    1. values.target + values.peers — register tickers
+    2. fetch_sec_financials once per company (sequential; max_years=1, include_quarterly=false)
+    3. values.link — {{ticker, file_id}} for each company from step 2
+    4. run_comparative_analysis when ready=true
+
     COMPARATIVE RULES:
     - values.target: {{ticker, company_name?}}
     - values.peers: list of {{ticker, company_name?}} (1–10)
     - values.fiscal_year: optional int; omit to auto-pick earliest latest FY across all companies
-    - values.link: {{ticker, file_id, company_name?}} after fetch_sec_financials
-    - Call fetch_sec_financials for EACH company first (one at a time, max_years=1,
-      include_quarterly=false). Then link each file_id.
+    - values.link: {{ticker, file_id, company_name?}} after each fetch_sec_financials
     - Do NOT call run_comparative_analysis until ready=true.
     """
     try:

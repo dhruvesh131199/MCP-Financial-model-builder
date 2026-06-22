@@ -55,7 +55,7 @@ def test_build_dedup_key_includes_ingest_source():
         include_quarterly=True,
         statements=["income"],
     )
-    assert "|ingest=edgartools|periods=v3|xbrl_only|default=1y" in key
+    assert "|ingest=edgartools|fetch=statements" in key
 
 
 def test_filter_max_years_keeps_five_annual_despite_future_quarterly():
@@ -91,6 +91,13 @@ def test_filter_max_years_keeps_five_annual_despite_future_quarterly():
     years = [p.fiscal_year for p in filtered.statements["income"].annual]
     assert years == [2025, 2024, 2023, 2022, 2021]
     assert len(filtered.statements["income"].quarterly) == 3
+
+
+def test_filter_fiscal_years_keeps_all_requested():
+    financials = _sample_financials()
+    filtered = filter_financials(financials, fiscal_years=[2023, 2024])
+    years = included_fiscal_years(filtered)
+    assert years == [2024, 2023]
 
 
 def test_build_dedup_key_differs_by_scope():

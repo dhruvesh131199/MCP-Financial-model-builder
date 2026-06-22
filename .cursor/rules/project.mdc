@@ -21,6 +21,7 @@ alwaysApply: true
 ## Layout
 
 - `backend/engine/` — pure math, no HTTP/MCP imports
+- `backend/ingest/` — SEC fetch (`edgar_fetch.py`) + statement extract (`statement_extract.py`); companyfacts fallback in `normalize.py`
 - `backend/mcp/` — MCP tools only; thin wrappers calling engine + store
 - `backend/api/` — read-only REST for dashboard
 - `frontend/` — polls API, no embedded chat

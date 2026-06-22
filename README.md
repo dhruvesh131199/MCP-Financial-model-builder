@@ -78,7 +78,11 @@ or, for more history:
 
 > Pull Tesla financials for the last 5 years — annual and quarterly.
 
-The host calls `fetch_sec_financials`; reports appear in the **Files** sidebar on your dashboard. Repeat requests with the same scope do not create duplicate entries. Session data is deleted after one hour (`SESSION_TTL_SECONDS`, default 3600).
+The host calls `fetch_sec_financials`; reports appear in the **Files** sidebar. Ingest uses **edgartools statement objects** (`income_statement`, `balance_sheet`, `cashflow_statement`) per filing — not XBRLS stitch. Repeat requests with the same scope do not create duplicate entries (dedup key `fetch=statements`). Session data is deleted after one hour (`SESSION_TTL_SECONDS`, default 3600).
+
+**Defaults:** latest annual 10-K only (`max_years=1`, `include_quarterly=false`). See MCP tool docstring for FY-specific and quarterly scopes.
+
+Homework / exploration scripts: `backend/homework/statement_fetch.py`.
 
 ## Manual start (3 terminals)
 

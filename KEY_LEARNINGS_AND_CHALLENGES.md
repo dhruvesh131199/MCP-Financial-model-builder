@@ -25,6 +25,7 @@ This is a **fresh MCP-first rewrite** of ideas proven in `AI assisted Financial 
 | Phase 1 scope | **One tool, all manual inputs** | Multi-tool bundle flow; SEC auto-fetch day one | Prove MCP → engine → dashboard loop before adding complexity |
 | Who does math? | **Python engine only** | LLM computes in chat | Non-negotiable for trust in financial models |
 | MCP transport | **HTTP streamable** (`localhost:8080/mcp`) | stdio subprocess | Matches deploy model from day one; strangers use URL in Cursor config |
+| SEC ingest | **Per-filing edgartools statements** | XBRLS stitch + `standard_concept` adapter | Simpler, accurate bank revenue; one `Financials.extract(filing)` per 10-K/10-Q |
 | User identity | **Random UUID session** — folder per user | Login/signup; shared latest_model | Demo-friendly; no auth friction; unguessable link = isolation |
 | Frontend (Phase 1) | **Single page, poll API** | Full 20/80 sidebar; WebSocket | See model in action fast; sidebar comes Phase 3 |
 | Codebase | **Fresh start** | Port entire REST project | Clean MCP architecture; reference sibling for algorithms only |
@@ -77,6 +78,8 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-06-22 | Refactor | SEC ingest simplified: per-filing `income_statement` / `balance_sheet` / `cashflow_statement` + `statement_extract.py`; removed XBRLS stitch, `edgar_adapter`, `edgar_fetch_plan`; JPM bank revenue fixed via total-line rules; dedup `fetch=statements`. |
+| 2026-06-21 | Doc | MCP INSTRUCTIONS + fetch_sec_financials phrase→params table; scope_applied in fetch response; comparative numbered workflow. |
 | 2026-06-21 | Perf | SEC fetch default `max_years=1`, `include_quarterly=false`; comps fetch latest FY only; MCP instructs sequential one-company fetches; dedup `default=1y`; 1 10-K when max_years≤1. |
 | 2026-06-22 | Fix | SEC Files: XBRL-only (no EBITDA/FCF/etc. derivations); AMD COGS was sum of duplicate CostOfGoodsAndServicesSold lines — now pick best tag; dedup `xbrl_only`. |
 | 2026-06-22 | Bugfix | 5Y annual showed 4 cols: `filter_financials` used fiscal years from quarterly (e.g. FY2026 Q1), dropping oldest annual year. Annual filter now uses annual periods only; quarterly cap = max_years×4; dedup key `periods=v2`. |
@@ -104,7 +107,7 @@ Newest first. Add a row when something interview-worthy happens.
 
 ## Not yet done (honest gaps)
 
-- SEC → DCF input prefill (Phase 4)
+- **Not yet done** → SEC → DCF prefill exists (`suggest_dcf_inputs`); LTM/TTM comps still open
 - LTM/TTM rolling multiples for comps
 - Filing HTML/PDF narrative viewer
 - Auth for public MCP endpoint
