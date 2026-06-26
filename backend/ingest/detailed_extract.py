@@ -33,7 +33,11 @@ DETAILED_INCOME_ORDER: tuple[str, ...] = (
     "interest_expense",
     "income_tax_expense",
     "net_income",
+    "eps_diluted",
 )
+
+# Used only for trend EPS fallback — not exported in detailed report rows.
+_TREND_ONLY_INCOME_KEYS: tuple[str, ...] = ("weighted_avg_shares_diluted",)
 
 DETAILED_BALANCE_ORDER: tuple[str, ...] = (
     "current_assets",
@@ -78,6 +82,7 @@ DETAILED_LABELS: dict[str, str] = {
     "interest_expense": "Interest",
     "income_tax_expense": "Tax",
     "net_income": "Net Income",
+    "eps_diluted": "EPS (Diluted)",
     "current_assets": "Current Assets",
     "non_current_assets": "Non-Current Assets",
     "current_liabilities": "Current Liabilities",
@@ -1017,6 +1022,36 @@ def extract_detailed_period(
             source_statement="income",
         )
 
+        val, tag = _pick_raw_tag(income_df, period_col, "EarningsPerShareDiluted")
+        if val is None:
+            val, tag = _pick_standard_concept(
+                income_df, period_col, "EarningsPerShareBasicAndDiluted"
+            )
+        income["eps_diluted"] = _make_cell(
+            "eps_diluted",
+            val,
+            xbrl_tag=tag,
+            label=_row_label(income_df, period_col, tag),
+            source_statement="income",
+        )
+
+        val, tag = _pick_raw_tag(
+            income_df,
+            period_col,
+            "WeightedAverageNumberOfDilutedSharesOutstanding",
+        )
+        if val is None:
+            val, tag = _pick_standard_concept(
+                income_df, period_col, "SharesFullyDilutedAverage"
+            )
+        income["weighted_avg_shares_diluted"] = _make_cell(
+            "weighted_avg_shares_diluted",
+            val,
+            xbrl_tag=tag,
+            label=_row_label(income_df, period_col, tag),
+            source_statement="income",
+        )
+
     if balance_df is not None and period_col in balance_df.columns:
         balance["current_assets"] = _pick_balance_total(
             balance_df,
@@ -1310,6 +1345,13 @@ def _period_cells_from_slice(
             cell = _line_item_to_cell(li, key)
             cell.source_statement = stmt_name
             cells[key] = cell
+    if stmt_name == "income":
+        for key in _TREND_ONLY_INCOME_KEYS:
+            li = by_key.get(key)
+            if li is not None:
+                cell = _line_item_to_cell(li, key)
+                cell.source_statement = stmt_name
+                cells[key] = cell
     return cells
 
 

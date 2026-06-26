@@ -21,6 +21,19 @@ export interface DetailedAnalysisPeriod {
   accounting_equation_ok?: boolean | null;
 }
 
+export interface TrendAnalysisRow {
+  key: string;
+  label: string;
+  row_type: "currency" | "percent" | "eps";
+  highlight: boolean;
+  values: (number | null)[];
+}
+
+export interface TrendAnalysisData {
+  fiscal_years: number[];
+  rows: TrendAnalysisRow[];
+}
+
 export interface DetailedAnalysisData {
   ticker: string;
   entity_name: string;
@@ -31,6 +44,7 @@ export interface DetailedAnalysisData {
   warnings: string[];
   integrity_checks: string[];
   is_bank_style: boolean;
+  trend_analysis?: TrendAnalysisData;
 }
 
 export interface DetailedAnalysisModelEntry {

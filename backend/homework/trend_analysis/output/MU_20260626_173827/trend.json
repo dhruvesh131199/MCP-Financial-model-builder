@@ -1,0 +1,115 @@
+{
+  "fiscal_years": [
+    2025,
+    2024,
+    2023,
+    2022,
+    2021
+  ],
+  "rows": [
+    {
+      "key": "revenue",
+      "label": "Revenue",
+      "row_type": "currency",
+      "highlight": false,
+      "values": [
+        37378000000.0,
+        25111000000.0,
+        15540000000.0,
+        30758000000.0,
+        27705000000.0
+      ]
+    },
+    {
+      "key": "revenue_growth_yoy",
+      "label": "Revenue growth YoY %",
+      "row_type": "percent",
+      "highlight": true,
+      "values": [
+        48.85110111106686,
+        61.589446589446595,
+        -49.47655894401456,
+        11.019671539433315,
+        null
+      ]
+    },
+    {
+      "key": "gross_profit",
+      "label": "Gross profit",
+      "row_type": "currency",
+      "highlight": false,
+      "values": [
+        14873000000.0,
+        5613000000.0,
+        -1416000000.0,
+        13898000000.0,
+        10423000000.0
+      ]
+    },
+    {
+      "key": "gross_margin_pct",
+      "label": "Gross margin %",
+      "row_type": "percent",
+      "highlight": true,
+      "values": [
+        39.79078602386431,
+        22.352753773246782,
+        -9.111969111969112,
+        45.184992522270626,
+        37.62136798411839
+      ]
+    },
+    {
+      "key": "operating_income",
+      "label": "EBIT",
+      "row_type": "currency",
+      "highlight": false,
+      "values": [
+        9770000000.0,
+        1304000000.0,
+        -5745000000.0,
+        9702000000.0,
+        6283000000.0
+      ]
+    },
+    {
+      "key": "ebit_margin_pct",
+      "label": "EBIT margin %",
+      "row_type": "percent",
+      "highlight": true,
+      "values": [
+        26.138370164267748,
+        5.192943331607662,
+        -36.969111969111964,
+        31.54301319981793,
+        22.67821692835228
+      ]
+    },
+    {
+      "key": "eps_diluted",
+      "label": "EPS",
+      "row_type": "eps",
+      "highlight": false,
+      "values": [
+        7.59,
+        0.7,
+        -5.34,
+        7.75,
+        5.14
+      ]
+    },
+    {
+      "key": "eps_growth_yoy",
+      "label": "EPS growth YoY %",
+      "row_type": "percent",
+      "highlight": true,
+      "values": [
+        984.2857142857143,
+        113.10861423220975,
+        -168.90322580645162,
+        50.77821011673153,
+        null
+      ]
+    }
+  ]
+}

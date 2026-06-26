@@ -35,6 +35,7 @@ from services.detailed_analysis_service import (
     save_detailed_analysis_from_cache,
     should_sync_detailed_analysis_on_fetch,
 )
+from services.trend_analysis_service import run_trend_analysis_for_session
 from services.comparative import handle_run_comparative_analysis, handle_set_comparative_inputs
 from session_binding import resolve_workspace_session
 from store import (
@@ -72,9 +73,15 @@ in-depth financial breakdown, or similar — call run_detailed_analysis, NOT fet
 | "Detailed analysis FY2023" | run_detailed_analysis | fiscal_years=[2023] |
 | "Run detailed analysis" (company already in context) | run_detailed_analysis | ticker from context |
 
-run_detailed_analysis fills the **Detailed Analysis** sidebar (curated income/balance/cashflow report).
-fetch_sec_financials fills **Files** only (raw XBRL browse/compare) — use for single-year fetch,
-quarterly, or comparative prep, NOT when the user asked for detailed analysis.
+run_detailed_analysis fills the **Detailed Analysis** sidebar (curated income/balance/cashflow report
+plus Trend analysis table). fetch_sec_financials fills **Files** only (raw XBRL browse/compare) —
+use for single-year fetch, quarterly, or comparative prep, NOT when the user asked for detailed analysis.
+
+TREND ANALYSIS ROUTING:
+| User says | Tool |
+|-----------|------|
+| "detailed analysis for AAPL" | run_detailed_analysis (includes trend) |
+| "update trend analysis" / "trend table only" / "refresh trend" | run_trend_analysis |
 
 SEC FETCH — map user words to fetch_sec_financials parameters:
 | User says | Parameters |
@@ -570,7 +577,8 @@ def run_detailed_analysis(
 
     **Use this tool when the user asks for detailed analysis** — not fetch_sec_financials.
     Saves to the dashboard **Detailed Analysis** sidebar: income, balance, and cash flow
-    sections in one scrollable report with derived metrics and integrity checks.
+    sections in one scrollable report with derived metrics, integrity checks, and a
+    **Trend analysis** table (revenue, margins, EPS, YoY growth).
 
     Uses session statements cache (ticker → period → statement). Fetches only missing
     income/balance/cashflow leaves, syncs Files, then saves type=detailed_analysis.
@@ -620,6 +628,68 @@ def run_detailed_analysis(
                 f"Detailed Analysis saved for {result.get('ticker')}. "
                 f"{result.get('periods_count', 0)} periods. "
                 f"Open {url} → Detailed Analysis sidebar."
+            ),
+        },
+    )
+
+
+@mcp.tool()
+def run_trend_analysis(
+    ctx: Context,
+    company_name: str | None = None,
+    ticker: str | None = None,
+    max_years: int = 5,
+    session_id: str | None = None,
+) -> dict:
+    """
+    Rebuild or refresh the Trend analysis table for a ticker (standalone).
+
+    Use when the user asks to update trend analysis only — not a full detailed analysis rerun.
+    Requires cached annual statements (from fetch_sec_financials or run_detailed_analysis).
+    Upserts the `trend_analysis` block on the ticker's Detailed Analysis model.
+
+    USER PHRASE → CALL:
+    | User says | Call |
+    | "Update trend analysis for Apple" | run_trend_analysis(ticker="AAPL") |
+    | "Refresh trend table" | run_trend_analysis(ticker=...) |
+    | "Detailed analysis for Apple" | run_detailed_analysis (includes trend) — NOT this tool |
+
+    WORKFLOW:
+    1. start_session() first
+    2. run_trend_analysis(ticker="AAPL", max_years=5)
+    3. Open view_url → Detailed Analysis → scroll to Trend analysis section
+    """
+    try:
+        sid = resolve_workspace_session(ctx, session_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    if not company_name and not ticker:
+        return _with_session(sid, {"error": "Provide company_name or ticker"})
+
+    resolved = sec_resolve_ticker(company_name=company_name, ticker=ticker)
+    if "error" in resolved:
+        return _with_session(sid, resolved)
+
+    _touch_session_writes()
+    result = run_trend_analysis_for_session(
+        sid,
+        resolved["ticker"],
+        max_years=max_years,
+    )
+    if "error" in result:
+        return _with_session(sid, result)
+
+    url = _view_url(sid)
+    return _with_session(
+        sid,
+        {
+            **result,
+            "view_url": url,
+            "message": (
+                f"Trend analysis updated for {result.get('ticker')}. "
+                f"{result.get('trend_row_count', 0)} rows. "
+                f"Open {url} → Detailed Analysis → Trend analysis."
             ),
         },
     )

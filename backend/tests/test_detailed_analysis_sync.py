@@ -74,6 +74,8 @@ def test_save_detailed_analysis_from_cache_creates_model():
     assert entry["name"] == "AAPL"
     years = [p["fiscal_year"] for p in entry["data"]["periods"]]
     assert years == [2025, 2024, 2023, 2022, 2021]
+    assert entry["data"].get("trend_analysis") is not None
+    assert len(entry["data"]["trend_analysis"]["rows"]) == 8
 
     ws = load_workspace(sid)
     assert any(m["type"] == "detailed_analysis" for m in ws["models"])

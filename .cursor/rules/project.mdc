@@ -29,6 +29,7 @@ alwaysApply: true
 ## MCP tool routing (host)
 
 - **Detailed analysis** (user says "detailed analysis", "analyze in detail", curated report) → `run_detailed_analysis` only — **not** `fetch_sec_financials`
+- **Trend analysis only** (user says "update trend", "trend table", "refresh trend") → `run_trend_analysis` (included automatically in `run_detailed_analysis`)
 - **Raw SEC / Files panel** (fetch 2023, quarterly, browse statements) → `fetch_sec_financials` or `fetch_sec_income`/`balance`/`cashflow`
 - **DCF** → `set_model_inputs` + `run_dcf`
 - **Peers** → `set_comparative_inputs` + fetch per company + `run_comparative_analysis`

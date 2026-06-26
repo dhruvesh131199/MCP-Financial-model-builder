@@ -9,6 +9,7 @@ from ingest.detailed_extract import build_detailed_snapshot_from_financials
 from services.sec_financials import fetch_and_cache_statements, materialize_ticker_file_view
 from services.statements_store import compute_fetch_gaps, get_cached_periods_summary
 from services.sec_client import resolve_ticker
+from services.trend_analysis_service import build_trend_from_snapshot
 from store import save_detailed_analysis_model
 
 ALL_STATEMENTS = frozenset({"income", "balance", "cashflow"})
@@ -33,6 +34,9 @@ def save_detailed_analysis_from_cache(
         return None
 
     analysis_data = snapshot_to_dict(snapshot)
+    analysis_data["trend_analysis"] = build_trend_from_snapshot(
+        snapshot, max_years=max_years
+    )
     entry = save_detailed_analysis_model(
         session_id,
         {

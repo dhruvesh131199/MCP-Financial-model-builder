@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { DetailedAnalysisData, DetailedMetricCell } from "../types";
+import TrendAnalysisSection from "./TrendAnalysisSection";
 import {
   BALANCE_GROUP_LABELS,
   DETAILED_ANALYSIS_DISCLAIMER,
@@ -176,6 +177,10 @@ export default function DetailedAnalysisViewer({
             </p>
           }
         />
+
+        {analysis.trend_analysis && (
+          <TrendAnalysisSection trend={analysis.trend_analysis} />
+        )}
 
         {analysis.integrity_checks.length > 0 && (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-xs text-amber-900">

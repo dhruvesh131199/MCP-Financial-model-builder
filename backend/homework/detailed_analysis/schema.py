@@ -6,6 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from engine.trend_analysis import TrendAnalysisTable
 from ingest.detailed_extract import (
     BALANCE_GROUP_LABELS,
     DETAILED_BALANCE_ORDER,
@@ -51,6 +52,7 @@ class DetailedAnalysisOut(BaseModel):
     warnings: list[str] = Field(default_factory=list)
     integrity_checks: list[str] = Field(default_factory=list)
     is_bank_style: bool = False
+    trend_analysis: TrendAnalysisTable | None = None
 
 
 def _cell_out(cell: MetricCell, *, group: str | None = None) -> MetricCellOut:

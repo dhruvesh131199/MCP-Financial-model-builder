@@ -98,6 +98,10 @@ def test_aapl_income_revenue_and_operating_cost(aapl_income: pd.DataFrame):
     assert period.income["operating_cost"].value == 62151000000.0
     assert period.income["operating_income"].value == 133050000000.0
     assert period.income["net_income"].value == 112010000000.0
+    assert "eps_diluted" in period.income
+    eps = period.income["eps_diluted"]
+    if eps.value is not None:
+        assert eps.value > 0
 
 
 def test_aapl_balance_section_totals(aapl_balance: pd.DataFrame):

@@ -55,6 +55,7 @@ export const DETAILED_INCOME_ORDER = [
   "interest_expense",
   "income_tax_expense",
   "net_income",
+  "eps_diluted",
 ] as const;
 
 export const DETAILED_BALANCE_ORDER = [
@@ -114,6 +115,7 @@ export const DETAILED_METRIC_LABELS: Record<string, string> = {
   interest_expense: "Interest",
   income_tax_expense: "Tax",
   net_income: "Net Income",
+  eps_diluted: "EPS (Diluted)",
   current_assets: "Current Assets",
   non_current_assets: "Non-Current Assets",
   total_assets: "Total Assets",
