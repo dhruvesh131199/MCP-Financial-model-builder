@@ -70,6 +70,29 @@ def test_jpm_total_revenue_not_principal_transactions():
     assert tag == "RevenuesNetOfInterestExpense"
 
 
+def test_gm_total_net_sales_and_revenue_not_automotive_segment():
+    """GM: automotive segment is RevenueFromContract; total is us-gaap_Revenues."""
+    df = pd.DataFrame(
+        {
+            "label": [
+                "Automotive",
+                "GM Financial",
+                "Total net sales and revenue (Note 3)",
+            ],
+            "concept": [
+                "us-gaap_RevenueFromContractWithCustomerExcludingAssessedTax",
+                "us-gaap_RevenueNotFromContractWithCustomer",
+                "us-gaap_Revenues",
+            ],
+            "standard_concept": [None, None, None],
+            "2025-12-31 (FY)": [167971000000.0, 17048000000.0, 185019000000.0],
+        }
+    )
+    val, tag = smart_revenue(df, "2025-12-31 (FY)")
+    assert val == 185019000000.0
+    assert tag == "Revenues"
+
+
 def test_no_derived_ebitda_from_cashflow_depreciation():
     income_df = pd.DataFrame(
         {

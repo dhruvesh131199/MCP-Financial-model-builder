@@ -1,3 +1,48 @@
+export interface DetailedMetricCell {
+  key: string;
+  label: string;
+  value: number | null;
+  xbrl_tag?: string | null;
+  row_label?: string | null;
+  source_statement?: string | null;
+  source?: "xbrl" | "derived" | "n/a";
+  warning?: string | null;
+  group?: string | null;
+}
+
+export interface DetailedAnalysisPeriod {
+  fiscal_year: number;
+  fiscal_period: string;
+  period_end: string;
+  income: DetailedMetricCell[];
+  balance: DetailedMetricCell[];
+  cashflow: DetailedMetricCell[];
+  is_bank_style?: boolean;
+  accounting_equation_ok?: boolean | null;
+}
+
+export interface DetailedAnalysisData {
+  ticker: string;
+  entity_name: string;
+  cik: string;
+  fetched_at: string;
+  source: string;
+  periods: DetailedAnalysisPeriod[];
+  warnings: string[];
+  integrity_checks: string[];
+  is_bank_style: boolean;
+}
+
+export interface DetailedAnalysisModelEntry {
+  id: string;
+  name: string;
+  type: "detailed_analysis";
+  created_at: string;
+  updated_at?: string;
+  data: DetailedAnalysisData;
+  source?: { ticker: string; statements_ref?: string };
+}
+
 export interface LineItem {
   key: string;
   label: string;
@@ -55,6 +100,7 @@ export interface FileEntry {
   type: "financials";
   dedup_key?: string;
   created_at: string;
+  updated_at?: string;
   data: FinancialStatements;
 }
 
@@ -167,7 +213,10 @@ export interface ComparativeModelEntry {
   data: ComparativeReport;
 }
 
-export type ModelEntry = DcfModelEntry | ComparativeModelEntry;
+export type ModelEntry =
+  | DcfModelEntry
+  | ComparativeModelEntry
+  | DetailedAnalysisModelEntry;
 
 export interface Workspace {
   session_id: string;
@@ -179,7 +228,8 @@ export interface Workspace {
 export type DashboardSelection =
   | { kind: "none" }
   | { kind: "file"; id: string }
-  | { kind: "model"; id: string };
+  | { kind: "model"; id: string }
+  | { kind: "analysis"; id: string };
 
 export interface ModelRecord {
   session_id?: string;

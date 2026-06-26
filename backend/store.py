@@ -123,6 +123,117 @@ def save_dcf_model(session_id: str, payload: dict) -> dict:
     return entry
 
 
+def ticker_financials_dedup_key(ticker: str) -> str:
+    return f"{ticker.upper()}|financials"
+
+
+def find_financials_file_for_ticker(session_id: str, ticker: str) -> dict | None:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        return None
+
+    sym = ticker.upper()
+    dedup = ticker_financials_dedup_key(sym)
+    for entry in _load_file_entries(session_dir):
+        if entry.get("dedup_key") == dedup:
+            return entry
+    for entry in _load_file_entries(session_dir):
+        if entry.get("type") != "financials":
+            continue
+        data = entry.get("data") or {}
+        if str(data.get("ticker", "")).upper() == sym:
+            return entry
+    return None
+
+
+def upsert_ticker_financials_file(
+    session_id: str,
+    ticker: str,
+    financials,
+) -> dict:
+    """Create or update the single Files entry for a ticker."""
+    sym = ticker.upper()
+    dedup_key = ticker_financials_dedup_key(sym)
+    payload = financials.model_dump() if hasattr(financials, "model_dump") else financials
+    existing = find_financials_file_for_ticker(session_id, sym)
+    if existing:
+        return update_file_entry(
+            session_id,
+            existing["id"],
+            {
+                "name": sym,
+                "type": "financials",
+                "dedup_key": dedup_key,
+                "data": payload,
+            },
+        )
+    return save_file_entry(
+        session_id,
+        {
+            "name": sym,
+            "type": "financials",
+            "dedup_key": dedup_key,
+            "data": payload,
+        },
+    )
+
+
+def find_detailed_analysis_by_ticker(session_id: str, ticker: str) -> dict | None:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        return None
+
+    sym = ticker.upper()
+    for entry in _load_model_entries(session_dir):
+        if entry.get("type") != "detailed_analysis":
+            continue
+        data = entry.get("data") or {}
+        if str(data.get("ticker", "")).upper() == sym:
+            return entry
+    return None
+
+
+def save_detailed_analysis_model(session_id: str, payload: dict) -> dict:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+
+    models_dir = session_dir / "models"
+    models_dir.mkdir(exist_ok=True)
+    _migrate_legacy_model(session_dir)
+
+    data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+    ticker = str(data.get("ticker") or "NONE").upper()
+    existing = find_detailed_analysis_by_ticker(session_id, ticker)
+
+    if existing:
+        model_id = existing["id"]
+        entry = {
+            **existing,
+            "name": ticker,
+            "type": "detailed_analysis",
+            "data": data,
+            "source": payload.get("source") or existing.get("source"),
+            "updated_at": _utc_now(),
+        }
+        (models_dir / f"{model_id}.json").write_text(
+            json.dumps(entry, indent=2), encoding="utf-8"
+        )
+        return entry
+
+    model_id = str(uuid.uuid4())
+    entry = {
+        "id": model_id,
+        "name": ticker,
+        "type": "detailed_analysis",
+        "created_at": _utc_now(),
+        "data": data,
+        "source": payload.get("source"),
+    }
+    (models_dir / f"{model_id}.json").write_text(json.dumps(entry, indent=2), encoding="utf-8")
+    return entry
+
+
 def _load_model_entries(session_dir: Path) -> list[dict]:
     models_dir = session_dir / "models"
     if not models_dir.exists():
@@ -197,10 +308,35 @@ def _entry_timestamp(entry: dict) -> str | None:
     return max(valid) if valid else None
 
 
-def _workspace_updated_at(models: list[dict], files: list[dict]) -> str | None:
+def _statements_inputs_path(session_id: str) -> Path:
+    session_dir = _session_dir(session_id)
+    inputs_dir = session_dir / "inputs"
+    inputs_dir.mkdir(exist_ok=True)
+    return inputs_dir / "statements.json"
+
+
+def load_statements_index_raw(session_id: str) -> dict | None:
+    path = _statements_inputs_path(session_id)
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_statements_index_raw(session_id: str, payload: dict) -> None:
+    path = _statements_inputs_path(session_id)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _workspace_updated_at(
+    models: list[dict],
+    files: list[dict],
+    *,
+    extra_timestamps: list[str | None] | None = None,
+) -> str | None:
     timestamps = [
         *(_entry_timestamp(m) for m in models),
         *(_entry_timestamp(f) for f in files),
+        *(t for t in (extra_timestamps or []) if t),
     ]
     timestamps = [t for t in timestamps if t]
     return max(timestamps) if timestamps else None
@@ -247,7 +383,13 @@ def load_workspace(session_id: str) -> dict | None:
     _migrate_legacy_model(session_dir)
     models = _load_model_entries(session_dir)
     files = _load_file_entries(session_dir)
-    updated_at = _workspace_updated_at(models, files)
+    stmt_path = session_dir / "inputs" / "statements.json"
+    stmt_mtime: str | None = None
+    if stmt_path.exists():
+        stmt_mtime = datetime.fromtimestamp(
+            stmt_path.stat().st_mtime, tz=timezone.utc
+        ).isoformat()
+    updated_at = _workspace_updated_at(models, files, extra_timestamps=[stmt_mtime])
     return {
         "session_id": session_id,
         "updated_at": updated_at,

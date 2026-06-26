@@ -6,7 +6,7 @@ export default function HomePage() {
       <div className="max-w-lg rounded-2xl border border-[var(--border-soft)] bg-white p-8 shadow-sm">
         <h1 className="text-2xl font-semibold text-gray-900">Financial Model Builder</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Build DCF models in Cursor or Claude. Each user gets a private workspace link —
+          Build DCF models with your AI assistant. Each user gets a private workspace link —
           no signup required.
         </p>
 

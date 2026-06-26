@@ -9,14 +9,19 @@ from store import (
     build_dcf_inputs_from_bundle,
     cleanup_expired_sessions,
     create_session,
+    find_detailed_analysis_by_ticker,
     find_file_by_dedup_key,
+    find_financials_file_for_ticker,
     load_workspace,
     merge_model_inputs,
     save_dcf_model,
+    save_detailed_analysis_model,
     save_file_entry,
     session_exists,
     summarize_input_bundle,
+    ticker_financials_dedup_key,
     update_file_entry,
+    upsert_ticker_financials_file,
 )
 
 
@@ -183,6 +188,61 @@ def test_workspace_updated_at_includes_files():
     assert ws is not None
     assert ws["updated_at"] is not None
     assert len(ws["files"]) == 1
+
+
+def test_upsert_ticker_financials_file_creates_and_updates():
+    sid = create_session()
+    data_v1 = {"ticker": "AAPL", "statements": {"income": {"annual": []}}}
+    entry = upsert_ticker_financials_file(sid, "AAPL", data_v1)
+    assert entry["name"] == "AAPL"
+    assert entry["dedup_key"] == ticker_financials_dedup_key("AAPL")
+
+    data_v2 = {
+        "ticker": "AAPL",
+        "statements": {"income": {"annual": [{"fiscal_year": 2023, "line_items": []}]}},
+    }
+    updated = upsert_ticker_financials_file(sid, "AAPL", data_v2)
+    assert updated["id"] == entry["id"]
+    assert updated["data"]["statements"]["income"]["annual"][0]["fiscal_year"] == 2023
+
+
+def test_find_financials_file_for_ticker_legacy_dedup():
+    sid = create_session()
+    legacy = save_file_entry(
+        sid,
+        {
+            "name": "AAPL — FY2023",
+            "type": "financials",
+            "dedup_key": "AAPL|years=2023|annual|income",
+            "data": {"ticker": "AAPL", "statements": {}},
+        },
+    )
+    found = find_financials_file_for_ticker(sid, "AAPL")
+    assert found is not None
+    assert found["id"] == legacy["id"]
+
+
+def test_save_detailed_analysis_upserts_by_ticker():
+    sid = create_session()
+    payload = {
+        "data": {"ticker": "AAPL", "entity_name": "Apple", "periods": [], "integrity_checks": []},
+    }
+    first = save_detailed_analysis_model(sid, payload)
+    assert first["name"] == "AAPL"
+    second = save_detailed_analysis_model(
+        sid,
+        {
+            "data": {
+                "ticker": "AAPL",
+                "entity_name": "Apple",
+                "periods": [{"fiscal_year": 2025}],
+                "integrity_checks": [],
+            },
+        },
+    )
+    assert second["id"] == first["id"]
+    assert len(second["data"]["periods"]) == 1
+    assert find_detailed_analysis_by_ticker(sid, "AAPL")["id"] == first["id"]
 
 
 def test_cleanup_expired_sessions(monkeypatch, tmp_path):

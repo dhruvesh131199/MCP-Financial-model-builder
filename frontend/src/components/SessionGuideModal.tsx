@@ -19,6 +19,18 @@ const EXAMPLES = [
     ),
   },
   {
+    id: "detailed-analysis",
+    title: "Detailed analysis report",
+    description: "Curated 5-year income, balance, and cash flow report in Detailed Analysis.",
+    prompt: "Run a detailed analysis for Apple (AAPL) over the last 5 years.",
+    accent: "from-sky-500/15 to-cyan-500/5",
+    icon: (
+      <svg className="h-5 w-5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
     id: "comps-2",
     title: "Peer comparison (2 companies)",
     description: "Side-by-side fundamentals, margins, and market multiples.",
@@ -131,11 +143,11 @@ export default function SessionGuideModal({ open, onClose }: SessionGuideModalPr
           </button>
           <p className="text-xs font-semibold uppercase tracking-widest text-indigo-200">Your workspace is ready</p>
           <h2 id="session-guide-title" className="mt-1 text-2xl font-semibold tracking-tight sm:text-[1.65rem]">
-            What to try in Cursor
+            What to try next
           </h2>
           <p className="mt-2 max-w-lg text-sm leading-relaxed text-indigo-100/95">
-            Chat with Cursor or Claude using the MCP tools — fetched files and built models show up here
-            automatically. Copy any prompt below and paste it into your assistant.
+            Chat with your assistant using the MCP tools — fetched files and built models show up here
+            automatically. Copy any prompt below and paste it into your chat.
           </p>
         </div>
 

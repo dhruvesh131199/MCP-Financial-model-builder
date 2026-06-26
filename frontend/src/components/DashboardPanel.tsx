@@ -1,11 +1,17 @@
-import type { DashboardSelection, FileEntry, ModelEntry } from "../types";
+import type {
+  DashboardSelection,
+  DetailedAnalysisModelEntry,
+  FileEntry,
+  ModelEntry,
+} from "../types";
 import { exportComparativeToExcel } from "../utils/exportComparativeExcel";
 import { exportDcfToExcel } from "../utils/exportDcfExcel";
 import { exportFinancialsToExcel } from "../utils/exportFinancialsExcel";
 import ComparativeTable from "./ComparativeTable";
 import DcfTable from "./DcfTable";
+import DetailedAnalysisViewer from "./DetailedAnalysisViewer";
 import FileViewer from "./FileViewer";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 interface DashboardPanelProps {
   files: FileEntry[];
@@ -24,13 +30,35 @@ export default function DashboardPanel({
 }: DashboardPanelProps) {
   const [downloading, setDownloading] = useState(false);
 
+  const dcfAndComparative = useMemo(
+    () => models.filter((m) => m.type === "dcf" || m.type === "comparative"),
+    [models],
+  );
+  const detailedAnalyses = useMemo(
+    () =>
+      models.filter(
+        (m): m is DetailedAnalysisModelEntry => m.type === "detailed_analysis",
+      ),
+    [models],
+  );
+
+  const displayFiles = useMemo(() => dedupeByTicker(files), [files]);
+  const displayAnalyses = useMemo(
+    () => dedupeAnalysesByTicker(detailedAnalyses),
+    [detailedAnalyses],
+  );
+
   const activeFile =
     selection.kind === "file"
-      ? files.find((f) => f.id === selection.id)
+      ? displayFiles.find((f) => f.id === selection.id)
       : undefined;
   const activeModel =
     selection.kind === "model"
-      ? models.find((m) => m.id === selection.id)
+      ? dcfAndComparative.find((m) => m.id === selection.id)
+      : undefined;
+  const activeAnalysis =
+    selection.kind === "analysis"
+      ? displayAnalyses.find((m) => m.id === selection.id)
       : undefined;
 
   async function handleDownload() {
@@ -66,15 +94,15 @@ export default function DashboardPanel({
 
   return (
     <div className="flex h-full min-h-0">
-      <aside className="flex w-[20%] min-w-[180px] flex-col border-r border-[var(--border-soft)] bg-[var(--bg-sidebar)]">
+      <aside className="flex w-[20%] min-w-[180px] flex-col overflow-y-auto border-r border-[var(--border-soft)] bg-[var(--bg-sidebar)]">
         <SidebarSection title="Files">
-          {files.length === 0 ? (
+          {displayFiles.length === 0 ? (
             <EmptyHint text="Fetched files will appear here" />
           ) : (
-            files.map((file) => (
+            displayFiles.map((file) => (
               <SidebarItem
                 key={file.id}
-                label={file.name}
+                label={file.data.ticker || file.name}
                 active={selection.kind === "file" && selection.id === file.id}
                 pulse={pulseId === file.id}
                 onClick={() => onSelect({ kind: "file", id: file.id })}
@@ -84,10 +112,10 @@ export default function DashboardPanel({
         </SidebarSection>
 
         <SidebarSection title="Models">
-          {models.length === 0 ? (
+          {dcfAndComparative.length === 0 ? (
             <EmptyHint text="Built models will appear here" />
           ) : (
-            models.map((model) => (
+            dcfAndComparative.map((model) => (
               <SidebarItem
                 key={model.id}
                 label={model.name}
@@ -98,37 +126,123 @@ export default function DashboardPanel({
             ))
           )}
         </SidebarSection>
+
+        <SidebarSection title="Detailed Analysis">
+          {displayAnalyses.length === 0 ? (
+            <EmptyHint text="Run detailed analysis from chat" />
+          ) : (
+            displayAnalyses.map((entry) => (
+              <SidebarItem
+                key={entry.id}
+                label={entry.data.ticker}
+                active={
+                  selection.kind === "analysis" && selection.id === entry.id
+                }
+                pulse={pulseId === entry.id}
+                onClick={() => onSelect({ kind: "analysis", id: entry.id })}
+              />
+            ))
+          )}
+        </SidebarSection>
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col bg-white">
         {activeModel?.type === "dcf" ? (
           <>
-            <ModelHeader name={activeModel.name} showDownload={showDownload} downloading={downloading} onDownload={handleDownload} />
+            <ModelHeader
+              name={activeModel.name}
+              showDownload={showDownload}
+              downloading={downloading}
+              onDownload={handleDownload}
+            />
             <div className="min-h-0 flex-1 overflow-hidden">
               <DcfTable model={activeModel.data} />
             </div>
           </>
         ) : activeModel?.type === "comparative" ? (
           <>
-            <ModelHeader name={activeModel.name} showDownload={showDownload} downloading={downloading} onDownload={handleDownload} />
+            <ModelHeader
+              name={activeModel.name}
+              showDownload={showDownload}
+              downloading={downloading}
+              onDownload={handleDownload}
+            />
             <div className="min-h-0 flex-1 overflow-hidden">
               <ComparativeTable report={activeModel.data} />
             </div>
           </>
+        ) : activeAnalysis ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <DetailedAnalysisViewer analysis={activeAnalysis.data} />
+          </div>
         ) : activeFile ? (
           <>
-            <ModelHeader name={activeFile.name} showDownload={showDownload} downloading={downloading} onDownload={handleDownload} />
+            <ModelHeader
+              name={activeFile.data.ticker || activeFile.name}
+              showDownload={showDownload}
+              downloading={downloading}
+              onDownload={handleDownload}
+            />
             <div className="min-h-0 flex-1 overflow-hidden">
-              <FileViewer file={activeFile} />
+              <FileViewer
+                file={activeFile}
+                hasDetailedAnalysis={displayAnalyses.some(
+                  (a) =>
+                    a.data.ticker.toUpperCase() ===
+                    activeFile.data.ticker.toUpperCase(),
+                )}
+              />
             </div>
           </>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-gray-500">
-            Select a file or model from the sidebar
+            Select a file, model, or detailed analysis from the sidebar
           </div>
         )}
       </main>
     </div>
+  );
+}
+
+function dedupeByTicker(files: FileEntry[]): FileEntry[] {
+  const byTicker = new Map<string, FileEntry>();
+  for (const file of files) {
+    const ticker = (file.data?.ticker ?? file.name).toUpperCase();
+    const existing = byTicker.get(ticker);
+    if (!existing) {
+      byTicker.set(ticker, file);
+      continue;
+    }
+    const existingTs = existing.updated_at ?? existing.created_at ?? "";
+    const fileTs = file.updated_at ?? file.created_at ?? "";
+    if (fileTs >= existingTs) {
+      byTicker.set(ticker, file);
+    }
+  }
+  return [...byTicker.values()].sort((a, b) =>
+    (a.created_at ?? "").localeCompare(b.created_at ?? ""),
+  );
+}
+
+function dedupeAnalysesByTicker(
+  entries: DetailedAnalysisModelEntry[],
+): DetailedAnalysisModelEntry[] {
+  const byTicker = new Map<string, DetailedAnalysisModelEntry>();
+  for (const entry of entries) {
+    const ticker = entry.data.ticker.toUpperCase();
+    const existing = byTicker.get(ticker);
+    if (!existing) {
+      byTicker.set(ticker, entry);
+      continue;
+    }
+    const existingTs = existing.updated_at ?? existing.created_at ?? "";
+    const entryTs = entry.updated_at ?? entry.created_at ?? "";
+    if (entryTs >= existingTs) {
+      byTicker.set(ticker, entry);
+    }
+  }
+  return [...byTicker.values()].sort((a, b) =>
+    (a.created_at ?? "").localeCompare(b.created_at ?? ""),
   );
 }
 

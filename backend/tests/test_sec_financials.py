@@ -5,8 +5,11 @@ from ingest.normalize import normalize_company_facts
 from services.sec_financials import (
     build_dedup_key,
     build_file_name,
+    build_ticker_dedup_key,
+    build_ticker_file_name,
     filter_financials,
     included_fiscal_years,
+    materialize_ticker_file_view,
 )
 
 
@@ -100,6 +103,15 @@ def test_filter_fiscal_years_keeps_all_requested():
     assert years == [2024, 2023]
 
 
+def test_build_ticker_dedup_key():
+    assert build_ticker_dedup_key("aapl") == "AAPL|financials"
+
+
+def test_build_ticker_file_name():
+    assert build_ticker_file_name("aapl") == "AAPL"
+    assert build_file_name("aapl", fiscal_years=[2023], max_years=5) == "AAPL"
+
+
 def test_build_dedup_key_differs_by_scope():
     key_a = build_dedup_key(
         "AAPL",
@@ -120,7 +132,37 @@ def test_build_dedup_key_differs_by_scope():
     assert key_a != key_b
 
 
+def test_materialize_ticker_file_view_newest_first():
+    from ingest.normalize import FinancialStatements, StatementPeriod, StatementSlice, LineItem
+    from services.statements_store import sync_financials_to_cache
+    from store import create_session
+
+    sid = create_session()
+    fin = FinancialStatements(
+        ticker="TST",
+        cik="1",
+        entity_name="Test",
+        fetched_at="2026-01-01T00:00:00+00:00",
+        statements={
+            "income": StatementSlice(
+                annual=[
+                    StatementPeriod(
+                        fiscal_year=y,
+                        fiscal_period="FY",
+                        line_items=[LineItem(key="revenue", label="R", value=float(y), unit="USD")],
+                    )
+                    for y in (2025, 2023, 2024)
+                ]
+            )
+        },
+        ingest_source="test",
+    )
+    sync_financials_to_cache(sid, fin, statements_written=["income"])
+    view = materialize_ticker_file_view(sid, "TST")
+    assert view is not None
+    years = [p.fiscal_year for p in view.statements["income"].annual]
+    assert years == [2025, 2024, 2023]
+
+
 def test_build_file_name():
-    assert build_file_name("aapl", fiscal_years=[2023], max_years=5) == "AAPL — FY2023"
-    assert build_file_name("tsla", fiscal_years=None, max_years=1) == "TSLA — Latest Financials"
-    assert build_file_name("tsla", fiscal_years=None, max_years=5) == "TSLA — 5Y Financials"
+    assert build_ticker_file_name("tsla") == "TSLA"

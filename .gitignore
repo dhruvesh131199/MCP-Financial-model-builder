@@ -8,3 +8,6 @@ __pycache__/
 *.pyc
 .DS_Store
 .logs/
+backend/homework/hero_output/
+backend/homework/huggingface_test/output/
+backend/homework/detailed_analysis/output/

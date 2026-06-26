@@ -88,6 +88,13 @@ METRICS: tuple[MetricDef, ...] = (
         comps_fields=("operating_margin",),
     ),
     MetricDef(
+        "operating_cost",
+        "Operating Cost",
+        "income",
+        (_a("us-gaap", "OperatingExpenses"), _a("us-gaap", "NoninterestExpense")),
+        applicability="when_reported",
+    ),
+    MetricDef(
         "interest_expense",
         "Interest Expense",
         "income",
@@ -241,6 +248,34 @@ METRICS: tuple[MetricDef, ...] = (
         comps_fields=("stockholders_equity", "roe", "debt_to_equity", "book_value_per_share"),
     ),
     MetricDef(
+        "current_assets",
+        "Current Assets",
+        "balance",
+        (_a("us-gaap", "AssetsCurrent"),),
+        applicability="when_reported",
+    ),
+    MetricDef(
+        "non_current_assets",
+        "Non-Current Assets",
+        "balance",
+        (_a("us-gaap", "AssetsNoncurrent"),),
+        applicability="when_reported",
+    ),
+    MetricDef(
+        "current_liabilities",
+        "Current Liabilities",
+        "balance",
+        (_a("us-gaap", "LiabilitiesCurrent"),),
+        applicability="when_reported",
+    ),
+    MetricDef(
+        "non_current_liabilities",
+        "Non-Current Liabilities",
+        "balance",
+        (_a("us-gaap", "LiabilitiesNoncurrent"),),
+        applicability="when_reported",
+    ),
+    MetricDef(
         "long_term_debt",
         "Long-Term Debt",
         "balance",
@@ -310,6 +345,32 @@ METRICS: tuple[MetricDef, ...] = (
         applicability="when_reported",
         comps_fields=("free_cash_flow", "fcf_margin"),
     ),
+    MetricDef(
+        "investing_cash_flow",
+        "Investing Cash Flow",
+        "cashflow",
+        (_a("us-gaap", "NetCashProvidedByUsedInInvestingActivities"),),
+        applicability="when_reported",
+    ),
+    MetricDef(
+        "financing_cash_flow",
+        "Financing Cash Flow",
+        "cashflow",
+        (_a("us-gaap", "NetCashProvidedByUsedInFinancingActivities"),),
+        applicability="when_reported",
+    ),
+    MetricDef(
+        "net_cash_change",
+        "Net Cash Change",
+        "cashflow",
+        (
+            _a(
+                "us-gaap",
+                "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalentsPeriodIncreaseDecreaseIncludingExchangeRateEffect",
+            ),
+        ),
+        applicability="when_reported",
+    ),
 )
 
 METRICS_BY_KEY: dict[str, MetricDef] = {m.key: m for m in METRICS}
@@ -350,9 +411,51 @@ BALANCE_METRIC_ORDER: tuple[str, ...] = (
 CASHFLOW_METRIC_ORDER: tuple[str, ...] = (
     "depreciation_and_amortization",
     "operating_cash_flow",
+    "investing_cash_flow",
     "capex",
     "free_cash_flow",
+    "financing_cash_flow",
+    "net_cash_change",
 )
+
+DETAILED_INCOME_METRIC_ORDER: tuple[str, ...] = (
+    "revenue",
+    "cost_of_revenue",
+    "gross_profit",
+    "operating_cost",
+    "operating_income",
+    "ebitda",
+    "depreciation",
+    "amortization",
+    "interest_expense",
+    "income_tax_expense",
+    "net_income",
+)
+
+DETAILED_BALANCE_METRIC_ORDER: tuple[str, ...] = (
+    "current_assets",
+    "non_current_assets",
+    "total_assets",
+    "current_liabilities",
+    "non_current_liabilities",
+    "total_liabilities",
+    "stockholders_equity",
+    "cash_end_of_period",
+)
+
+DETAILED_CASHFLOW_METRIC_ORDER: tuple[str, ...] = (
+    "operating_cash_flow",
+    "investing_cash_flow",
+    "free_cash_flow",
+    "financing_cash_flow",
+    "net_cash_change",
+)
+
+DETAILED_ANALYSIS_ORDER: dict[str, tuple[str, ...]] = {
+    "income": DETAILED_INCOME_METRIC_ORDER,
+    "balance": DETAILED_BALANCE_METRIC_ORDER,
+    "cashflow": DETAILED_CASHFLOW_METRIC_ORDER,
+}
 
 STATEMENT_METRIC_ORDER: dict[str, tuple[str, ...]] = {
     "income": INCOME_METRIC_ORDER,

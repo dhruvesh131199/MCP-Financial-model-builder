@@ -19,12 +19,16 @@ export default function SessionPage() {
   const [guideOpen, setGuideOpen] = useState(false);
   const modelCountRef = useRef(0);
   const fileCountRef = useRef(0);
+  const analysisSnapshotRef = useRef<Map<string, string>>(new Map());
 
-  const selectAndPulse = useCallback((kind: "file" | "model", id: string) => {
-    setSelection({ kind, id });
-    setPulseId(id);
-    window.setTimeout(() => setPulseId(null), 3200);
-  }, []);
+  const selectAndPulse = useCallback(
+    (kind: "file" | "model" | "analysis", id: string) => {
+      setSelection({ kind, id });
+      setPulseId(id);
+      window.setTimeout(() => setPulseId(null), 3200);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!sessionId) return;
@@ -57,10 +61,35 @@ export default function SessionPage() {
           setModels(workspace.models);
           setFiles(workspace.files);
 
-          if (workspace.models.length > prevModelCount && workspace.models.length > 0) {
+          let analysisToSelect: ModelEntry | undefined;
+          for (const model of workspace.models) {
+            if (model.type !== "detailed_analysis") continue;
+            const ts =
+              ("updated_at" in model && model.updated_at) ||
+              model.created_at ||
+              "";
+            const prev = analysisSnapshotRef.current.get(model.id);
+            const isNew =
+              prev === undefined && workspace.models.length > prevModelCount;
+            const isUpdated = prev !== undefined && prev !== ts;
+            if (isNew || isUpdated) {
+              analysisToSelect = model;
+            }
+            analysisSnapshotRef.current.set(model.id, ts);
+          }
+
+          if (analysisToSelect) {
+            selectAndPulse("analysis", analysisToSelect.id);
+          } else if (
+            workspace.models.length > prevModelCount &&
+            workspace.models.length > 0
+          ) {
             const latest = workspace.models[workspace.models.length - 1];
             selectAndPulse("model", latest.id);
-          } else if (workspace.files.length > prevFileCount && workspace.files.length > 0) {
+          } else if (
+            workspace.files.length > prevFileCount &&
+            workspace.files.length > 0
+          ) {
             const latest = workspace.files[workspace.files.length - 1];
             selectAndPulse("file", latest.id);
           }
@@ -91,7 +120,7 @@ export default function SessionPage() {
           <div className="min-w-0">
             <h1 className="text-base font-semibold text-gray-900">Workspace</h1>
             <p className="text-xs text-gray-500">
-              Private link — files and models update as you chat in Cursor
+              Private link — files and models update as you chat with your assistant
             </p>
           </div>
           <SessionGuideButton onClick={() => setGuideOpen(true)} />
@@ -114,7 +143,7 @@ export default function SessionPage() {
         {!notFound && !error && !hasContent && (
           <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
             <p className="text-sm text-gray-500">
-              No files or models yet — use the button above for example prompts to try in Cursor.
+              No files or models yet — use the button above for example prompts to try in chat.
             </p>
           </div>
         )}

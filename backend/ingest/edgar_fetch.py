@@ -245,6 +245,19 @@ def _collect_filing_periods(
                 LineItem(**item) for item in metrics_to_line_items(metrics, key)
             ]
         if by_stmt:
+            from ingest.detailed_extract import (
+                extract_detailed_period,
+                merge_detailed_into_line_items,
+            )
+
+            detailed_period = extract_detailed_period(
+                frames.get("income"),
+                frames.get("balance"),
+                frames.get("cashflow"),
+                col,
+                fy_end_mmdd=fy_end_mmdd,
+            )
+            merge_detailed_into_line_items(by_stmt, detailed_period)
             out.append((col, by_stmt, annual))
     return out
 

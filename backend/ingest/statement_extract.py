@@ -77,6 +77,22 @@ def _num(value: Any) -> float | None:
         return None
 
 
+def _total_revenue_label_ok(label: str, tag: str) -> bool:
+    """Label looks like company-wide total revenue (not a segment sub-line)."""
+    text = label.strip()
+    lower = text.lower()
+    if TOTAL_LABEL_RE.search(text):
+        return True
+    if "net of interest" in lower:
+        return True
+    if lower in ("total revenue", "total net revenue"):
+        return True
+    # GM-style: "Total net sales and revenue (Note 3)" on us-gaap_Revenues
+    if tag == "Revenues" and "total net sales" in lower and "revenue" in lower:
+        return True
+    return False
+
+
 def smart_revenue(df: pd.DataFrame, period_col: str) -> tuple[float | None, str | None]:
     """Total revenue — banks need tag/label rules, not blind standard_concept."""
     for tag in TOTAL_REVENUE_CONCEPTS:
@@ -87,11 +103,7 @@ def smart_revenue(df: pd.DataFrame, period_col: str) -> tuple[float | None, str 
             if SEGMENT_LABEL_RE.search(label):
                 continue
             if tag in ("RevenuesNetOfInterestExpense", "Revenues"):
-                if not (
-                    TOTAL_LABEL_RE.search(label.strip())
-                    or "net of interest" in label.lower()
-                    or label.strip().lower() in ("total revenue", "total net revenue")
-                ):
+                if not _total_revenue_label_ok(label, tag):
                     continue
             val = _num(row.get(period_col))
             if val is not None:

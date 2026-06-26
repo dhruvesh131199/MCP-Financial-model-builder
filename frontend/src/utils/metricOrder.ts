@@ -36,9 +36,98 @@ export const BALANCE_METRIC_ORDER = [
 export const CASHFLOW_METRIC_ORDER = [
   "depreciation_and_amortization",
   "operating_cash_flow",
+  "investing_cash_flow",
   "capex",
   "free_cash_flow",
+  "financing_cash_flow",
+  "net_cash_change",
 ] as const;
+
+export const DETAILED_INCOME_ORDER = [
+  "revenue",
+  "cost_of_revenue",
+  "gross_profit",
+  "operating_cost",
+  "operating_income",
+  "ebitda",
+  "depreciation",
+  "amortization",
+  "interest_expense",
+  "income_tax_expense",
+  "net_income",
+] as const;
+
+export const DETAILED_BALANCE_ORDER = [
+  "current_assets",
+  "non_current_assets",
+  "total_assets",
+  "current_liabilities",
+  "non_current_liabilities",
+  "total_liabilities",
+  "stockholders_equity",
+  "cash_end_of_period",
+] as const;
+
+export const DETAILED_CASHFLOW_ORDER = [
+  "operating_cash_flow",
+  "investing_cash_flow",
+  "free_cash_flow",
+  "financing_cash_flow",
+  "net_cash_change",
+] as const;
+
+export const DETAILED_ANALYSIS_ORDER: Record<string, readonly string[]> = {
+  income: DETAILED_INCOME_ORDER,
+  balance: DETAILED_BALANCE_ORDER,
+  cashflow: DETAILED_CASHFLOW_ORDER,
+};
+
+export const BALANCE_GROUP_LABELS: Record<string, string> = {
+  current_assets: "Assets",
+  non_current_assets: "Assets",
+  total_assets: "Totals",
+  current_liabilities: "Liabilities",
+  non_current_liabilities: "Liabilities",
+  total_liabilities: "Totals",
+  stockholders_equity: "Equity",
+  cash_end_of_period: "Cash",
+};
+
+export const DETAILED_ANALYSIS_DISCLAIMER =
+  "Data is fetched from official SEC filings via the edgartools library. We map thousands of XBRL tags using hardcoded rules, but filers use inconsistent labels and tags — some figures may be inaccurate. Please verify against the 10-K/10-Q and treat these as a starting point. We continuously improve our mapping dictionary; thank you for flagging mismatches.";
+
+export const BANK_SECTOR_DISCLAIMER =
+  "Bank / financial institution: income statement layout differs from industrial companies (often no COGS or gross profit). Figures may not match standard templates — verify carefully.";
+
+export const FCF_FOOTNOTE =
+  "Free cash flow = operating cash flow minus |capital expenditures|. Other sites may use different definitions (leases, working capital, etc.).";
+
+export const DETAILED_METRIC_LABELS: Record<string, string> = {
+  revenue: "Revenue",
+  cost_of_revenue: "COGS",
+  gross_profit: "Gross Profit",
+  operating_cost: "Operating Cost",
+  operating_income: "Operating Income / EBIT",
+  ebitda: "EBITDA",
+  depreciation: "Depreciation",
+  amortization: "Amortization",
+  interest_expense: "Interest",
+  income_tax_expense: "Tax",
+  net_income: "Net Income",
+  current_assets: "Current Assets",
+  non_current_assets: "Non-Current Assets",
+  total_assets: "Total Assets",
+  current_liabilities: "Current Liabilities",
+  non_current_liabilities: "Non-Current Liabilities",
+  total_liabilities: "Total Liabilities",
+  stockholders_equity: "Stockholders' Equity",
+  cash_end_of_period: "Cash at Period End",
+  operating_cash_flow: "CFOA",
+  investing_cash_flow: "CFIO (Investing)",
+  free_cash_flow: "Free Cash Flow",
+  financing_cash_flow: "CFFO (Financing)",
+  net_cash_change: "Net Change in Cash (FY)",
+};
 
 export const STATEMENT_METRIC_ORDER: Record<string, readonly string[]> = {
   income: INCOME_METRIC_ORDER,
@@ -75,6 +164,14 @@ export const METRIC_LABELS: Record<string, string> = {
   total_debt: "Total Debt",
   shares_outstanding: "Shares Outstanding",
   operating_cash_flow: "Operating Cash Flow",
+  investing_cash_flow: "Investing Cash Flow",
   capex: "Capital Expenditures",
   free_cash_flow: "Free Cash Flow",
+  financing_cash_flow: "Financing Cash Flow",
+  net_cash_change: "Net Cash Change",
+  operating_cost: "Operating Cost",
+  current_assets: "Current Assets",
+  non_current_assets: "Non-Current Assets",
+  current_liabilities: "Current Liabilities",
+  non_current_liabilities: "Non-Current Liabilities",
 };

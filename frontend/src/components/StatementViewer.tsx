@@ -43,6 +43,12 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
     (k): k is StatementKey =>
       k === "income" || k === "balance" || k === "cashflow",
   );
+  const hasQuarterlyData = useMemo(() => {
+    return Object.values(financials.statements).some(
+      (slice) => (slice?.quarterly.length ?? 0) > 0,
+    );
+  }, [financials.statements]);
+
   const [statement, setStatement] = useState<StatementKey>(
     scope[0] ?? "income",
   );
@@ -57,6 +63,9 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
     const cap = periodType === "annual" ? MAX_ANNUAL_PERIODS : MAX_QUARTERLY_PERIODS;
     return list.slice(0, cap);
   }, [financials, statement, periodType]);
+
+  const effectiveViewMode: ViewMode =
+    periods.length > 1 ? viewMode : "single";
 
   const activePeriod: StatementPeriod | undefined = periods[periodIndex];
 
@@ -144,12 +153,14 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
           >
             Annual
           </TabButton>
-          <TabButton
-            active={periodType === "quarterly"}
-            onClick={() => handlePeriodType("quarterly")}
-          >
-            Quarterly
-          </TabButton>
+          {hasQuarterlyData && (
+            <TabButton
+              active={periodType === "quarterly"}
+              onClick={() => handlePeriodType("quarterly")}
+            >
+              Quarterly
+            </TabButton>
+          )}
         </TabGroup>
         {periods.length > 1 && (
           <>
@@ -170,7 +181,7 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
             </TabGroup>
           </>
         )}
-        {viewMode === "single" && periods.length > 0 && (
+        {effectiveViewMode === "single" && periods.length > 0 && (
           <>
             <span className="mx-1 text-gray-300">|</span>
             <select
@@ -193,7 +204,7 @@ export default function StatementViewer({ financials }: StatementViewerProps) {
           <p className="text-sm text-gray-400">
             No {periodType} data for this statement.
           </p>
-        ) : viewMode === "compare" ? (
+        ) : effectiveViewMode === "compare" ? (
           <ComparisonTable
             headers={periodHeaders}
             labels={comparison.labels}

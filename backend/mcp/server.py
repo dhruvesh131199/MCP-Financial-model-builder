@@ -26,11 +26,14 @@ from engine.dcf_prefill import dcf_still_required, suggest_dcf_inputs
 from ingest.normalize import FinancialStatements
 from services.sec_client import resolve_ticker as sec_resolve_ticker
 from services.sec_financials import (
-    build_dedup_key,
-    build_file_name,
     build_scope_applied,
-    fetch_sec_financials as do_fetch_sec_financials,
+    fetch_and_cache_statements,
     financials_summary,
+)
+from services.detailed_analysis_service import (
+    run_detailed_analysis_for_session,
+    save_detailed_analysis_from_cache,
+    should_sync_detailed_analysis_on_fetch,
 )
 from services.comparative import handle_run_comparative_analysis, handle_set_comparative_inputs
 from session_binding import resolve_workspace_session
@@ -39,11 +42,8 @@ from store import (
     build_dcf_inputs_from_bundle,
     cleanup_expired_sessions,
     company_name_from_bundle,
-    find_file_by_dedup_key,
     merge_model_inputs,
     save_dcf_model,
-    save_file_entry,
-    update_file_entry,
     summarize_input_bundle,
 )
 
@@ -53,19 +53,35 @@ MCP_PORT = int(os.getenv("MCP_PORT", "8080"))
 
 INSTRUCTIONS = """
 You help users with financial modeling in a private workspace: DCF valuation, SEC financials,
-and peer comparative analysis.
+detailed analysis reports, and peer comparative analysis.
 
 CAPABILITIES:
 1. DCF — set_model_inputs + run_dcf
-2. SEC filings — fetch_sec_financials (Files panel on dashboard)
-3. Peer comparison — set_comparative_inputs + fetch_sec_financials per company + run_comparative_analysis
+2. SEC filings (Files panel) — fetch_sec_financials, fetch_sec_income/balance/cashflow
+3. Detailed Analysis (report panel) — run_detailed_analysis ONLY (see routing below)
+4. Peer comparison — set_comparative_inputs + fetch_sec_financials per company + run_comparative_analysis
+
+DETAILED ANALYSIS — REQUIRED ROUTING (do not substitute fetch_sec_financials):
+When the user asks for detailed analysis, a detailed report, curated 5-year analysis,
+in-depth financial breakdown, or similar — call run_detailed_analysis, NOT fetch_sec_financials.
+
+| User says | Tool | Parameters |
+|-----------|------|------------|
+| "Detailed analysis for Apple" / "analyze AAPL in detail" | run_detailed_analysis | ticker="AAPL" (default max_years=5) |
+| "Detailed analysis last 3 years" | run_detailed_analysis | max_years=3 |
+| "Detailed analysis FY2023" | run_detailed_analysis | fiscal_years=[2023] |
+| "Run detailed analysis" (company already in context) | run_detailed_analysis | ticker from context |
+
+run_detailed_analysis fills the **Detailed Analysis** sidebar (curated income/balance/cashflow report).
+fetch_sec_financials fills **Files** only (raw XBRL browse/compare) — use for single-year fetch,
+quarterly, or comparative prep, NOT when the user asked for detailed analysis.
 
 SEC FETCH — map user words to fetch_sec_financials parameters:
 | User says | Parameters |
 |-----------|------------|
 | "Fetch Apple reports" / latest financials | defaults (max_years=1, include_annual=true, include_quarterly=false) |
 | "Apple 2023" / "FY2023 report" | fiscal_years=[2023], include_annual=true, include_quarterly=false |
-| "Last 5 years" | max_years=5, include_annual=true; add include_quarterly=true only if user asks quarterly |
+| "Last 5 years" (raw SEC data, NOT detailed analysis) | max_years=5, include_annual=true; add include_quarterly=true only if user asks quarterly |
 | "Quarterly" / "last 4 quarters" | include_annual=false, include_quarterly=true, max_years=1 |
 | "Apple 2023 quarterly" | fiscal_years=[2023], include_annual=false, include_quarterly=true |
 | Peer comparison (each company) | max_years=1, include_quarterly=false — ONE company per call, sequentially |
@@ -123,8 +139,8 @@ def start_session(ctx: Context) -> dict:
         "view_url": url,
         "message": (
             f"Workspace ready. Open your dashboard: {url} "
-            "What would you like to do — build a DCF, fetch SEC financials, "
-            "or run a peer comparison?"
+            "What would you like to do — build a DCF, fetch SEC financials (Files), "
+            "run detailed analysis (Detailed Analysis report), or run a peer comparison?"
         ),
     }
 
@@ -260,6 +276,105 @@ def resolve_ticker(
     )
 
 
+def _handle_cached_sec_fetch(
+    sid: str,
+    *,
+    company_name: str | None,
+    ticker: str | None,
+    fiscal_years: list[int] | None,
+    max_years: int,
+    include_annual: bool,
+    include_quarterly: bool,
+    statements: list[str],
+) -> dict:
+    resolved = sec_resolve_ticker(company_name=company_name, ticker=ticker)
+    if "error" in resolved:
+        return resolved
+
+    sym = resolved["ticker"]
+
+    _touch_session_writes()
+
+    try:
+        financials, gaps_filled, had_fetch, file_id, file_name = fetch_and_cache_statements(
+            sid,
+            company_name=company_name,
+            ticker=ticker,
+            fiscal_years=fiscal_years,
+            max_years=max_years,
+            include_annual=include_annual,
+            include_quarterly=include_quarterly,
+            statements=statements,
+        )
+    except ValueError as exc:
+        return {"error": str(exc)}
+    except Exception as exc:
+        return {
+            "error": f"SEC fetch failed for {sym}: {exc}",
+            "hint": "Retry one company at a time; on small EC2 try include_quarterly=false.",
+        }
+
+    dcf_suggested = suggest_dcf_inputs(financials)
+    dcf_prefilled: dict = {}
+    if dcf_suggested:
+        summary_bundle = merge_model_inputs(sid, dcf_suggested)
+        dcf_prefilled = summary_bundle.get("filled") or {}
+
+    dcf_response = {
+        "dcf_prefilled": dcf_prefilled,
+        "dcf_still_required": dcf_still_required(dcf_prefilled),
+    }
+
+    scope = build_scope_applied(
+        fiscal_years=fiscal_years,
+        max_years=max_years,
+        include_annual=include_annual,
+        include_quarterly=include_quarterly,
+        statements=statements,
+        financials=financials,
+    )
+    summary = financials_summary(financials, scope_applied=scope)
+    cache_note = (
+        " (from session cache)" if not had_fetch and not gaps_filled else ""
+    )
+
+    analysis_sync: dict | None = None
+    if should_sync_detailed_analysis_on_fetch(
+        max_years=max_years,
+        include_annual=include_annual,
+        statements=statements,
+    ):
+        analysis_sync = save_detailed_analysis_from_cache(
+            sid, sym, max_years=max_years
+        )
+
+    response = {
+        **summary,
+        **dcf_response,
+        "file_id": file_id,
+        "file_name": file_name,
+        "deduplicated": True,
+        "refreshed": bool(had_fetch or gaps_filled),
+        "statements_cached": not had_fetch and not gaps_filled,
+        "gaps_filled": gaps_filled,
+        "message": (
+            f"Saved '{file_name}' to Files{cache_note}. "
+            f"This fetch scope: FY {scope['fiscal_years_included']}; "
+            f"quarterly FYs: {scope['quarterly_fiscal_years_included'] or 'none'}. "
+            f"Open {_view_url(sid)} to browse."
+        ),
+    }
+    if analysis_sync:
+        response["analysis_id"] = analysis_sync["analysis_id"]
+        response["analysis_name"] = analysis_sync["analysis_name"]
+        response["periods_count"] = analysis_sync["periods_count"]
+        response["message"] = (
+            f"Saved '{file_name}' to Files and Detailed Analysis ({analysis_sync['periods_count']} periods)"
+            f"{cache_note}. Open {_view_url(sid)} → Detailed Analysis sidebar."
+        )
+    return response
+
+
 @mcp.tool()
 def fetch_sec_financials(
     ctx: Context,
@@ -275,6 +390,10 @@ def fetch_sec_financials(
     """
     Fetch official SEC financial statements for a US public company and save to the
     session Files panel on the dashboard.
+
+    NOT FOR DETAILED ANALYSIS: If the user asked for "detailed analysis", a detailed report,
+    or an in-depth curated breakdown — call run_detailed_analysis instead. This tool is for
+    raw SEC Files browsing (single year, quarterly, comparative prep).
 
     PARAMETER GUIDE (max_years default 1, include_quarterly default false):
     - Latest annual only: omit optional scope args (or max_years=1).
@@ -316,120 +435,191 @@ def fetch_sec_financials(
     if not valid_stmts:
         valid_stmts = ["income", "balance", "cashflow"]
 
-    resolved = sec_resolve_ticker(company_name=company_name, ticker=ticker)
-    if "error" in resolved:
-        return _with_session(sid, resolved)
-
-    sym = resolved["ticker"]
-    dedup_key = build_dedup_key(
-        sym,
+    result = _handle_cached_sec_fetch(
+        sid,
+        company_name=company_name,
+        ticker=ticker,
         fiscal_years=fiscal_years,
         max_years=max_years,
         include_annual=include_annual,
         include_quarterly=include_quarterly,
         statements=valid_stmts,
     )
+    return _with_session(sid, result)
+
+
+def _fetch_sec_statement_tool(
+    ctx: Context,
+    statement: str,
+    *,
+    company_name: str | None = None,
+    ticker: str | None = None,
+    fiscal_years: list[int] | None = None,
+    max_years: int = 1,
+    include_annual: bool = True,
+    include_quarterly: bool = False,
+    session_id: str | None = None,
+) -> dict:
+    try:
+        sid = resolve_workspace_session(ctx, session_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    if not company_name and not ticker:
+        return _with_session(sid, {"error": "Provide company_name or ticker"})
+
+    result = _handle_cached_sec_fetch(
+        sid,
+        company_name=company_name,
+        ticker=ticker,
+        fiscal_years=fiscal_years,
+        max_years=max_years,
+        include_annual=include_annual,
+        include_quarterly=include_quarterly,
+        statements=[statement],
+    )
+    return _with_session(sid, result)
+
+
+@mcp.tool()
+def fetch_sec_income(
+    ctx: Context,
+    company_name: str | None = None,
+    ticker: str | None = None,
+    fiscal_years: list[int] | None = None,
+    max_years: int = 1,
+    include_annual: bool = True,
+    include_quarterly: bool = False,
+    session_id: str | None = None,
+) -> dict:
+    """Fetch and cache income statement only. Skips SEC call if period leaves already cached."""
+    return _fetch_sec_statement_tool(
+        ctx,
+        "income",
+        company_name=company_name,
+        ticker=ticker,
+        fiscal_years=fiscal_years,
+        max_years=max_years,
+        include_annual=include_annual,
+        include_quarterly=include_quarterly,
+        session_id=session_id,
+    )
+
+
+@mcp.tool()
+def fetch_sec_balance(
+    ctx: Context,
+    company_name: str | None = None,
+    ticker: str | None = None,
+    fiscal_years: list[int] | None = None,
+    max_years: int = 1,
+    include_annual: bool = True,
+    include_quarterly: bool = False,
+    session_id: str | None = None,
+) -> dict:
+    """Fetch and cache balance sheet only. Skips SEC call if period leaves already cached."""
+    return _fetch_sec_statement_tool(
+        ctx,
+        "balance",
+        company_name=company_name,
+        ticker=ticker,
+        fiscal_years=fiscal_years,
+        max_years=max_years,
+        include_annual=include_annual,
+        include_quarterly=include_quarterly,
+        session_id=session_id,
+    )
+
+
+@mcp.tool()
+def fetch_sec_cashflow(
+    ctx: Context,
+    company_name: str | None = None,
+    ticker: str | None = None,
+    fiscal_years: list[int] | None = None,
+    max_years: int = 1,
+    include_annual: bool = True,
+    include_quarterly: bool = False,
+    session_id: str | None = None,
+) -> dict:
+    """Fetch and cache cash flow statement only. Skips SEC call if period leaves already cached."""
+    return _fetch_sec_statement_tool(
+        ctx,
+        "cashflow",
+        company_name=company_name,
+        ticker=ticker,
+        fiscal_years=fiscal_years,
+        max_years=max_years,
+        include_annual=include_annual,
+        include_quarterly=include_quarterly,
+        session_id=session_id,
+    )
+
+
+@mcp.tool()
+def run_detailed_analysis(
+    ctx: Context,
+    company_name: str | None = None,
+    ticker: str | None = None,
+    fiscal_years: list[int] | None = None,
+    max_years: int = 5,
+    session_id: str | None = None,
+) -> dict:
+    """
+    Build curated Detailed Analysis report for a US public company (5-year default).
+
+    **Use this tool when the user asks for detailed analysis** — not fetch_sec_financials.
+    Saves to the dashboard **Detailed Analysis** sidebar: income, balance, and cash flow
+    sections in one scrollable report with derived metrics and integrity checks.
+
+    Uses session statements cache (ticker → period → statement). Fetches only missing
+    income/balance/cashflow leaves, syncs Files, then saves type=detailed_analysis.
+
+    USER PHRASE → CALL (always this tool, never fetch_sec_financials):
+    | User says | Call |
+    | "Detailed analysis for Apple" | run_detailed_analysis(ticker="AAPL") |
+    | "Do a detailed analysis on AAPL" | run_detailed_analysis(ticker="AAPL") |
+    | "Analyze Microsoft in detail" | run_detailed_analysis(company_name="Microsoft") |
+    | "Detailed analysis last 3 years" | run_detailed_analysis(ticker="...", max_years=3) |
+    | "Detailed analysis for FY2023" | run_detailed_analysis(ticker="...", fiscal_years=[2023]) |
+
+    WORKFLOW:
+    1. start_session() first
+    2. run_detailed_analysis(ticker="AAPL", max_years=5) — default 5 annual years
+    3. Open view_url → click ticker under **Detailed Analysis** in sidebar
+
+    For partial raw SEC data only (Files panel), use fetch_sec_income / balance / cashflow.
+    Repeat calls skip SEC fetch when cache is complete (statements_cached=true).
+    """
+    try:
+        sid = resolve_workspace_session(ctx, session_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    if not company_name and not ticker:
+        return _with_session(sid, {"error": "Provide company_name or ticker"})
 
     _touch_session_writes()
-    existing = find_file_by_dedup_key(sid, dedup_key)
-
-    try:
-        financials = do_fetch_sec_financials(
-            company_name=company_name,
-            ticker=ticker,
-            fiscal_years=fiscal_years,
-            max_years=max_years,
-            include_annual=include_annual,
-            include_quarterly=include_quarterly,
-            statements=valid_stmts,
-        )
-    except ValueError as exc:
-        return _with_session(sid, {"error": str(exc)})
-    except Exception as exc:
-        return _with_session(
-            sid,
-            {
-                "error": f"SEC fetch failed for {sym}: {exc}",
-                "hint": "Retry one company at a time; on small EC2 try include_quarterly=false.",
-            },
-        )
-
-    dcf_suggested = suggest_dcf_inputs(financials)
-    dcf_prefilled: dict = {}
-    if dcf_suggested:
-        summary_bundle = merge_model_inputs(sid, dcf_suggested)
-        dcf_prefilled = summary_bundle.get("filled") or {}
-
-    dcf_response = {
-        "dcf_prefilled": dcf_prefilled,
-        "dcf_still_required": dcf_still_required(dcf_prefilled),
-    }
-
-    file_name = build_file_name(
-        sym,
-        fiscal_years=fiscal_years,
-        max_years=max_years,
-    )
-    scope = build_scope_applied(
-        fiscal_years=fiscal_years,
-        max_years=max_years,
-        include_annual=include_annual,
-        include_quarterly=include_quarterly,
-        statements=valid_stmts,
-        financials=financials,
-    )
-    summary = financials_summary(financials, scope_applied=scope)
-
-    if existing:
-        entry = update_file_entry(
-            sid,
-            existing["id"],
-            {
-                "name": file_name,
-                "type": "financials",
-                "dedup_key": dedup_key,
-                "data": financials.model_dump(),
-            },
-        )
-        return _with_session(
-            sid,
-            {
-                **summary,
-                **dcf_response,
-                "file_id": entry["id"],
-                "file_name": entry["name"],
-                "deduplicated": True,
-                "refreshed": True,
-                "message": (
-                    f"Refreshed '{entry['name']}' from SEC. "
-                    f"FY included: {scope['fiscal_years_included']}. "
-                    f"Open {_view_url(sid)} to view."
-                ),
-            },
-        )
-
-    entry = save_file_entry(
+    result = run_detailed_analysis_for_session(
         sid,
-        {
-            "name": file_name,
-            "type": "financials",
-            "dedup_key": dedup_key,
-            "data": financials.model_dump(),
-        },
+        company_name=company_name,
+        ticker=ticker,
+        fiscal_years=fiscal_years,
+        max_years=max_years,
     )
+    if "error" in result:
+        return _with_session(sid, result)
+
+    url = _view_url(sid)
     return _with_session(
         sid,
         {
-            **summary,
-            **dcf_response,
-            "file_id": entry["id"],
-            "file_name": entry["name"],
-            "deduplicated": False,
+            **result,
+            "view_url": url,
             "message": (
-                f"Saved '{entry['name']}' to Files. "
-                f"FY included: {scope['fiscal_years_included']}; "
-                f"quarterly FYs: {scope['quarterly_fiscal_years_included'] or 'none'}. "
-                f"Open {_view_url(sid)} to browse."
+                f"Detailed Analysis saved for {result.get('ticker')}. "
+                f"{result.get('periods_count', 0)} periods. "
+                f"Open {url} → Detailed Analysis sidebar."
             ),
         },
     )
