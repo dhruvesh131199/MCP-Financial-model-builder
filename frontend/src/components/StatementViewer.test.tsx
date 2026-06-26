@@ -34,7 +34,6 @@ function makeFinancials(
       cashflow: { annual: [], quarterly: [] },
     },
     fetch_scope: ["income", "balance", "cashflow"],
-    ingest_source: "test",
   };
 }
 
