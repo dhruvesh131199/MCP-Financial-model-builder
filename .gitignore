@@ -11,3 +11,4 @@ __pycache__/
 backend/homework/hero_output/
 backend/homework/huggingface_test/output/
 backend/homework/detailed_analysis/output/
+backend/homework/trend_analysis/output/
