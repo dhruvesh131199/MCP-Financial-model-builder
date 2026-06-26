@@ -20,9 +20,10 @@ const EXAMPLES = [
   },
   {
     id: "detailed-analysis",
-    title: "Detailed analysis report",
-    description: "Curated 5-year income, balance, and cash flow report in Detailed Analysis.",
-    prompt: "Run a detailed analysis for Apple (AAPL) over the last 5 years.",
+    title: "Ask for detailed analysis (Under development)",
+    description:
+      "Curated 5-year income, balance, and cash flow report — appears in Detailed Analysis.",
+    prompt: "Do a detailed analysis of Walmart.",
     accent: "from-sky-500/15 to-cyan-500/5",
     icon: (
       <svg className="h-5 w-5 text-sky-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
