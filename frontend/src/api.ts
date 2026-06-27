@@ -1,6 +1,27 @@
-import type { DcfResult, ModelRecord, Workspace } from "./types";
+import type {
+  DcfComputeResponse,
+  DcfDraftDefaults,
+  DcfDraftInputs,
+  DcfDraftSummary,
+  DcfResult,
+  Workspace,
+} from "./types";
 
 export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+
+export interface DcfDraftPatchBody {
+  base_revenue?: number | null;
+  wacc?: number | null;
+  terminal_growth?: number | null;
+  net_debt?: number | null;
+  shares_outstanding?: number | null;
+  revenue_growth?: (number | null)[];
+  ebitda_margin?: (number | null)[];
+  tax_rate?: (number | null)[];
+  capex_pct?: (number | null)[];
+  nwc_pct?: (number | null)[];
+  defaults?: DcfDraftDefaults;
+}
 
 export async function fetchSessionWorkspace(
   sessionId: string,
@@ -22,4 +43,54 @@ export async function fetchSessionWorkspace(
   return { ...data, exists: true };
 }
 
-export type { DcfResult, ModelRecord, Workspace };
+export async function patchDcfDraft(
+  sessionId: string,
+  modelId: string,
+  body: DcfDraftPatchBody,
+): Promise<DcfDraftSummary> {
+  const res = await fetch(
+    `${API_BASE}/api/sessions/${sessionId}/models/${modelId}/dcf-draft`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `PATCH failed: ${res.status}`);
+  }
+  return res.json() as Promise<DcfDraftSummary>;
+}
+
+export async function computeDcfDraft(
+  sessionId: string,
+  modelId: string,
+): Promise<DcfComputeResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/sessions/${sessionId}/models/${modelId}/dcf-compute`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `Compute failed: ${res.status}`);
+  }
+  return res.json() as Promise<DcfComputeResponse>;
+}
+
+export async function previewDcfDraft(
+  sessionId: string,
+  modelId: string,
+): Promise<DcfResult> {
+  const res = await fetch(
+    `${API_BASE}/api/sessions/${sessionId}/models/${modelId}/dcf-preview`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `Preview failed: ${res.status}`);
+  }
+  return res.json() as Promise<DcfResult>;
+}
+
+export type { DcfComputeResponse, DcfDraftInputs, DcfDraftSummary, DcfResult, Workspace };

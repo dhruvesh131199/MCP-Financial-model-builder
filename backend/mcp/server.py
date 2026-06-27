@@ -21,8 +21,7 @@ ensure_edgar_identity()
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from engine.dcf import compute_dcf
-from engine.dcf_prefill import dcf_still_required, suggest_dcf_inputs
+from engine.dcf_prefill import suggest_dcf_inputs
 from ingest.normalize import FinancialStatements
 from services.sec_client import resolve_ticker as sec_resolve_ticker
 from services.sec_financials import (
@@ -37,16 +36,9 @@ from services.detailed_analysis_service import (
 )
 from services.trend_analysis_service import run_trend_analysis_for_session
 from services.comparative import handle_run_comparative_analysis, handle_set_comparative_inputs
+from services.dcf_service import create_dcf_draft
 from session_binding import resolve_workspace_session
-from store import (
-    REQUIRED_DCF_FIELDS,
-    build_dcf_inputs_from_bundle,
-    cleanup_expired_sessions,
-    company_name_from_bundle,
-    merge_model_inputs,
-    save_dcf_model,
-    summarize_input_bundle,
-)
+from store import cleanup_expired_sessions
 
 VIEW_BASE_URL = os.getenv("VIEW_BASE_URL", "http://localhost:5173").rstrip("/")
 MCP_HOST = os.getenv("MCP_HOST", "0.0.0.0")
@@ -57,16 +49,17 @@ You help users with financial modeling in a private workspace: DCF valuation, SE
 detailed analysis reports, and peer comparative analysis.
 
 CAPABILITIES:
-1. DCF — set_model_inputs + run_dcf (human-in-the-loop — see DCF rules)
+1. DCF — create_dcf_model (dashboard editor — see DCF rules)
 2. SEC filings (Files panel) — fetch_sec_financials, fetch_sec_income/balance/cashflow
 3. Detailed Analysis (report panel) — run_detailed_analysis ONLY (see routing below)
 4. Peer comparison — set_comparative_inputs + run_comparative_analysis (auto-fetch/link SEC files)
 
-DCF — HUMAN IN THE LOOP (strict):
-- SEC fetch returns dcf_suggestions only — they are NOT saved. Never copy suggestions into set_model_inputs.
-- Ask the user for WACC, terminal growth, NWC %, projection years, and any missing required fields.
-- set_model_inputs: pass ONLY keys the user explicitly stated in chat.
-- Do NOT call run_dcf until set_model_inputs returns ready=true.
+DCF — DASHBOARD HUMAN IN THE LOOP (strict):
+- ALWAYS ask the user: "How many years should the DCF forecast cover?" before creating a model.
+- NEVER call create_dcf_model without explicit projection_years from the user (1–10).
+- create_dcf_model always fetches 5 years of SEC data for the reference panel (independent of forecast length).
+- User fills assumptions on the dashboard → clicks Update model. Do NOT collect DCF assumptions in chat.
+- SEC fetch returns dcf_suggestions as read-only context only — never auto-save; use create_dcf_model for DCF.
 
 DETAILED ANALYSIS — REQUIRED ROUTING (do not substitute fetch_sec_financials):
 When the user asks for detailed analysis, a detailed report, curated 5-year analysis,
@@ -159,103 +152,55 @@ def start_session(ctx: Context) -> dict:
 
 
 @mcp.tool()
-def set_model_inputs(
-    values: dict[str, Any],
+def create_dcf_model(
     ctx: Context,
+    ticker: str,
+    projection_years: int,
+    company_name: str | None = None,
     session_id: str | None = None,
 ) -> dict:
     """
-    Record user-stated DCF assumptions on the server. Call after the user provides numbers.
+    Create a DCF model template on the dashboard. REQUIRED before any DCF valuation.
 
-    DCF RULES (human-in-the-loop):
-    - Pass ONLY keys the user explicitly stated in chat. Never use dcf_suggestions from SEC fetch.
-    - Ask the user for every missing required field before calling this tool.
-    - Allowed keys: base_revenue, revenue_growth, ebitda_margin, tax_rate, capex_pct,
-      nwc_pct, wacc, terminal_growth, projection_years, net_debt, shares_outstanding,
-      company_name
-    - Required fields: """ + ", ".join(REQUIRED_DCF_FIELDS) + """
-    - Returns missing_required and ready. If ready=false, ask the user for missing fields.
-    - Do NOT call run_dcf until ready=true.
+    WORKFLOW:
+    1. Ask the user how many forecast years (projection_years) they want — required, no default.
+    2. create_dcf_model(ticker="MU", projection_years=5) — fetches 5Y SEC reference, builds N-year grid.
+    3. User opens view_url → fills WACC, terminal g, base revenue, per-year rows → Update model.
+
+    RULES:
+    - projection_years is REQUIRED (1–10). Never omit or guess.
+    - SEC fetch is always 5 years for reference history, regardless of projection_years.
+    - Forecast grid has projection_years columns; reference panel always shows 5 fiscal years.
+    - Do NOT collect DCF assumptions in chat — dashboard editor only.
     """
     try:
         sid = resolve_workspace_session(ctx, session_id)
     except ValueError as exc:
         return {"error": str(exc)}
 
-    if not values:
-        return _with_session(
-            sid,
-            {
-                "error": "values object is required",
-                "example": {"wacc": 0.10, "terminal_growth": 0.02},
-            },
-        )
-
-    try:
-        _touch_session_writes()
-        summary = merge_model_inputs(sid, values)
-    except KeyError:
-        return {"error": "Session not found. Call start_session first."}
-
-    msg = (
-        "All required inputs recorded. Call run_dcf() now."
-        if summary["ready"]
-        else f"Still need from user: {', '.join(summary['missing_required'])}"
-    )
-    return _with_session(sid, {**summary, "message": msg})
-
-
-@mcp.tool()
-def run_dcf(ctx: Context, session_id: str | None = None) -> dict:
-    """
-    Build the DCF from inputs already stored via set_model_inputs. Does NOT accept
-    inline numbers — the server enforces that inputs were recorded first.
-
-    If not ready, returns missing_required instead of computing.
-    Python computes all math; never calculate EV or FCF yourself.
-  """
-    try:
-        sid = resolve_workspace_session(ctx, session_id)
-    except ValueError as exc:
-        return {"error": str(exc)}
-
-    summary = summarize_input_bundle(sid)
-    if not summary["ready"]:
-        return _with_session(
-            sid,
-            {
-                "success": False,
-                "missing_required": summary["missing_required"],
-                "filled": summary["filled"],
-                "message": (
-                    "Cannot run DCF yet. Ask the user for missing_required fields, "
-                    "then call set_model_inputs before run_dcf."
-                ),
-            },
-        )
-
-    try:
-        inputs = build_dcf_inputs_from_bundle(sid)
-    except ValueError as exc:
-        return _with_session(sid, {"success": False, "error": str(exc)})
-
-    company_name = company_name_from_bundle(sid)
-    result = compute_dcf(inputs, company_name=company_name)
     _touch_session_writes()
-    entry = save_dcf_model(sid, result.model_dump())
-    url = _view_url(sid)
+    result = create_dcf_draft(
+        sid,
+        ticker=ticker,
+        company_name=company_name,
+        projection_years=projection_years,
+    )
+    if "error" in result:
+        return _with_session(sid, result)
 
-    return {
-        "success": True,
-        "session_id": sid,
-        "view_url": url,
-        "model_id": entry["id"],
-        "model_name": entry["name"],
-        "enterprise_value_millions": result.enterprise_value,
-        "equity_value_millions": result.equity_value,
-        "price_per_share": result.price_per_share,
-        "message": f"DCF '{entry['name']}' saved. Open {url} to view and download.",
-    }
+    url = _view_url(sid)
+    n = result.get("projection_years")
+    ref = result.get("reference_years", 5)
+    return _with_session(
+        sid,
+        {
+            **result,
+            "message": (
+                f"DCF draft created ({n}-year forecast, {ref}-year SEC reference). "
+                f"Open {url} → fill assumptions in the editor → click Update model."
+            ),
+        },
+    )
 
 
 @mcp.tool()
@@ -329,14 +274,11 @@ def _handle_cached_sec_fetch(
         }
 
     dcf_suggested = suggest_dcf_inputs(financials)
-    input_summary = summarize_input_bundle(sid)
     dcf_response = {
         "dcf_suggestions": dcf_suggested,
-        "dcf_still_required": input_summary.get("missing_required")
-        or dcf_still_required(input_summary.get("filled") or {}),
         "dcf_hitl_note": (
-            "dcf_suggestions are read-only hints — ask the user before set_model_inputs; "
-            "never pass suggested values unless the user explicitly stated them."
+            "dcf_suggestions are read-only SEC hints. For DCF, ask projection years "
+            "and call create_dcf_model — fill assumptions on the dashboard editor."
         ),
     }
 

@@ -1,4 +1,4 @@
-"""Read-only API for session dashboards."""
+"""Read-only API for session dashboards + DCF draft write endpoints."""
 
 import asyncio
 import os
@@ -7,8 +7,15 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-from store import cleanup_expired_sessions, load_workspace, session_exists
+from services.dcf_service import (
+    compute_dcf_from_draft,
+    preview_dcf_from_draft,
+    summarize_dcf_draft,
+    update_dcf_draft,
+)
+from store import cleanup_expired_sessions, get_model_entry, load_workspace, session_exists
 
 load_dotenv()
 
@@ -50,9 +57,23 @@ def _cors_origins() -> list[str]:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    allow_methods=["GET"],
+    allow_methods=["GET", "PATCH", "POST"],
     allow_headers=["*"],
 )
+
+
+class DcfDraftPatchBody(BaseModel):
+    base_revenue: float | None = None
+    wacc: float | None = None
+    terminal_growth: float | None = None
+    net_debt: float | None = None
+    shares_outstanding: float | None = None
+    revenue_growth: list[float | None] | None = None
+    ebitda_margin: list[float | None] | None = None
+    tax_rate: list[float | None] | None = None
+    capex_pct: list[float | None] | None = None
+    nwc_pct: list[float | None] | None = None
+    defaults: dict[str, float | None] | None = None
 
 
 @app.get("/health")
@@ -82,3 +103,49 @@ def get_session_model_legacy(session_id: str) -> dict:
         "model": latest,
         "exists": True,
     }
+
+
+def _require_dcf_draft(session_id: str, model_id: str) -> dict:
+    if not session_exists(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    entry = get_model_entry(session_id, model_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Model not found")
+    if entry.get("type") != "dcf_draft":
+        raise HTTPException(status_code=400, detail="Model is not a DCF draft")
+    return entry
+
+
+@app.patch("/api/sessions/{session_id}/models/{model_id}/dcf-draft")
+def patch_dcf_draft(session_id: str, model_id: str, body: DcfDraftPatchBody) -> dict:
+    _require_dcf_draft(session_id, model_id)
+    payload = body.model_dump(exclude_none=True)
+    try:
+        result = update_dcf_draft(session_id, model_id, payload)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Model not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return result
+
+
+@app.post("/api/sessions/{session_id}/models/{model_id}/dcf-compute")
+def post_dcf_compute(session_id: str, model_id: str) -> dict:
+    _require_dcf_draft(session_id, model_id)
+    try:
+        return compute_dcf_from_draft(session_id, model_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Model not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/sessions/{session_id}/models/{model_id}/dcf-preview")
+def post_dcf_preview(session_id: str, model_id: str) -> dict:
+    _require_dcf_draft(session_id, model_id)
+    try:
+        return preview_dcf_from_draft(session_id, model_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Model not found") from None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -58,8 +58,8 @@ const EXAMPLES = [
   {
     id: "dcf",
     title: "DCF valuation model",
-    description: "Discounted cash flow built in Python — assumptions from you, math from the engine.",
-    prompt: "Build a DCF model for NVIDIA with 5-year projections.",
+    description: "Dashboard editor — ask forecast years in chat, fill assumptions on the dashboard, click Update.",
+    prompt: "Build a 5-year DCF model for Micron (MU). Ask me how many forecast years if needed.",
     accent: "from-amber-500/15 to-orange-500/5",
     icon: (
       <svg className="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>

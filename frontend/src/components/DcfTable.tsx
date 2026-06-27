@@ -12,12 +12,25 @@ function fmtPct(value: number): string {
   return `${(value * 100).toFixed(1)}%`;
 }
 
+function fmtRateDisplay(value: number | number[]): string {
+  if (Array.isArray(value)) {
+    const pcts = value.map((v) => (Math.abs(v) <= 1 ? v * 100 : v));
+    const unique = [...new Set(pcts.map((v) => v.toFixed(1)))];
+    return unique.length === 1 ? `${unique[0]}%` : "per year";
+  }
+  return fmtPct(value);
+}
+
 function fmtMult(value: number): string {
   return value.toFixed(3);
 }
 
 interface DcfTableProps {
   model: DcfResult;
+}
+
+function rateAt(value: number | number[], index: number): number {
+  return Array.isArray(value) ? value[index] : value;
 }
 
 interface YearMetrics {
@@ -45,10 +58,13 @@ export default function DcfTable({ model }: DcfTableProps) {
 
   const metrics: YearMetrics[] = years.map((row, i) => {
     const prevRevenue = i === 0 ? inputs.base_revenue : years[i - 1].revenue;
-    const taxes = row.ebitda * inputs.tax_rate;
+    const taxRate = rateAt(inputs.tax_rate, i);
+    const capexPct = rateAt(inputs.capex_pct, i);
+    const nwcPct = rateAt(inputs.nwc_pct, i);
+    const taxes = row.ebitda * taxRate;
     const nopat = row.ebitda - taxes;
-    const capex = row.revenue * inputs.capex_pct;
-    const deltaNwc = (row.revenue - prevRevenue) * inputs.nwc_pct;
+    const capex = row.revenue * capexPct;
+    const deltaNwc = (row.revenue - prevRevenue) * nwcPct;
     return {
       revenue: row.revenue,
       growth: row.revenue / prevRevenue - 1,
@@ -115,10 +131,10 @@ export default function DcfTable({ model }: DcfTableProps) {
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
           <span>WACC {fmtPct(inputs.wacc)}</span>
           <span>Terminal g {fmtPct(inputs.terminal_growth)}</span>
-          <span>Tax {fmtPct(inputs.tax_rate)}</span>
-          <span>EBITDA margin {fmtPct(inputs.ebitda_margin)}</span>
-          <span>CapEx {fmtPct(inputs.capex_pct)} of rev</span>
-          <span>ΔNWC {fmtPct(inputs.nwc_pct)} of Δrev</span>
+          <span>Tax {fmtRateDisplay(inputs.tax_rate)}</span>
+          <span>EBITDA margin {fmtRateDisplay(inputs.ebitda_margin)}</span>
+          <span>CapEx {fmtRateDisplay(inputs.capex_pct)} of rev</span>
+          <span>ΔNWC {fmtRateDisplay(inputs.nwc_pct)} of Δrev</span>
           <span>{inputs.projection_years}-year explicit forecast</span>
           <span>Units: $M USD</span>
         </div>

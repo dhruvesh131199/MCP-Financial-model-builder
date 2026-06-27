@@ -148,8 +148,9 @@ export default function SessionPage() {
           </div>
         )}
 
-        {!notFound && !error && hasContent && (
+        {!notFound && !error && hasContent && sessionId && (
           <DashboardPanel
+            sessionId={sessionId}
             files={files}
             models={models}
             selection={selection}

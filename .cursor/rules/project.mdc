@@ -8,7 +8,7 @@ alwaysApply: true
 ## Principles
 
 - Host LLM (Cursor/Claude) orchestrates; **Python computes all financial math**.
-- Phase 1: `start_session` + `set_model_inputs` + `run_dcf`, anonymous session folders, no Groq, no `/chat` endpoint.
+- Phase 1: `start_session` + `create_dcf_model` (dashboard editor only), anonymous session folders, no Groq, no `/chat` endpoint.
 - MCP runs over **HTTP** (`http://localhost:8080/mcp`) — Cursor config uses `url`, not stdio.
 - Each user gets `data/sessions/{uuid}/` — dashboard at `http://localhost:5173/s/{uuid}`.
 
@@ -23,7 +23,7 @@ alwaysApply: true
 - `backend/engine/` — pure math, no HTTP/MCP imports
 - `backend/ingest/` — SEC fetch (`edgar_fetch.py`) + statement extract (`statement_extract.py`); companyfacts fallback in `normalize.py`
 - `backend/mcp/` — MCP tools only; thin wrappers calling engine + store
-- `backend/api/` — read-only REST for dashboard
+- `backend/api/` — REST for dashboard (GET + DCF draft PATCH/POST)
 - `frontend/` — polls API, no embedded chat
 
 ## MCP tool routing (host)
@@ -31,5 +31,5 @@ alwaysApply: true
 - **Detailed analysis** (user says "detailed analysis", "analyze in detail", curated report) → `run_detailed_analysis` only — **not** `fetch_sec_financials`
 - **Trend analysis only** (user says "update trend", "trend table", "refresh trend") → `run_trend_analysis` (included automatically in `run_detailed_analysis`)
 - **Raw SEC / Files panel** (fetch 2023, quarterly, browse statements) → `fetch_sec_financials` or `fetch_sec_income`/`balance`/`cashflow`
-- **DCF** → ask user first; `set_model_inputs` only with user-stated values; never auto-fill from `dcf_suggestions`
+- **DCF** → always ask user for `projection_years`; `create_dcf_model(ticker, projection_years)` fetches **5Y SEC reference** and opens dashboard editor; user clicks Update model (never chat-collect assumptions)
 - **Peers** → `set_comparative_inputs` + `run_comparative_analysis` (auto-fetch/link SEC Files)

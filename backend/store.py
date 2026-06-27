@@ -123,6 +123,112 @@ def save_dcf_model(session_id: str, payload: dict) -> dict:
     return entry
 
 
+def get_model_entry(session_id: str, model_id: str) -> dict | None:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        return None
+    path = session_dir / "models" / f"{model_id}.json"
+    if not path.exists():
+        return None
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def update_model_entry(session_id: str, model_id: str, *, data: dict | None = None) -> dict:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+    path = session_dir / "models" / f"{model_id}.json"
+    if not path.exists():
+        raise KeyError("Model not found")
+    entry = json.loads(path.read_text(encoding="utf-8"))
+    if data is not None:
+        entry["data"] = data
+    entry["updated_at"] = _utc_now()
+    path.write_text(json.dumps(entry, indent=2), encoding="utf-8")
+    return entry
+
+
+def save_dcf_draft_model(session_id: str, payload: dict) -> dict:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+
+    models_dir = session_dir / "models"
+    models_dir.mkdir(exist_ok=True)
+    _migrate_legacy_model(session_dir)
+
+    existing_names = [m["name"] for m in _load_model_entries(session_dir)]
+    company = payload.get("company_name")
+    years = int(payload.get("projection_years") or 5)
+    model_id = str(uuid.uuid4())
+    entry = {
+        "id": model_id,
+        "name": _build_dcf_name(company, years, existing_names),
+        "type": "dcf_draft",
+        "created_at": _utc_now(),
+        "data": payload,
+    }
+    (models_dir / f"{model_id}.json").write_text(json.dumps(entry, indent=2), encoding="utf-8")
+    return entry
+
+
+def find_dcf_computed_for_draft(session_id: str, draft_id: str) -> dict | None:
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        return None
+    for entry in _load_model_entries(session_dir):
+        if entry.get("type") != "dcf":
+            continue
+        if entry.get("draft_id") == draft_id:
+            return entry
+        data = entry.get("data") or {}
+        if data.get("draft_id") == draft_id:
+            return entry
+    return None
+
+
+def upsert_dcf_computed_from_draft(
+    session_id: str,
+    draft_id: str,
+    draft_entry: dict,
+    payload: dict,
+) -> dict:
+    """Create or update the read-only valuation twin for a dcf_draft (one twin per draft)."""
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+
+    models_dir = session_dir / "models"
+    models_dir.mkdir(exist_ok=True)
+
+    linked = {**payload, "draft_id": draft_id}
+    existing = find_dcf_computed_for_draft(session_id, draft_id)
+
+    if existing:
+        model_id = existing["id"]
+        entry = {
+            **existing,
+            "name": draft_entry.get("name", existing.get("name")),
+            "type": "dcf",
+            "draft_id": draft_id,
+            "data": linked,
+            "updated_at": _utc_now(),
+        }
+    else:
+        model_id = str(uuid.uuid4())
+        entry = {
+            "id": model_id,
+            "name": draft_entry.get("name", "dcf"),
+            "type": "dcf",
+            "draft_id": draft_id,
+            "created_at": _utc_now(),
+            "data": linked,
+        }
+
+    (models_dir / f"{model_id}.json").write_text(json.dumps(entry, indent=2), encoding="utf-8")
+    return entry
+
+
 def ticker_financials_dedup_key(ticker: str) -> str:
     return f"{ticker.upper()}|financials"
 

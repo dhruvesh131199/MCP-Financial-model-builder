@@ -129,15 +129,79 @@ export interface DcfYearRow {
 export interface DcfInputs {
   base_revenue: number;
   revenue_growth: number | number[];
-  ebitda_margin: number;
-  tax_rate: number;
-  capex_pct: number;
-  nwc_pct: number;
+  ebitda_margin: number | number[];
+  tax_rate: number | number[];
+  capex_pct: number | number[];
+  nwc_pct: number | number[];
   wacc: number;
   terminal_growth: number;
   projection_years: number;
   net_debt?: number | null;
   shares_outstanding?: number | null;
+}
+
+export interface DcfReferenceRow {
+  key: string;
+  label: string;
+  values: (number | null)[];
+  format: string;
+}
+
+export interface DcfReferenceHints {
+  base_revenue_m?: number | null;
+  shares_outstanding_m?: number | null;
+  shares_source?: string | null;
+}
+
+export interface DcfReferenceHistory {
+  ticker: string;
+  company_name?: string | null;
+  fiscal_years: number[];
+  rows: DcfReferenceRow[];
+  latest_revenue_usd?: number | null;
+  hints?: DcfReferenceHints;
+  units_note?: string;
+}
+
+export interface DcfDraftInputs {
+  base_revenue: number | null;
+  wacc: number | null;
+  terminal_growth: number | null;
+  revenue_growth: (number | null)[];
+  ebitda_margin: (number | null)[];
+  tax_rate: (number | null)[];
+  capex_pct: (number | null)[];
+  nwc_pct: (number | null)[];
+  net_debt?: number | null;
+  shares_outstanding?: number | null;
+}
+
+export interface DcfDraftDefaults {
+  revenue_growth?: number | null;
+  tax_rate?: number | null;
+  ebitda_margin?: number | null;
+  capex_pct?: number | null;
+  nwc_pct?: number | null;
+}
+
+export interface DcfDraftData {
+  type: "dcf_draft";
+  ticker: string;
+  company_name?: string | null;
+  projection_years: number;
+  reference_history: DcfReferenceHistory;
+  inputs: DcfDraftInputs;
+  defaults?: DcfDraftDefaults;
+  computed_model_id?: string | null;
+}
+
+export interface DcfDraftModelEntry {
+  id: string;
+  name: string;
+  type: "dcf_draft";
+  created_at: string;
+  updated_at?: string;
+  data: DcfDraftData;
 }
 
 export interface DcfResult {
@@ -156,7 +220,9 @@ export interface DcfModelEntry {
   name: string;
   type: "dcf";
   created_at: string;
-  data: DcfResult;
+  updated_at?: string;
+  draft_id?: string;
+  data: DcfResult & { draft_id?: string };
 }
 
 export interface ComparativeFundamentals {
@@ -229,8 +295,30 @@ export interface ComparativeModelEntry {
 
 export type ModelEntry =
   | DcfModelEntry
+  | DcfDraftModelEntry
   | ComparativeModelEntry
   | DetailedAnalysisModelEntry;
+
+export interface DcfDraftSummary {
+  model_id: string;
+  projection_years: number;
+  ticker?: string;
+  missing_required: string[];
+  ready: boolean;
+  inputs: DcfDraftInputs;
+  defaults?: DcfDraftDefaults;
+}
+
+export interface DcfComputeResponse {
+  success: boolean;
+  model_id: string;
+  model_name: string;
+  draft_model_id: string;
+  enterprise_value_millions: number;
+  equity_value_millions?: number | null;
+  price_per_share?: number | null;
+  result: DcfResult;
+}
 
 export interface Workspace {
   session_id: string;

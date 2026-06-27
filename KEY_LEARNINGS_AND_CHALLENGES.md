@@ -236,6 +236,7 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-06-24 | Feature | DCF dashboard HITL: `create_dcf_model(ticker, projection_years)` always fetches 5Y SEC reference; forecast grid length = user `projection_years`; `DcfEditor` + PATCH/POST API; UFCF derived not typed. |
 | 2026-06-26 | Fix | Comparative analysis fetches last 2 annual years (gap-based dedup) so `extract_fiscal_snapshot` can compute revenue growth YoY in engine/comps — not in inputs bundle. |
 | 2026-06-26 | Fix | Balance totals in Detailed Analysis cache path (derivations + derive totals from sections); DCF human-in-the-loop (dcf_suggestions read-only, no auto merge on fetch); comparative auto-link/fetch and per-company latest FY. |
 | 2026-06-24 | Feature | Trend analysis: homework-first `engine/trend_analysis.py` (revenue/margin/EPS + YoY); `eps_diluted` in detailed extract; auto-attached on `run_detailed_analysis`; standalone `run_trend_analysis` MCP tool; `TrendAnalysisSection` in report UI. EBIT = `operating_income`; EPS from XBRL or `net_income / shares` fallback. |

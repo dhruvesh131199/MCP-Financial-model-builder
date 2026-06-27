@@ -1,19 +1,23 @@
 import type {
   DashboardSelection,
   DetailedAnalysisModelEntry,
+  DcfModelEntry,
+  DcfResult,
   FileEntry,
   ModelEntry,
 } from "../types";
 import { exportComparativeToExcel } from "../utils/exportComparativeExcel";
-import { exportDcfToExcel } from "../utils/exportDcfExcel";
+import { exportDcfTemplateExcel, exportDcfToExcel } from "../utils/exportDcfExcel";
 import { exportFinancialsToExcel } from "../utils/exportFinancialsExcel";
 import ComparativeTable from "./ComparativeTable";
+import DcfEditor from "./DcfEditor";
 import DcfTable from "./DcfTable";
 import DetailedAnalysisViewer from "./DetailedAnalysisViewer";
 import FileViewer from "./FileViewer";
 import { useMemo, useState, type ReactNode } from "react";
 
 interface DashboardPanelProps {
+  sessionId: string;
   files: FileEntry[];
   models: ModelEntry[];
   selection: DashboardSelection;
@@ -22,6 +26,7 @@ interface DashboardPanelProps {
 }
 
 export default function DashboardPanel({
+  sessionId,
   files,
   models,
   selection,
@@ -30,10 +35,20 @@ export default function DashboardPanel({
 }: DashboardPanelProps) {
   const [downloading, setDownloading] = useState(false);
 
-  const dcfAndComparative = useMemo(
-    () => models.filter((m) => m.type === "dcf" || m.type === "comparative"),
+  const sidebarModels = useMemo(
+    () =>
+      models.filter((m) => {
+        if (m.type === "dcf_draft" || m.type === "comparative") return true;
+        if (m.type === "dcf") {
+          const twin =
+            (m as DcfModelEntry).draft_id ?? (m as DcfModelEntry).data?.draft_id;
+          return !twin;
+        }
+        return false;
+      }),
     [models],
   );
+
   const detailedAnalyses = useMemo(
     () =>
       models.filter(
@@ -54,14 +69,36 @@ export default function DashboardPanel({
       : undefined;
   const activeModel =
     selection.kind === "model"
-      ? dcfAndComparative.find((m) => m.id === selection.id)
+      ? sidebarModels.find((m) => m.id === selection.id)
       : undefined;
   const activeAnalysis =
     selection.kind === "analysis"
       ? displayAnalyses.find((m) => m.id === selection.id)
       : undefined;
 
+  const activeDraft =
+    selection.kind === "model" && activeModel?.type === "dcf_draft"
+      ? activeModel
+      : undefined;
+
+  const computedForDraft: DcfResult | null = useMemo(() => {
+    if (!activeDraft) return null;
+    const cid = activeDraft.data.computed_model_id;
+    if (!cid) return null;
+    const entry = models.find((m) => m.id === cid && m.type === "dcf");
+    return entry?.type === "dcf" ? entry.data : null;
+  }, [activeDraft, models]);
+
   async function handleDownload() {
+    if (activeDraft?.type === "dcf_draft") {
+      setDownloading(true);
+      try {
+        await exportDcfTemplateExcel(activeDraft.data, activeDraft.name);
+      } finally {
+        setDownloading(false);
+      }
+      return;
+    }
     if (activeModel?.type === "dcf") {
       setDownloading(true);
       try {
@@ -90,7 +127,9 @@ export default function DashboardPanel({
     }
   }
 
-  const showDownload = Boolean(activeModel || activeFile);
+  const showDownload = Boolean(
+    (activeModel && activeModel.type !== "dcf_draft") || activeFile,
+  );
 
   return (
     <div className="flex h-full min-h-0">
@@ -112,10 +151,10 @@ export default function DashboardPanel({
         </SidebarSection>
 
         <SidebarSection title="Models">
-          {dcfAndComparative.length === 0 ? (
+          {sidebarModels.length === 0 ? (
             <EmptyHint text="Built models will appear here" />
           ) : (
-            dcfAndComparative.map((model) => (
+            sidebarModels.map((model) => (
               <SidebarItem
                 key={model.id}
                 label={model.name}
@@ -147,7 +186,15 @@ export default function DashboardPanel({
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col bg-white">
-        {activeModel?.type === "dcf" ? (
+        {activeDraft?.type === "dcf_draft" ? (
+          <DcfEditor
+            sessionId={sessionId}
+            modelId={activeDraft.id}
+            draft={activeDraft.data}
+            modelName={activeDraft.name}
+            computedResult={computedForDraft}
+          />
+        ) : activeModel?.type === "dcf" ? (
           <>
             <ModelHeader
               name={activeModel.name}

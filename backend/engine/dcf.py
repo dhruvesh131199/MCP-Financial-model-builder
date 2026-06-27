@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+RateField = float | list[float]
+
 
 def _normalize_rate(value: float) -> float:
     """Accept 10 or 0.10 for 10%; store as decimal."""
@@ -12,15 +14,21 @@ def _normalize_rate(value: float) -> float:
     return value
 
 
+def _normalize_rate_field(v: RateField) -> RateField:
+    if isinstance(v, list):
+        return [_normalize_rate(x) for x in v]
+    return _normalize_rate(v)
+
+
 class DcfInputs(BaseModel):
     base_revenue: float = Field(gt=0, description="Starting revenue in millions USD")
-    revenue_growth: float | list[float] = Field(
+    revenue_growth: RateField = Field(
         description="Annual revenue growth as decimal(s), e.g. 0.10 for 10%"
     )
-    ebitda_margin: float
-    tax_rate: float
-    capex_pct: float
-    nwc_pct: float
+    ebitda_margin: RateField
+    tax_rate: RateField
+    capex_pct: RateField
+    nwc_pct: RateField
     wacc: float
     terminal_growth: float
     projection_years: int = Field(ge=1, le=10)
@@ -33,40 +41,58 @@ class DcfInputs(BaseModel):
 
     @field_validator("revenue_growth", mode="before")
     @classmethod
-    def _normalize_growth(cls, v: float | list[float]) -> float | list[float]:
-        if isinstance(v, list):
-            return [_normalize_rate(x) for x in v]
-        return _normalize_rate(v)
+    def _normalize_growth(cls, v: RateField) -> RateField:
+        return _normalize_rate_field(v)
 
     @field_validator(
         "ebitda_margin",
         "tax_rate",
         "capex_pct",
         "nwc_pct",
-        "wacc",
-        "terminal_growth",
         mode="before",
     )
     @classmethod
-    def _normalize_rates(cls, v: float) -> float:
+    def _normalize_rate_fields(cls, v: RateField) -> RateField:
+        return _normalize_rate_field(v)
+
+    @field_validator("wacc", "terminal_growth", mode="before")
+    @classmethod
+    def _normalize_scalar_rates(cls, v: float) -> float:
         return _normalize_rate(v)
 
     @model_validator(mode="after")
     def _validate_model(self) -> DcfInputs:
         if self.wacc <= self.terminal_growth:
             raise ValueError("WACC must be greater than terminal growth rate")
-        growths = self._growth_rates()
-        if len(growths) != self.projection_years:
-            raise ValueError(
-                f"revenue_growth must be a single rate or a list of "
-                f"{self.projection_years} rates"
-            )
+        n = self.projection_years
+        for field in ("revenue_growth", "ebitda_margin", "tax_rate", "capex_pct", "nwc_pct"):
+            series = self._rate_series(getattr(self, field), n)
+            if len(series) != n:
+                raise ValueError(
+                    f"{field} must be a single rate or a list of {n} rates"
+                )
         return self
 
+    def _rate_series(self, value: RateField, years: int | None = None) -> list[float]:
+        n = years if years is not None else self.projection_years
+        if isinstance(value, list):
+            return value
+        return [value] * n
+
     def _growth_rates(self) -> list[float]:
-        if isinstance(self.revenue_growth, list):
-            return self.revenue_growth
-        return [self.revenue_growth] * self.projection_years
+        return self._rate_series(self.revenue_growth)
+
+    def margin_rates(self) -> list[float]:
+        return self._rate_series(self.ebitda_margin)
+
+    def tax_rates(self) -> list[float]:
+        return self._rate_series(self.tax_rate)
+
+    def capex_rates(self) -> list[float]:
+        return self._rate_series(self.capex_pct)
+
+    def nwc_rates(self) -> list[float]:
+        return self._rate_series(self.nwc_pct)
 
 
 class DcfYearRow(BaseModel):
@@ -90,6 +116,10 @@ class DcfResult(BaseModel):
 
 def compute_dcf(inputs: DcfInputs, company_name: str | None = None) -> DcfResult:
     growths = inputs._growth_rates()
+    margins = inputs.margin_rates()
+    taxes = inputs.tax_rates()
+    capex_pcts = inputs.capex_rates()
+    nwc_pcts = inputs.nwc_rates()
     wacc = inputs.wacc
     g = inputs.terminal_growth
 
@@ -99,12 +129,13 @@ def compute_dcf(inputs: DcfInputs, company_name: str | None = None) -> DcfResult
     final_fcf = 0.0
 
     for t in range(1, inputs.projection_years + 1):
-        revenue = revenue * (1 + growths[t - 1])
-        prev_revenue = revenue / (1 + growths[t - 1])
-        ebitda = revenue * inputs.ebitda_margin
-        nopat = ebitda * (1 - inputs.tax_rate)
-        capex = revenue * inputs.capex_pct
-        delta_nwc = (revenue - prev_revenue) * inputs.nwc_pct
+        idx = t - 1
+        revenue = revenue * (1 + growths[idx])
+        prev_revenue = revenue / (1 + growths[idx])
+        ebitda = revenue * margins[idx]
+        nopat = ebitda * (1 - taxes[idx])
+        capex = revenue * capex_pcts[idx]
+        delta_nwc = (revenue - prev_revenue) * nwc_pcts[idx]
         fcf = nopat - capex - delta_nwc
         pv_fcf = fcf / (1 + wacc) ** t
         pv_fcf_sum += pv_fcf
