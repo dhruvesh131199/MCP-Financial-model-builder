@@ -1355,6 +1355,73 @@ def _period_cells_from_slice(
     return cells
 
 
+def _enrich_balance_totals_from_components(period: DetailedPeriod) -> None:
+    """Derive balance totals from section lines when cache lacks total_assets/liabilities."""
+    bal = period.balance
+    ta = bal.get("total_assets")
+    ca = bal.get("current_assets")
+    nca = bal.get("non_current_assets")
+    if (
+        ta
+        and ta.value is None
+        and ca
+        and nca
+        and ca.value is not None
+        and nca.value is not None
+    ):
+        bal["total_assets"] = _make_cell(
+            "total_assets",
+            ca.value + nca.value,
+            xbrl_tag="derived_total_assets",
+            label="Current + Non-current assets",
+            source_statement="balance",
+            source="derived",
+            warning="derived_from_balance_arithmetic",
+        )
+
+    tl = bal.get("total_liabilities")
+    cl = bal.get("current_liabilities")
+    ncl = bal.get("non_current_liabilities")
+    if (
+        tl
+        and tl.value is None
+        and cl
+        and ncl
+        and cl.value is not None
+        and ncl.value is not None
+    ):
+        bal["total_liabilities"] = _make_cell(
+            "total_liabilities",
+            cl.value + ncl.value,
+            xbrl_tag="derived_total_liabilities",
+            label="Current + Non-current liabilities",
+            source_statement="balance",
+            source="derived",
+            warning="derived_from_balance_arithmetic",
+        )
+
+    tl = bal.get("total_liabilities")
+    eq = bal.get("stockholders_equity")
+    ta = bal.get("total_assets")
+    if (
+        tl
+        and tl.value is None
+        and ta
+        and eq
+        and ta.value is not None
+        and eq.value is not None
+    ):
+        bal["total_liabilities"] = _make_cell(
+            "total_liabilities",
+            ta.value - eq.value,
+            xbrl_tag="derived_a_minus_e",
+            label="Total assets − Stockholders' equity",
+            source_statement="balance",
+            source="derived",
+            warning="derived_from_balance_arithmetic",
+        )
+
+
 def build_detailed_snapshot_from_financials(
     financials: Any,
     *,
@@ -1420,6 +1487,9 @@ def build_detailed_snapshot_from_financials(
             ):
                 period.is_bank_style = True
                 is_bank = True
+        _enrich_balance_totals_from_components(period)
+        apply_detailed_derivations(period)
+        _enrich_balance_totals_from_components(period)
         _update_accounting_equation_flag(period)
         integrity.extend(run_integrity_checks(period))
         periods.append(period)

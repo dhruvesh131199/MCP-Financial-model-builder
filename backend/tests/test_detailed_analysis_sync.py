@@ -105,3 +105,53 @@ def test_fetch_5y_populates_detailed_analysis_via_cache(mock_resolve, mock_edgar
     result = save_detailed_analysis_from_cache(sid, "AAPL", max_years=5)
     assert result is not None
     assert find_detailed_analysis_by_ticker(sid, "AAPL") is not None
+
+
+def test_detailed_analysis_derives_balance_totals_from_sections():
+    sid = create_session()
+    annual = [
+        {
+            "fiscal_year": 2025,
+            "fiscal_period": "FY",
+            "period_end": "2025-08-31",
+            "line_items": [
+                {"key": "revenue", "label": "Revenue", "value": 100.0, "unit": "USD"},
+                {"key": "operating_income", "label": "OI", "value": 20.0, "unit": "USD"},
+                {"key": "net_income", "label": "NI", "value": 15.0, "unit": "USD"},
+            ],
+        }
+    ]
+    balance_annual = [
+        {
+            "fiscal_year": 2025,
+            "fiscal_period": "FY",
+            "period_end": "2025-08-31",
+            "line_items": [
+                {"key": "current_assets", "label": "CA", "value": 60.0, "unit": "USD"},
+                {"key": "non_current_assets", "label": "NCA", "value": 40.0, "unit": "USD"},
+                {"key": "current_liabilities", "label": "CL", "value": 30.0, "unit": "USD"},
+                {"key": "non_current_liabilities", "label": "NCL", "value": 20.0, "unit": "USD"},
+                {"key": "stockholders_equity", "label": "Eq", "value": 50.0, "unit": "USD"},
+            ],
+        }
+    ]
+    fin = FinancialStatements(
+        ticker="MU",
+        cik="1",
+        entity_name="Micron",
+        fetched_at="2026-01-01T00:00:00+00:00",
+        statements={
+            "income": StatementSlice(annual=annual),
+            "balance": StatementSlice(annual=balance_annual),
+            "cashflow": StatementSlice(annual=annual),
+        },
+        ingest_source="test",
+    )
+    sync_financials_to_cache(sid, fin)
+    result = save_detailed_analysis_from_cache(sid, "MU", max_years=1)
+    assert result is not None
+    entry = find_detailed_analysis_by_ticker(sid, "MU")
+    period = entry["data"]["periods"][0]
+    by_key = {c["key"]: c for c in period["balance"]}
+    assert by_key["total_assets"]["value"] == 100.0
+    assert by_key["total_liabilities"]["value"] == 50.0

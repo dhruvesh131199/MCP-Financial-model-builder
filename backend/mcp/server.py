@@ -57,10 +57,16 @@ You help users with financial modeling in a private workspace: DCF valuation, SE
 detailed analysis reports, and peer comparative analysis.
 
 CAPABILITIES:
-1. DCF — set_model_inputs + run_dcf
+1. DCF — set_model_inputs + run_dcf (human-in-the-loop — see DCF rules)
 2. SEC filings (Files panel) — fetch_sec_financials, fetch_sec_income/balance/cashflow
 3. Detailed Analysis (report panel) — run_detailed_analysis ONLY (see routing below)
-4. Peer comparison — set_comparative_inputs + fetch_sec_financials per company + run_comparative_analysis
+4. Peer comparison — set_comparative_inputs + run_comparative_analysis (auto-fetch/link SEC files)
+
+DCF — HUMAN IN THE LOOP (strict):
+- SEC fetch returns dcf_suggestions only — they are NOT saved. Never copy suggestions into set_model_inputs.
+- Ask the user for WACC, terminal growth, NWC %, projection years, and any missing required fields.
+- set_model_inputs: pass ONLY keys the user explicitly stated in chat.
+- Do NOT call run_dcf until set_model_inputs returns ready=true.
 
 DETAILED ANALYSIS — REQUIRED ROUTING (do not substitute fetch_sec_financials):
 When the user asks for detailed analysis, a detailed report, curated 5-year analysis,
@@ -91,7 +97,7 @@ SEC FETCH — map user words to fetch_sec_financials parameters:
 | "Last 5 years" (raw SEC data, NOT detailed analysis) | max_years=5, include_annual=true; add include_quarterly=true only if user asks quarterly |
 | "Quarterly" / "last 4 quarters" | include_annual=false, include_quarterly=true, max_years=1 |
 | "Apple 2023 quarterly" | fiscal_years=[2023], include_annual=false, include_quarterly=true |
-| Peer comparison (each company) | max_years=1, include_quarterly=false — ONE company per call, sequentially |
+| Peer comparison (each company) | max_years=2, include_quarterly=false — ONE company per call, sequentially (2 years for YoY growth) |
 
 SEC FETCH RULES:
 - Use fiscal_years=[...] when the user names specific years. Use max_years=N for "last N years".
@@ -161,8 +167,9 @@ def set_model_inputs(
     """
     Record user-stated DCF assumptions on the server. Call after the user provides numbers.
 
-    DCF RULES:
-    - Pass ONLY keys the user explicitly gave you in chat. Do not fill missing fields.
+    DCF RULES (human-in-the-loop):
+    - Pass ONLY keys the user explicitly stated in chat. Never use dcf_suggestions from SEC fetch.
+    - Ask the user for every missing required field before calling this tool.
     - Allowed keys: base_revenue, revenue_growth, ebitda_margin, tax_rate, capex_pct,
       nwc_pct, wacc, terminal_growth, projection_years, net_debt, shares_outstanding,
       company_name
@@ -322,14 +329,15 @@ def _handle_cached_sec_fetch(
         }
 
     dcf_suggested = suggest_dcf_inputs(financials)
-    dcf_prefilled: dict = {}
-    if dcf_suggested:
-        summary_bundle = merge_model_inputs(sid, dcf_suggested)
-        dcf_prefilled = summary_bundle.get("filled") or {}
-
+    input_summary = summarize_input_bundle(sid)
     dcf_response = {
-        "dcf_prefilled": dcf_prefilled,
-        "dcf_still_required": dcf_still_required(dcf_prefilled),
+        "dcf_suggestions": dcf_suggested,
+        "dcf_still_required": input_summary.get("missing_required")
+        or dcf_still_required(input_summary.get("filled") or {}),
+        "dcf_hitl_note": (
+            "dcf_suggestions are read-only hints — ask the user before set_model_inputs; "
+            "never pass suggested values unless the user explicitly stated them."
+        ),
     }
 
     scope = build_scope_applied(
@@ -420,7 +428,7 @@ def fetch_sec_financials(
 
     SEC RULES:
     - Independent of DCF and comparative — no other inputs required.
-    - Peer comparison: ONE company per call, max_years=1, include_quarterly=false.
+    - Peer comparison: ONE company per call, max_years=2, include_quarterly=false (prior year for revenue growth YoY).
     - statements optional: income, balance, cashflow (default all three).
     - Values are SEC XBRL only in Files — host must not calculate or invent figures.
     - Response includes scope_applied — verify fiscal_years_included matches user intent.
@@ -704,18 +712,18 @@ def set_comparative_inputs(
     """
     Set up a peer comparison: target company + 1–10 peers.
 
-    WORKFLOW (in order):
-    1. values.target + values.peers — register tickers
-    2. fetch_sec_financials once per company (sequential; max_years=1, include_quarterly=false)
-    3. values.link — {{ticker, file_id}} for each company from step 2
-    4. run_comparative_analysis when ready=true
+    WORKFLOW:
+    1. set_comparative_inputs with target + peers tickers
+    2. run_comparative_analysis — auto-fetches last 2 annual years if missing (YoY growth), links ticker Files, builds report
+
+    Optional: fetch_sec_financials per company first; values.link still supported for manual file_id.
 
     COMPARATIVE RULES:
     - values.target: {{ticker, company_name?}}
     - values.peers: list of {{ticker, company_name?}} (1–10)
-    - values.fiscal_year: optional int; omit to auto-pick earliest latest FY across all companies
-    - values.link: {{ticker, file_id, company_name?}} after each fetch_sec_financials
-    - Do NOT call run_comparative_analysis until ready=true.
+    - values.fiscal_year: optional int — same FY for all; omit to use each company's latest annual FY
+    - values.link: {{ticker, file_id}} optional when Files already exist
+    - run_comparative_analysis fetches Finnhub market data and SEC fundamentals per company
     """
     try:
         sid = resolve_workspace_session(ctx, session_id)
@@ -732,10 +740,10 @@ def set_comparative_inputs(
 @mcp.tool()
 def run_comparative_analysis(ctx: Context, session_id: str | None = None) -> dict:
     """
-    Build comparative report when set_comparative_inputs reports ready=true.
+    Build comparative report for target + peers registered via set_comparative_inputs.
 
-    Fetches Finnhub market data (price, market cap) and computes fundamentals + multiples
-    from linked SEC files. Saves type=comparative model to dashboard.
+    Auto-fetches last 2 annual SEC years per ticker when cache gaps exist (YoY revenue growth),
+    links by ticker, uses each company's latest annual FY unless fiscal_year was set.
     """
     try:
         sid = resolve_workspace_session(ctx, session_id)

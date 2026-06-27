@@ -236,6 +236,8 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-06-26 | Fix | Comparative analysis fetches last 2 annual years (gap-based dedup) so `extract_fiscal_snapshot` can compute revenue growth YoY in engine/comps — not in inputs bundle. |
+| 2026-06-26 | Fix | Balance totals in Detailed Analysis cache path (derivations + derive totals from sections); DCF human-in-the-loop (dcf_suggestions read-only, no auto merge on fetch); comparative auto-link/fetch and per-company latest FY. |
 | 2026-06-24 | Feature | Trend analysis: homework-first `engine/trend_analysis.py` (revenue/margin/EPS + YoY); `eps_diluted` in detailed extract; auto-attached on `run_detailed_analysis`; standalone `run_trend_analysis` MCP tool; `TrendAnalysisSection` in report UI. EBIT = `operating_income`; EPS from XBRL or `net_income / shares` fallback. |
 | 2026-06-25 | Fix | Detailed Analysis sidebar empty when host used `fetch_sec_financials(max_years=5)` instead of `run_detailed_analysis` — auto-sync analysis model on full 5Y fetch; build snapshot from full cache; years newest-first in Files + report. |
 | 2026-06-25 | Doc | Added **Detailed Analysis v1.1 — extraction logic (interview reference)** section: two-phase pick/derive, per-metric rules, ticker stories, 30s pitch. |

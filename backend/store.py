@@ -647,8 +647,37 @@ def merge_comparative_inputs(session_id: str, values: dict) -> dict:
         if not updated:
             raise ValueError(f"No company slot found for ticker {ticker}")
 
+    sync_comparative_file_links(session_id, bundle)
     _save_comparative_bundle(session_id, bundle)
     return summarize_comparative_bundle(session_id)
+
+
+def sync_comparative_file_links(session_id: str, bundle: dict | None = None) -> dict:
+    """Attach ticker Files entries to comparative slots when file_id is missing."""
+    if bundle is None:
+        bundle = load_comparative_bundle(session_id)
+
+    target = bundle.get("target")
+    if target and target.get("ticker") and not target.get("file_id"):
+        entry = find_financials_file_for_ticker(session_id, target["ticker"])
+        if entry:
+            bundle["target"] = _merge_company_slot(target, {"file_id": entry["id"]})
+
+    peers = list(bundle.get("peers") or [])
+    for i, peer in enumerate(peers):
+        if peer.get("ticker") and not peer.get("file_id"):
+            entry = find_financials_file_for_ticker(session_id, peer["ticker"])
+            if entry:
+                peers[i] = _merge_company_slot(peer, {"file_id": entry["id"]})
+    bundle["peers"] = peers
+    return bundle
+
+
+def apply_comparative_file_links(session_id: str) -> None:
+    """Load bundle, link ticker Files entries, persist."""
+    bundle = load_comparative_bundle(session_id)
+    bundle = sync_comparative_file_links(session_id, bundle)
+    _save_comparative_bundle(session_id, bundle)
 
 
 def resolve_comparative_fiscal_year(
@@ -667,7 +696,7 @@ def resolve_comparative_fiscal_year(
                 return None, f"FY{fy} not available for {company.get('ticker', '?')}"
         return fy, f"Using user-selected FY{fy}."
 
-    latest_years: list[int] = []
+    per_company: list[tuple[str, int]] = []
     for company in companies:
         file_id = company.get("file_id")
         if not file_id:
@@ -678,15 +707,21 @@ def resolve_comparative_fiscal_year(
         latest = latest_annual_fiscal_year(entry.get("data") or {})
         if latest is None:
             return None, None
-        latest_years.append(latest)
+        per_company.append((str(company.get("ticker", "?")), latest))
 
-    if not latest_years:
+    if not per_company:
         return None, None
 
-    chosen = min(latest_years)
-    return chosen, (
-        f"Using FY{chosen} — earliest latest fiscal year across target and peers."
+    target_ticker = str(
+        next((c.get("ticker") for c in companies if c.get("role") == "target"), per_company[0][0])
     )
+    target_fy = next((fy for t, fy in per_company if t == target_ticker), per_company[0][1])
+    if len({fy for _, fy in per_company}) == 1:
+        note = f"Using FY{target_fy} for all companies."
+    else:
+        parts = ", ".join(f"{t} FY{fy}" for t, fy in per_company)
+        note = f"Each company's latest annual FY: {parts}."
+    return target_fy, note
 
 
 def summarize_comparative_bundle(session_id: str) -> dict:
@@ -743,8 +778,8 @@ def summarize_comparative_bundle(session_id: str) -> dict:
         next_step = "Add 1–10 peer companies via set_comparative_inputs."
     elif any(not c.get("file_id") for c in companies):
         next_step = (
-            "Call fetch_sec_financials for each company, then link file_id "
-            "via set_comparative_inputs(link={ticker, file_id})."
+            "Ensure SEC Files exist for each ticker (fetch_sec_financials) or call "
+            "run_comparative_analysis to auto-fetch and link."
         )
     elif fiscal_year_used is None:
         next_step = "Ensure SEC files include annual data for the chosen fiscal year."

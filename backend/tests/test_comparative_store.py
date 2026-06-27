@@ -114,8 +114,33 @@ def test_fiscal_year_auto_default_min_of_latest():
     merge_comparative_inputs(sid, {"link": {"ticker": "KO", "file_id": ko_file["id"]}})
     merge_comparative_inputs(sid, {"link": {"ticker": "PEP", "file_id": pep_file["id"]}})
     summary = summarize_comparative_bundle(sid)
-    assert summary["fiscal_year_used"] == 2024
-    assert "FY2024" in (summary["fiscal_year_note"] or "")
+    assert summary["fiscal_year_used"] == 2025
+    assert "latest annual FY" in (summary["fiscal_year_note"] or "")
+
+
+def test_auto_link_comparative_from_ticker_files():
+    sid = create_session()
+    from store import upsert_ticker_financials_file
+    from ingest.normalize import FinancialStatements
+
+    upsert_ticker_financials_file(
+        sid,
+        "MU",
+        FinancialStatements.model_validate(_financials_file("MU", 2024)),
+    )
+    upsert_ticker_financials_file(
+        sid,
+        "NVDA",
+        FinancialStatements.model_validate(_financials_file("NVDA", 2025)),
+    )
+    merge_comparative_inputs(
+        sid,
+        {"target": {"ticker": "MU"}, "peers": [{"ticker": "NVDA"}]},
+    )
+    summary = summarize_comparative_bundle(sid)
+    assert summary["ready"] is True
+    assert summary["target"]["file_id"]
+    assert summary["peers"][0]["file_id"]
 
 
 def test_fiscal_year_user_override():
