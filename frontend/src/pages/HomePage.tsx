@@ -1,14 +1,12 @@
 import { Link } from "react-router-dom";
+import { HOME_TAGLINE, PRODUCT_TITLE } from "../config/branding";
 
 export default function HomePage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--bg-app)] px-4">
       <div className="max-w-lg rounded-2xl border border-[var(--border-soft)] bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-semibold text-gray-900">Financial Model Builder</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Build DCF models with your AI assistant. Each user gets a private workspace link —
-          no signup required.
-        </p>
+        <h1 className="text-2xl font-semibold text-gray-900">{PRODUCT_TITLE}</h1>
+        <p className="mt-2 text-sm text-gray-600">{HOME_TAGLINE}</p>
 
         <Link
           to="/setup"

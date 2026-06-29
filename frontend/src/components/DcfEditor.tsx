@@ -14,6 +14,10 @@ import DcfTable from "./DcfTable";
 
 type EditorView = "template" | "valuation";
 
+function viewStorageKey(modelId: string) {
+  return `dcf-editor-view:${modelId}`;
+}
+
 interface DcfEditorProps {
   sessionId: string;
   modelId: string;
@@ -29,7 +33,10 @@ export default function DcfEditor({
   modelName,
   computedResult,
 }: DcfEditorProps) {
-  const [view, setView] = useState<EditorView>("template");
+  const [view, setView] = useState<EditorView>(() => {
+    const stored = sessionStorage.getItem(viewStorageKey(modelId));
+    return stored === "valuation" ? "valuation" : "template";
+  });
   const [inputs, setInputs] = useState<DcfDraftInputs>(() => ({
     ...draft.inputs,
   }));
@@ -46,8 +53,14 @@ export default function DcfEditor({
   );
 
   useEffect(() => {
-    setLocalComputed(computedResult ?? null);
+    if (computedResult != null) {
+      setLocalComputed(computedResult);
+    }
   }, [computedResult]);
+
+  useEffect(() => {
+    sessionStorage.setItem(viewStorageKey(modelId), view);
+  }, [modelId, view]);
 
   useEffect(() => {
     setInputs({ ...draft.inputs });

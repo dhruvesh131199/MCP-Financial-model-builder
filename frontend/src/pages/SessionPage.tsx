@@ -4,6 +4,9 @@ import { fetchSessionWorkspace, API_BASE } from "../api";
 import DashboardPanel from "../components/DashboardPanel";
 import SessionGuideModal, { SessionGuideButton } from "../components/SessionGuideModal";
 import type { DashboardSelection, FileEntry, ModelEntry } from "../types";
+import {
+  resolveNewModelAutoSelect,
+} from "../lib/sessionAutoSelect";
 
 const POLL_MS = 3000;
 const guideSeenKey = (sessionId: string) => `session-guide-seen:${sessionId}`;
@@ -20,6 +23,12 @@ export default function SessionPage() {
   const modelCountRef = useRef(0);
   const fileCountRef = useRef(0);
   const analysisSnapshotRef = useRef<Map<string, string>>(new Map());
+  const selectionRef = useRef(selection);
+  const initialSyncDoneRef = useRef(false);
+
+  useEffect(() => {
+    selectionRef.current = selection;
+  }, [selection]);
 
   const selectAndPulse = useCallback(
     (kind: "file" | "model" | "analysis", id: string) => {
@@ -56,6 +65,24 @@ export default function SessionPage() {
           lastUpdated = workspace.updated_at;
           const prevModelCount = modelCountRef.current;
           const prevFileCount = fileCountRef.current;
+
+          if (!initialSyncDoneRef.current) {
+            initialSyncDoneRef.current = true;
+            modelCountRef.current = workspace.models.length;
+            fileCountRef.current = workspace.files.length;
+            setModels(workspace.models);
+            setFiles(workspace.files);
+            for (const model of workspace.models) {
+              if (model.type !== "detailed_analysis") continue;
+              const ts =
+                ("updated_at" in model && model.updated_at) ||
+                model.created_at ||
+                "";
+              analysisSnapshotRef.current.set(model.id, ts);
+            }
+            return;
+          }
+
           modelCountRef.current = workspace.models.length;
           fileCountRef.current = workspace.files.length;
           setModels(workspace.models);
@@ -85,7 +112,10 @@ export default function SessionPage() {
             workspace.models.length > 0
           ) {
             const latest = workspace.models[workspace.models.length - 1];
-            selectAndPulse("model", latest.id);
+            const next = resolveNewModelAutoSelect(latest, selectionRef.current);
+            if (next) {
+              selectAndPulse(next.kind, next.id);
+            }
           } else if (
             workspace.files.length > prevFileCount &&
             workspace.files.length > 0
@@ -120,7 +150,7 @@ export default function SessionPage() {
           <div className="min-w-0">
             <h1 className="text-base font-semibold text-gray-900">Workspace</h1>
             <p className="text-xs text-gray-500">
-              Private link — files and models update as you chat with your assistant
+              Private analyzer workspace — updates as you chat with your assistant
             </p>
           </div>
           <SessionGuideButton onClick={() => setGuideOpen(true)} />

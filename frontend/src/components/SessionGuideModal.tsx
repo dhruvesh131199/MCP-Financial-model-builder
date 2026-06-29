@@ -147,8 +147,8 @@ export default function SessionGuideModal({ open, onClose }: SessionGuideModalPr
             What to try next
           </h2>
           <p className="mt-2 max-w-lg text-sm leading-relaxed text-indigo-100/95">
-            Chat with your assistant using the MCP tools — fetched files and built models show up here
-            automatically. Copy any prompt below and paste it into your chat.
+            Use your assistant&apos;s MCP tools to fetch filings, run valuations, compare peers, and
+            more — results land here automatically. Copy any prompt below into chat.
           </p>
         </div>
 
@@ -174,7 +174,7 @@ export default function SessionGuideModal({ open, onClose }: SessionGuideModalPr
           </div>
 
           <p className="mt-5 text-center text-xs text-gray-500">
-            New files and models appear in the sidebar as your assistant runs tools.
+            New files, models, and reports appear in the sidebar as your assistant runs tools.
           </p>
         </div>
 

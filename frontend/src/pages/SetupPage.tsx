@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { SETUP_INTRO } from "../config/branding";
 import SegmentedToggle from "../components/setup/SegmentedToggle";
 import ClaudeGuide from "../components/setup/guides/ClaudeGuide";
 import CursorGuide from "../components/setup/guides/CursorGuide";
@@ -21,10 +22,7 @@ export default function SetupPage() {
 
         <header className="mt-4">
           <h1 className="text-3xl font-semibold tracking-tight text-gray-900">Set up in 1 minute</h1>
-          <p className="mt-2 text-gray-600">
-            Add our MCP server to Cursor or Claude, restart once, and start building DCF models on
-            your private dashboard.
-          </p>
+          <p className="mt-2 text-gray-600">{SETUP_INTRO}</p>
         </header>
 
         <div className="mt-8">

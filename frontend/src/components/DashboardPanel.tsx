@@ -14,7 +14,8 @@ import DcfEditor from "./DcfEditor";
 import DcfTable from "./DcfTable";
 import DetailedAnalysisViewer from "./DetailedAnalysisViewer";
 import FileViewer from "./FileViewer";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { resolveOrphanModelSelection } from "../lib/sessionAutoSelect";
 
 interface DashboardPanelProps {
   sessionId: string;
@@ -49,6 +50,25 @@ export default function DashboardPanel({
     [models],
   );
 
+  const sidebarModelIds = useMemo(
+    () => sidebarModels.map((m) => m.id),
+    [sidebarModels],
+  );
+
+  const effectiveSelection = useMemo(
+    () => resolveOrphanModelSelection(selection, sidebarModelIds, models),
+    [selection, sidebarModelIds, models],
+  );
+
+  useEffect(() => {
+    const unchanged =
+      effectiveSelection.kind === selection.kind &&
+      (effectiveSelection.kind === "none" ||
+        (selection.kind !== "none" && effectiveSelection.id === selection.id));
+    if (unchanged) return;
+    onSelect(effectiveSelection);
+  }, [effectiveSelection, selection, onSelect]);
+
   const detailedAnalyses = useMemo(
     () =>
       models.filter(
@@ -64,20 +84,21 @@ export default function DashboardPanel({
   );
 
   const activeFile =
-    selection.kind === "file"
-      ? displayFiles.find((f) => f.id === selection.id)
+    effectiveSelection.kind === "file"
+      ? displayFiles.find((f) => f.id === effectiveSelection.id)
       : undefined;
   const activeModel =
-    selection.kind === "model"
-      ? sidebarModels.find((m) => m.id === selection.id)
+    effectiveSelection.kind === "model"
+      ? sidebarModels.find((m) => m.id === effectiveSelection.id)
       : undefined;
+
   const activeAnalysis =
-    selection.kind === "analysis"
-      ? displayAnalyses.find((m) => m.id === selection.id)
+    effectiveSelection.kind === "analysis"
+      ? displayAnalyses.find((m) => m.id === effectiveSelection.id)
       : undefined;
 
   const activeDraft =
-    selection.kind === "model" && activeModel?.type === "dcf_draft"
+    effectiveSelection.kind === "model" && activeModel?.type === "dcf_draft"
       ? activeModel
       : undefined;
 
@@ -142,7 +163,7 @@ export default function DashboardPanel({
               <SidebarItem
                 key={file.id}
                 label={file.data.ticker || file.name}
-                active={selection.kind === "file" && selection.id === file.id}
+                active={effectiveSelection.kind === "file" && effectiveSelection.id === file.id}
                 pulse={pulseId === file.id}
                 onClick={() => onSelect({ kind: "file", id: file.id })}
               />
@@ -158,7 +179,7 @@ export default function DashboardPanel({
               <SidebarItem
                 key={model.id}
                 label={model.name}
-                active={selection.kind === "model" && selection.id === model.id}
+                active={effectiveSelection.kind === "model" && effectiveSelection.id === model.id}
                 pulse={pulseId === model.id}
                 onClick={() => onSelect({ kind: "model", id: model.id })}
               />
@@ -175,7 +196,7 @@ export default function DashboardPanel({
                 key={entry.id}
                 label={entry.data.ticker}
                 active={
-                  selection.kind === "analysis" && selection.id === entry.id
+                  effectiveSelection.kind === "analysis" && effectiveSelection.id === entry.id
                 }
                 pulse={pulseId === entry.id}
                 onClick={() => onSelect({ kind: "analysis", id: entry.id })}

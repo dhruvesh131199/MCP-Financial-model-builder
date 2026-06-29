@@ -1,3 +1,4 @@
+import { MCP_SUGGESTED_NAME } from "../../../config/branding";
 import { PUBLIC_APP_URL, PUBLIC_MCP_URL } from "../../../config/publicUrls";
 import SetupImage from "../SetupImage";
 
@@ -18,15 +19,16 @@ export default function ClaudeGuide() {
             <div className="min-w-0 space-y-2">
               <h3 className="font-medium text-gray-900">Add the connector in Settings</h3>
               <p className="text-sm text-gray-600">
-                Open <strong>Claude</strong> → <strong>Settings</strong>, go to{" "}
-                <strong>Connectors</strong>, and add a custom connector.
+                Open <strong>Claude Desktop</strong> → <strong>Settings</strong>, go to{" "}
+                <strong>Connectors</strong> (or <strong>Developer</strong> → MCP), and add a custom
+                connector.
               </p>
               <p className="text-sm text-gray-600">Paste this URL:</p>
               <pre className="overflow-x-auto rounded-lg bg-gray-900 px-4 py-3 text-sm text-gray-100">
                 <code>{PUBLIC_MCP_URL}</code>
               </pre>
               <p className="text-sm text-gray-600">
-                Name it <strong>Financial Models</strong>.
+                Name it anything you&apos;ll recognize — e.g. <strong>{MCP_SUGGESTED_NAME}</strong>.
               </p>
             </div>
           </div>
@@ -45,7 +47,7 @@ export default function ClaudeGuide() {
             <div className="min-w-0 space-y-2">
               <h3 className="font-medium text-gray-900">Restart Claude</h3>
               <p className="text-sm text-gray-600">
-                Fully quit and reopen Claude — closing the window isn&apos;t enough.
+                Fully quit and reopen Claude Desktop — closing the window isn&apos;t enough.
               </p>
             </div>
           </div>
@@ -62,17 +64,18 @@ export default function ClaudeGuide() {
               3
             </span>
             <div className="min-w-0 space-y-2">
-              <h3 className="font-medium text-gray-900">Turn on Financial Models in chat</h3>
+              <h3 className="font-medium text-gray-900">Turn on the connector in chat</h3>
               <p className="text-sm text-gray-600">
-                Start a new chat. Tap the <strong>+</strong> button, then{" "}
-                <strong>Connectors</strong> → <strong>Financial Models</strong>.
+                Start a <strong>new chat</strong>. Tap the <strong>+</strong> button (or the tools
+                menu), then <strong>Connectors</strong> → enable{" "}
+                <strong>{MCP_SUGGESTED_NAME}</strong> (or whatever you named it).
               </p>
             </div>
           </div>
           <SetupImage
             src="/setup/claude/step-3-connectors.png"
-            alt="Claude chat plus menu showing Connectors and Financial Models"
-            caption="+ → Connectors → Financial Models"
+            alt="Claude chat plus menu showing Connectors and Financial Workflow"
+            caption="+ → Connectors → enable your workflow server"
           />
         </li>
 
@@ -84,7 +87,8 @@ export default function ClaudeGuide() {
             <div className="min-w-0 space-y-2">
               <h3 className="font-medium text-gray-900">Get your private dashboard</h3>
               <p className="text-sm text-gray-600">
-                Ask Claude to start a session. Open the link it gives you and keep chatting.
+                Ask Claude to start a session. Open the link it gives you — filings, models, and
+                reports from chat will appear on the dashboard as you work.
               </p>
               <blockquote className="rounded-lg border border-[var(--border-soft)] bg-[var(--bg-sidebar)] px-4 py-3 text-sm italic text-gray-700">
                 Call start_session and give me my dashboard link.
@@ -104,8 +108,8 @@ export default function ClaudeGuide() {
           </div>
           <SetupImage
             src="/setup/claude/step-4-dashboard.png"
-            alt="Browser dashboard showing a DCF model after chatting with Claude"
-            caption="Your private dashboard link"
+            alt="Browser dashboard showing workspace content after chatting with Claude"
+            caption="Your private analyzer workspace"
           />
         </li>
       </ol>
