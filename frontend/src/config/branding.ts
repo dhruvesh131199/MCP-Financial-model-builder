@@ -18,7 +18,7 @@ export const MCP_CONFIG_KEY = "financial-workflow";
 
 export const MCP_SAMPLE_TOOLS = [
   "start_session",
-  "fetch_sec_financials",
+  "fetch_report",
   "create_dcf_model",
   "run_comparative_analysis",
 ] as const;

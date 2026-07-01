@@ -81,8 +81,16 @@ def test_ingest_from_upload_fixture(tmp_path, monkeypatch):
 def test_mcp_tool_response_shape():
     import importlib.util
     from pathlib import Path
+    import sys
 
     server_path = Path(__file__).resolve().parent.parent / "mcp" / "server.py"
+    
+    # We need to make sure mcp package is available
+    import types
+    sys.modules['mcp.fetch_report'] = types.ModuleType('mcp.fetch_report')
+    sys.modules['mcp.fetch_report'].run_fetch_report = lambda *a, **kw: None
+    sys.modules['mcp.fetch_report'].ReportType = str
+    
     spec = importlib.util.spec_from_file_location("fm_mcp_server", server_path)
     assert spec and spec.loader
     mod = importlib.util.module_from_spec(spec)
@@ -91,27 +99,34 @@ def test_mcp_tool_response_shape():
     with patch.object(mod, "resolve_workspace_session", return_value="sess-1"):
         with patch.object(
             mod,
-            "resolve_or_ingest_sec",
-            return_value=type(
-                "R",
-                (),
-                {
-                    "success": True,
-                    "from_cache": False,
-                    "document_id": "doc-1",
-                    "filing_key": "AAPL_2025_10K",
-                    "parent_count": 1,
-                    "subchunk_count": 2,
-                    "error": None,
-                },
-            )(),
+            "run_fetch_report",
+            return_value={
+                "success": True,
+                "report_type": "full_report",
+                "results": [
+                    {
+                        "ticker": "AAPL",
+                        "year": 2025,
+                        "success": True,
+                        "document_id": "doc-1",
+                        "filing_key": "AAPL_2025_10K",
+                        "from_cache": False,
+                    }
+                ],
+                "errors": [],
+                "message": "Fetched 1/1",
+            },
         ):
-            out = mod.fetch_annual_report(ctx=None, ticker="AAPL")
+            out = mod.fetch_report(
+                ctx=None,
+                report_type="full_report",
+                tickers=["AAPL"],
+            )
 
     assert out["success"] is True
-    assert out["document_id"] == "doc-1"
-    assert out["session_id"] == "sess-1"
-    assert "view_url" in out
+    assert out["report_type"] == "full_report"
+    assert len(out["results"]) == 1
+    assert out["results"][0]["document_id"] == "doc-1"
 
 
 def test_approx_tokens_formula():

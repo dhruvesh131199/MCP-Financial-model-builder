@@ -19,7 +19,36 @@ from ingest.edgar_identity import ensure_edgar_identity
 
 ensure_edgar_identity()
 
-from mcp.server.fastmcp import Context, FastMCP
+import importlib.util
+import sys
+import os
+
+# Find the installed mcp package
+import site
+site_packages = site.getsitepackages()[0]
+sys.path.insert(0, site_packages)
+
+# Import the real mcp package directly from site-packages
+import importlib.machinery
+spec = importlib.machinery.PathFinder().find_spec("mcp", [site_packages])
+real_mcp = importlib.util.module_from_spec(spec)
+sys.modules["real_mcp"] = real_mcp
+spec.loader.exec_module(real_mcp)
+
+spec_server = importlib.machinery.PathFinder().find_spec("mcp.server", [os.path.join(site_packages, "mcp")])
+real_mcp_server = importlib.util.module_from_spec(spec_server)
+sys.modules["real_mcp.server"] = real_mcp_server
+spec_server.loader.exec_module(real_mcp_server)
+
+spec_fastmcp = importlib.machinery.PathFinder().find_spec("mcp.server.fastmcp", [os.path.join(site_packages, "mcp", "server")])
+real_mcp_server_fastmcp = importlib.util.module_from_spec(spec_fastmcp)
+sys.modules["real_mcp.server.fastmcp"] = real_mcp_server_fastmcp
+spec_fastmcp.loader.exec_module(real_mcp_server_fastmcp)
+
+Context = real_mcp_server_fastmcp.Context
+FastMCP = real_mcp_server_fastmcp.FastMCP
+
+sys.path.pop(0)
 
 from engine.dcf_prefill import suggest_dcf_inputs
 from ingest.normalize import FinancialStatements
@@ -37,7 +66,7 @@ from services.detailed_analysis_service import (
 from services.trend_analysis_service import run_trend_analysis_for_session
 from services.comparative import handle_run_comparative_analysis, handle_set_comparative_inputs
 from services.dcf_service import create_dcf_draft
-from homework.rag_markitdown.resolve import resolve_or_ingest_sec
+from mcp.fetch_report import run_fetch_report
 from session_binding import resolve_workspace_session
 from store import cleanup_expired_sessions
 
@@ -51,10 +80,9 @@ detailed analysis reports, and peer comparative analysis.
 
 CAPABILITIES:
 1. DCF — create_dcf_model (dashboard editor — see DCF rules)
-2. SEC filings (Files panel) — fetch_sec_financials, fetch_sec_income/balance/cashflow
-3. Annual report document (RAG prep) — fetch_annual_report (full 10-K → markdown; homework Phase 1)
-4. Detailed Analysis (report panel) — run_detailed_analysis ONLY (see routing below)
-5. Peer comparison — set_comparative_inputs + run_comparative_analysis (auto-fetch/link SEC files)
+2. Fetch SEC data — fetch_report (Files tables OR full 10-K RAG)
+3. Detailed Analysis (report panel) — run_detailed_analysis ONLY (see routing below)
+4. Peer comparison — set_comparative_inputs + run_comparative_analysis (auto-fetch/link SEC files)
 
 DCF — DASHBOARD HUMAN IN THE LOOP (strict):
 - ALWAYS ask the user: "How many years should the DCF forecast cover?" before creating a model.
@@ -75,7 +103,7 @@ in-depth financial breakdown, or similar — call run_detailed_analysis, NOT fet
 | "Run detailed analysis" (company already in context) | run_detailed_analysis | ticker from context |
 
 run_detailed_analysis fills the **Detailed Analysis** sidebar (curated income/balance/cashflow report
-plus Trend analysis table). fetch_sec_financials fills **Files** only (raw XBRL browse/compare) —
+plus Trend analysis table). fetch_report(just_financials) fills **Files** only (raw XBRL browse/compare) —
 use for single-year fetch, quarterly, or comparative prep, NOT when the user asked for detailed analysis.
 
 TREND ANALYSIS ROUTING:
@@ -84,37 +112,19 @@ TREND ANALYSIS ROUTING:
 | "detailed analysis for AAPL" | run_detailed_analysis (includes trend) |
 | "update trend analysis" / "trend table only" / "refresh trend" | run_trend_analysis |
 
-SEC FETCH — map user words to fetch_sec_financials parameters:
-| User says | Parameters |
-|-----------|------------|
-| "Fetch Apple reports" / latest financials | defaults (max_years=1, include_annual=true, include_quarterly=false) |
-| "Apple 2023" / "FY2023 report" | fiscal_years=[2023], include_annual=true, include_quarterly=false |
-| "Last 5 years" (raw SEC data, NOT detailed analysis) | max_years=5, include_annual=true; add include_quarterly=true only if user asks quarterly |
-| "Quarterly" / "last 4 quarters" | include_annual=false, include_quarterly=true, max_years=1 |
-| "Apple 2023 quarterly" | fiscal_years=[2023], include_annual=false, include_quarterly=true |
-| Peer comparison (each company) | max_years=2, include_quarterly=false — ONE company per call, sequentially (2 years for YoY growth) |
-
-SEC FETCH RULES:
-- Use fiscal_years=[...] when the user names specific years. Use max_years=N for "last N years".
-- Do not pass both unless intentional. When fiscal_years is set, max_years does not pick the year.
-- After fetch, read scope_applied in the response to confirm the right periods were stored.
-- Fiscal year is the company's FY (e.g. Apple FY2025 ends ~Sep 2025), not always calendar year.
-
-SEC DATA TYPE — REQUIRED DISAMBIGUATION (fetch_sec_financials vs fetch_annual_report):
+SEC DATA TYPE — REQUIRED DISAMBIGUATION (fetch_report):
 When the user asks to "fetch financials", "get reports", "fetch 10-K", "annual report", or similar:
 1. ALWAYS ask: "Do you want structured SEC financial tables (Files panel) or the complete 10-K narrative document (RAG)?"
-2. Map answer:
-   - Tables / statements / DCF or comps prep / quarterly → fetch_sec_financials
-   - Full annual report / 10-K document / RAG / narrative / risk factors / MD&A → fetch_annual_report
-3. NEVER call fetch_sec_financials when the user asked for the full 10-K RAG document.
-4. NEVER call fetch_annual_report when the user only wants XBRL tables in Files.
+2. Map answer to report_type:
+   - Tables / statements / DCF or comps prep / quarterly → just_financials
+   - Full annual report / 10-K document / RAG / narrative / risk factors / MD&A → full_report
 
 | User says | Tool | Parameters |
 |-----------|------|------------|
-| "Fetch Apple financial statements" / tables for Files | fetch_sec_financials | ticker="AAPL" |
-| "Fetch Apple annual report" / full 10-K for RAG | fetch_annual_report | ticker="AAPL" |
-| "Fetch Walmart 2024 annual report" | fetch_annual_report | ticker="WMT", fiscal_year=2024 |
-| "Latest Apple 10-K document" | fetch_annual_report | ticker="AAPL" (omit fiscal_year) |
+| "Fetch Apple financial statements" / tables for Files | fetch_report | report_type="just_financials", tickers=["AAPL"] |
+| "Fetch Apple annual report" / full 10-K for RAG | fetch_report | report_type="full_report", tickers=["AAPL"] |
+| "Fetch Walmart 2024 annual report" | fetch_report | report_type="full_report", tickers=["WMT"], years=[2024] |
+| "Last 5 years for AAPL and MSFT" | fetch_report | report_type="just_financials", tickers=["AAPL", "MSFT"], max_years=5 |
 
 UNIVERSAL RULES:
 1. start_session() — ALWAYS first for any workspace task. Share view_url after EVERY tool call.
@@ -351,7 +361,61 @@ def _handle_cached_sec_fetch(
 
 
 @mcp.tool()
-def fetch_sec_financials(
+def fetch_report(
+    ctx: Context,
+    report_type: str,
+    tickers: list[str],
+    years: list[int] | None = None,
+    max_years: int = 1,
+    session_id: str | None = None,
+) -> dict:
+    """
+    Fetch financial reports for one or more US public companies.
+
+    REQUIRED DISAMBIGUATION:
+    If report_type is unclear, ALWAYS ask: "Do you want structured SEC financial tables (Files panel) or the complete 10-K narrative document (RAG)?"
+
+    report_type MUST be one of:
+    - "just_financials": Structured XBRL tables (income/balance/cashflow) in Files panel. Use for DCF, comps, or raw data browsing.
+    - "full_report": Entire filed 10-K document as markdown (narrative, risk factors, MD&A, footnotes) for RAG. Saves to RAG sidebar.
+
+    USER PHRASE → CALL EXAMPLES:
+    | User says | Call |
+    | "Fetch Apple financial statements" / tables for Files | report_type="just_financials", tickers=["AAPL"] |
+    | "Fetch Apple annual report" / full 10-K for RAG | report_type="full_report", tickers=["AAPL"] |
+    | "Fetch Walmart 2024 annual report" | report_type="full_report", tickers=["WMT"], years=[2024] |
+    | "Last 5 years for AAPL and MSFT" | report_type="just_financials", tickers=["AAPL", "MSFT"], max_years=5 |
+
+    YEAR RESOLUTION:
+    - years=[2024] → Fetch FY2024 only
+    - years=[2023, 2024] → Fetch each listed year
+    - years omitted, max_years=N → Last N distinct fiscal years
+    - years omitted, max_years=1 (default) → Latest filing only
+    """
+    try:
+        sid = resolve_workspace_session(ctx, session_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    _touch_session_writes()
+    
+    # Cast report_type to Literal to satisfy type checker, validation happens inside run_fetch_report
+    from typing import cast
+    from mcp.fetch_report import ReportType
+    
+    return _with_session(
+        sid,
+        run_fetch_report(
+            session_id=sid,
+            report_type=cast(ReportType, report_type),
+            tickers=tickers,
+            years=years,
+            max_years=max_years,
+        ),
+    )
+
+
+def _fetch_sec_financials_impl(
     ctx: Context,
     company_name: str | None = None,
     ticker: str | None = None,
@@ -429,8 +493,7 @@ def fetch_sec_financials(
     return _with_session(sid, result)
 
 
-@mcp.tool()
-def fetch_annual_report(
+def _fetch_annual_report_impl(
     ctx: Context,
     ticker: str,
     fiscal_year: int | None = None,
@@ -548,8 +611,7 @@ def _fetch_sec_statement_tool(
     return _with_session(sid, result)
 
 
-@mcp.tool()
-def fetch_sec_income(
+def _fetch_sec_income_impl(
     ctx: Context,
     company_name: str | None = None,
     ticker: str | None = None,
@@ -573,8 +635,7 @@ def fetch_sec_income(
     )
 
 
-@mcp.tool()
-def fetch_sec_balance(
+def _fetch_sec_balance_impl(
     ctx: Context,
     company_name: str | None = None,
     ticker: str | None = None,
@@ -598,8 +659,7 @@ def fetch_sec_balance(
     )
 
 
-@mcp.tool()
-def fetch_sec_cashflow(
+def _fetch_sec_cashflow_impl(
     ctx: Context,
     company_name: str | None = None,
     ticker: str | None = None,
@@ -635,7 +695,7 @@ def run_detailed_analysis(
     """
     Build curated Detailed Analysis report for a US public company (5-year default).
 
-    **Use this tool when the user asks for detailed analysis** — not fetch_sec_financials.
+    **Use this tool when the user asks for detailed analysis** — not fetch_report.
     Saves to the dashboard **Detailed Analysis** sidebar: income, balance, and cash flow
     sections in one scrollable report with derived metrics, integrity checks, and a
     **Trend analysis** table (revenue, margins, EPS, YoY growth).
@@ -643,7 +703,7 @@ def run_detailed_analysis(
     Uses session statements cache (ticker → period → statement). Fetches only missing
     income/balance/cashflow leaves, syncs Files, then saves type=detailed_analysis.
 
-    USER PHRASE → CALL (always this tool, never fetch_sec_financials):
+    USER PHRASE → CALL (always this tool, never fetch_report):
     | User says | Call |
     | "Detailed analysis for Apple" | run_detailed_analysis(ticker="AAPL") |
     | "Do a detailed analysis on AAPL" | run_detailed_analysis(ticker="AAPL") |
@@ -656,7 +716,7 @@ def run_detailed_analysis(
     2. run_detailed_analysis(ticker="AAPL", max_years=5) — default 5 annual years
     3. Open view_url → click ticker under **Detailed Analysis** in sidebar
 
-    For partial raw SEC data only (Files panel), use fetch_sec_income / balance / cashflow.
+    For partial raw SEC data only (Files panel), use fetch_report(just_financials).
     Repeat calls skip SEC fetch when cache is complete (statements_cached=true).
     """
     try:
@@ -705,7 +765,7 @@ def run_trend_analysis(
     Rebuild or refresh the Trend analysis table for a ticker (standalone).
 
     Use when the user asks to update trend analysis only — not a full detailed analysis rerun.
-    Requires cached annual statements (from fetch_sec_financials or run_detailed_analysis).
+    Requires cached annual statements (from fetch_report or run_detailed_analysis).
     Upserts the `trend_analysis` block on the ticker's Detailed Analysis model.
 
     USER PHRASE → CALL:
@@ -768,7 +828,7 @@ def set_comparative_inputs(
     1. set_comparative_inputs with target + peers tickers
     2. run_comparative_analysis — auto-fetches last 2 annual years if missing (YoY growth), links ticker Files, builds report
 
-    Optional: fetch_sec_financials per company first; values.link still supported for manual file_id.
+    Optional: fetch_report(just_financials) per company first; values.link still supported for manual file_id.
 
     COMPARATIVE RULES:
     - values.target: {{ticker, company_name?}}

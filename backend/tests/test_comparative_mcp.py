@@ -70,7 +70,7 @@ def test_set_comparative_inputs_stages():
         {"target": {"ticker": "KO"}, "peers": [{"ticker": "PEP"}]},
     )
     assert result["ready"] is False
-    assert "fetch_sec_financials" in result["next_step"] or "run_comparative_analysis" in result["next_step"]
+    assert "fetch_report" in result["next_step"] or "run_comparative_analysis" in result["next_step"]
 
 
 def test_run_not_ready_without_sec_files(block_comparative_sec_fetch):

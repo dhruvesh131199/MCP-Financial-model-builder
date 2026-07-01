@@ -236,6 +236,7 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-06-30 | UX + MCP | Unified `fetch_report` MCP tool: consolidated `fetch_sec_financials`, `fetch_annual_report`, and statement fetchers into one tool with required `report_type` (`just_financials` vs `full_report`) to solve host LLM routing confusion. |
 | 2026-06-24 | UX + MCP | RAG dashboard: no default panel selection; sidebar section-only (doc list in main panel); MCP disambiguation fetch_sec_financials vs fetch_annual_report (mirror DCF ask-first); fiscal_year on 10-K fetch; ParentChunk item_label in chunk explorer. |
 | 2026-06-24 | Feature | RAG merged into session dashboard: fourth sidebar section + `RagHubPanel`; global Postgres dedup via `resolve_or_ingest` (cache hit links session only); per-session `rag_documents.json`; chunk explorer at `/s/{id}/rag/{docId}/chunks`; session API `/api/sessions/{id}/rag/*`. |
 | 2026-06-30 | Feature | RAG homework Postgres layer: deterministic parent IDs (`TICKER_YEAR_10K_P_NN`), `migrations/001_init.sql`, `PostgresVectorStore` upserts on ingest when `DATABASE_URL` set; embeddings NULL until embed step; same DDL for local pgvector → Aurora. |

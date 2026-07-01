@@ -81,7 +81,7 @@ SESSION_TTL_SECONDS=3600
 
 `VIEW_BASE_URL` is the link Claude returns from `start_session`. Must match Render exactly (no trailing slash).
 
-`SEC_USER_AGENT` is required by SEC EDGAR (descriptive app name + contact email) for `fetch_sec_financials`.
+`SEC_USER_AGENT` is required by SEC EDGAR (descriptive app name + contact email) for `fetch_report`.
 
 `SESSION_TTL_SECONDS=3600` deletes each anonymous session folder after one hour — no long-lived user data on disk.
 

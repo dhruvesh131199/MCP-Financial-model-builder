@@ -10,12 +10,12 @@ Learn the ingest path before merging into production and adding vector search.
 4. **Chunk** each Item into parent + sub-chunks for RAG (`chunks.json`)
 5. **Save** raw file + `converted.md` + `sections.json` + `chunks.json` + `report.html`
 
-This is **not** the same as `fetch_sec_financials`, which stores structured XBRL tables for the Files panel.
+This is **not** the same as `fetch_report(just_financials)`, which stores structured XBRL tables for the Files panel.
 
 ## Flow
 
 ```
-MCP fetch_annual_report ──┐
+MCP fetch_report(full_report) ──┐
                           ├──► pipeline.ingest_* ──► MarkItDown ──► converted.md
 Homework API upload  ─────┘                              ├──► section_analyze ──► sections.json
 CLI run.py --ticker ──────┘                              ├──► chunk_plan ──► chunks.json
@@ -131,7 +131,7 @@ RAG lives in the main workspace sidebar (fourth section) — not a separate home
 | Main panel | Fetch 10-K or upload; session document list with Done / error / “Loaded from library” |
 | Chunk explorer | `/s/{sessionId}/rag/{documentId}/chunks` — parent/sub tree from session `chunks.json` or Postgres on cache hit |
 | Session index | `data/sessions/{uuid}/rag_documents.json` |
-| MCP | `fetch_annual_report` → `resolve_or_ingest_sec` (same dedup) |
+| MCP | `fetch_report(full_report)` → `resolve_or_ingest_sec` (same dedup) |
 
 **API (session-scoped):**
 

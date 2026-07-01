@@ -27,7 +27,7 @@ def run_trend_analysis_for_session(
         return {
             "error": (
                 f"No cached statements for {sym}. "
-                "Run fetch_sec_financials or run_detailed_analysis first."
+                "Run fetch_report(just_financials) or run_detailed_analysis first."
             ),
         }
 

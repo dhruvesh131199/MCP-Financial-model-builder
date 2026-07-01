@@ -75,10 +75,11 @@ def test_mcp_instructions_contain_phrase_mapping():
     assert "scope_applied" in text
 
 
-def test_fetch_sec_financials_docstring_contains_examples():
+def test_fetch_report_docstring_contains_examples():
     from pathlib import Path
 
     text = Path(__file__).resolve().parents[1].joinpath("mcp", "server.py").read_text()
     assert "USER PHRASE" in text
-    assert "scope_applied" in text
-    assert "include_quarterly=false" in text
+    assert "report_type=" in text
+    assert "just_financials" in text
+    assert "full_report" in text

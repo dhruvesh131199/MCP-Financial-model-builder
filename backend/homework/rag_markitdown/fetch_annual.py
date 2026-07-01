@@ -62,6 +62,27 @@ def _resolve_10k_filing(company: Company, fiscal_year: int | None) -> Any:
     )
 
 
+def list_10k_fiscal_years(ticker: str, count: int) -> list[int]:
+    """Return the most recent N fiscal years for which a 10-K exists."""
+    ensure_edgar_identity()
+    sym = ticker.strip().upper()
+    company = Company(sym)
+    filings = company.get_filings(form="10-K", amendments=False)
+    
+    years: list[int] = []
+    seen: set[int] = set()
+    
+    for filing in filings:
+        fy = _filing_fiscal_year(filing)
+        if fy is not None and fy not in seen:
+            seen.add(fy)
+            years.append(fy)
+            if len(years) >= count:
+                break
+                
+    return sorted(years, reverse=True)
+
+
 def _meta_from_filing(company: Company, filing: Any, sym: str) -> FilingMeta:
     return FilingMeta(
         ticker=sym,

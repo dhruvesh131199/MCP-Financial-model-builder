@@ -3,7 +3,7 @@
 MCP server + dashboard for building DCF models. Chat in **Cursor or Claude**; Python computes; each user gets a **private workspace link** (no signup).
 
 **Phase 1:** HTTP MCP on localhost, anonymous sessions, manual DCF inputs.  
-**Phase 2:** SEC EDGAR financials (`fetch_sec_financials`), Files sidebar, 1-hour session TTL.
+**Phase 2:** SEC EDGAR financials (`fetch_report`), Files sidebar, 1-hour session TTL.
 
 ## Architecture
 
@@ -53,7 +53,7 @@ Restart Cursor after adding. Check **Settings → MCP** — `financial-models` s
 
 3. Add the block from [`claude_desktop_config.example.json`](claude_desktop_config.example.json) in this repo (merge into existing `mcpServers` if you already have other servers).
 4. **Fully quit** Claude Desktop (Cmd+Q) and reopen — not just close the window.
-5. Look for the tools icon in chat; you should see `start_session`, `set_model_inputs`, `run_dcf`, `resolve_ticker`, and `fetch_sec_financials`.
+5. Look for the tools icon in chat; you should see `start_session`, `set_model_inputs`, `run_dcf`, `resolve_ticker`, and `fetch_report`.
 
 
 ### Try it
@@ -78,7 +78,7 @@ or, for more history:
 
 > Pull Tesla financials for the last 5 years — annual and quarterly.
 
-The host calls `fetch_sec_financials`; reports appear in the **Files** sidebar. Ingest uses **edgartools statement objects** (`income_statement`, `balance_sheet`, `cashflow_statement`) per filing — not XBRLS stitch. Repeat requests with the same scope do not create duplicate entries (dedup key `fetch=statements`). Session data is deleted after one hour (`SESSION_TTL_SECONDS`, default 3600).
+The host calls `fetch_report(just_financials)`; reports appear in the **Files** sidebar. Ingest uses **edgartools statement objects** (`income_statement`, `balance_sheet`, `cashflow_statement`) per filing — not XBRLS stitch. Repeat requests with the same scope do not create duplicate entries (dedup key `fetch=statements`). Session data is deleted after one hour (`SESSION_TTL_SECONDS`, default 3600).
 
 **Defaults:** latest annual 10-K only (`max_years=1`, `include_quarterly=false`). See MCP tool docstring for FY-specific and quarterly scopes.
 

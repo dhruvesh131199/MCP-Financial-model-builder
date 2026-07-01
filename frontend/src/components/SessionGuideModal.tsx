@@ -11,7 +11,7 @@ const EXAMPLES = [
     title: "Fetch SEC financials (Files panel)",
     description:
       "Structured income/balance/cashflow tables — not the full 10-K narrative. For complete annual reports (RAG), use the RAG example below.",
-    prompt: "Fetch Apple SEC financial reports.",
+    prompt: "Fetch Apple financial statements.",
     accent: "from-emerald-500/15 to-teal-500/5",
     icon: (
       <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>

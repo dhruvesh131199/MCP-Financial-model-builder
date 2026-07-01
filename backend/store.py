@@ -891,7 +891,7 @@ def summarize_comparative_bundle(session_id: str) -> dict:
         next_step = "Add 1–10 peer companies via set_comparative_inputs."
     elif any(not c.get("file_id") for c in companies):
         next_step = (
-            "Ensure SEC Files exist for each ticker (fetch_sec_financials) or call "
+            "Ensure SEC Files exist for each ticker (fetch_report) or call "
             "run_comparative_analysis to auto-fetch and link."
         )
     elif fiscal_year_used is None:
