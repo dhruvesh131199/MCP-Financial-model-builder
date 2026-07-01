@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChunkPlan, ParentChunk, SubChunk } from "../api/sessionRag";
+import type { ChunkPlan, ParentChunk, SubChunk } from "../../api/sessionRag";
 
 const PREVIEW_CHARS = 240;
 

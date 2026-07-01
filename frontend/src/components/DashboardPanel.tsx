@@ -70,7 +70,12 @@ export default function DashboardPanel({
     const unchanged =
       effectiveSelection.kind === selection.kind &&
       (effectiveSelection.kind === "none" ||
-        (selection.kind !== "none" && effectiveSelection.id === selection.id));
+        effectiveSelection.kind === "rag_hub" ||
+        ((effectiveSelection.kind === "file" ||
+          effectiveSelection.kind === "model" ||
+          effectiveSelection.kind === "analysis") &&
+          selection.kind === effectiveSelection.kind &&
+          effectiveSelection.id === selection.id));
     if (unchanged) return;
     onSelect(effectiveSelection);
   }, [effectiveSelection, selection, onSelect]);
