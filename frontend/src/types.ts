@@ -325,13 +325,32 @@ export interface Workspace {
   updated_at: string | null;
   models: ModelEntry[];
   files: FileEntry[];
+  rag_documents?: RagDocumentEntry[];
+}
+
+export interface RagDocumentEntry {
+  id: string;
+  filing_key: string;
+  document_id: string | null;
+  ticker: string | null;
+  year: number | null;
+  doctype: string | null;
+  label: string;
+  source: string;
+  status: "ready" | "error";
+  error: string | null;
+  from_cache: boolean;
+  linked_at?: string;
+  parent_count?: number;
+  subchunk_count?: number;
 }
 
 export type DashboardSelection =
   | { kind: "none" }
   | { kind: "file"; id: string }
   | { kind: "model"; id: string }
-  | { kind: "analysis"; id: string };
+  | { kind: "analysis"; id: string }
+  | { kind: "rag_hub" };
 
 export interface ModelRecord {
   session_id?: string;

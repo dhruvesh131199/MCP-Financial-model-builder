@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { fetchSessionWorkspace, API_BASE } from "../api";
 import DashboardPanel from "../components/DashboardPanel";
 import SessionGuideModal, { SessionGuideButton } from "../components/SessionGuideModal";
-import type { DashboardSelection, FileEntry, ModelEntry } from "../types";
+import type { DashboardSelection, FileEntry, ModelEntry, RagDocumentEntry } from "../types";
 import {
   resolveNewModelAutoSelect,
 } from "../lib/sessionAutoSelect";
@@ -15,6 +15,7 @@ export default function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [models, setModels] = useState<ModelEntry[]>([]);
+  const [ragDocuments, setRagDocuments] = useState<RagDocumentEntry[]>([]);
   const [selection, setSelection] = useState<DashboardSelection>({ kind: "none" });
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +73,7 @@ export default function SessionPage() {
             fileCountRef.current = workspace.files.length;
             setModels(workspace.models);
             setFiles(workspace.files);
+            setRagDocuments(workspace.rag_documents ?? []);
             for (const model of workspace.models) {
               if (model.type !== "detailed_analysis") continue;
               const ts =
@@ -87,6 +89,7 @@ export default function SessionPage() {
           fileCountRef.current = workspace.files.length;
           setModels(workspace.models);
           setFiles(workspace.files);
+          setRagDocuments(workspace.rag_documents ?? []);
 
           let analysisToSelect: ModelEntry | undefined;
           for (const model of workspace.models) {
@@ -139,7 +142,19 @@ export default function SessionPage() {
     };
   }, [sessionId, selectAndPulse]);
 
-  const hasContent = models.length > 0 || files.length > 0;
+  const refreshWorkspace = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const workspace = await fetchSessionWorkspace(sessionId);
+      if (workspace.exists) {
+        setRagDocuments(workspace.rag_documents ?? []);
+        setModels(workspace.models);
+        setFiles(workspace.files);
+      }
+    } catch {
+      /* poll will retry */
+    }
+  }, [sessionId]);
 
   return (
     <div className="flex h-screen flex-col">
@@ -170,22 +185,16 @@ export default function SessionPage() {
           </div>
         )}
 
-        {!notFound && !error && !hasContent && (
-          <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-            <p className="text-sm text-gray-500">
-              No files or models yet — use the button above for example prompts to try in chat.
-            </p>
-          </div>
-        )}
-
-        {!notFound && !error && hasContent && sessionId && (
+        {!notFound && !error && sessionId && (
           <DashboardPanel
             sessionId={sessionId}
             files={files}
             models={models}
+            ragDocuments={ragDocuments}
             selection={selection}
             pulseId={pulseId}
             onSelect={setSelection}
+            onRagRefresh={() => void refreshWorkspace()}
           />
         )}
       </div>

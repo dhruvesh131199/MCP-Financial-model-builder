@@ -485,22 +485,29 @@ def load_workspace(session_id: str) -> dict | None:
     if not session_exists(session_id):
         return None
 
+    from rag_session_store import list_rag_documents, rag_index_mtime
+
     session_dir = _session_dir(session_id)
     _migrate_legacy_model(session_dir)
     models = _load_model_entries(session_dir)
     files = _load_file_entries(session_dir)
+    rag_documents = list_rag_documents(session_id)
     stmt_path = session_dir / "inputs" / "statements.json"
     stmt_mtime: str | None = None
     if stmt_path.exists():
         stmt_mtime = datetime.fromtimestamp(
             stmt_path.stat().st_mtime, tz=timezone.utc
         ).isoformat()
-    updated_at = _workspace_updated_at(models, files, extra_timestamps=[stmt_mtime])
+    rag_mtime = rag_index_mtime(session_id)
+    updated_at = _workspace_updated_at(
+        models, files, extra_timestamps=[stmt_mtime, rag_mtime]
+    )
     return {
         "session_id": session_id,
         "updated_at": updated_at,
         "models": models,
         "files": files,
+        "rag_documents": rag_documents,
     }
 
 

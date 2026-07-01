@@ -8,13 +8,27 @@ export interface SessionGuideModalProps {
 const EXAMPLES = [
   {
     id: "fetch",
-    title: "Fetch SEC financials",
-    description: "Pull official 10-K / 10-Q data into your workspace. Results appear in Files.",
+    title: "Fetch SEC financials (Files panel)",
+    description:
+      "Structured income/balance/cashflow tables — not the full 10-K narrative. For complete annual reports (RAG), use the RAG example below.",
     prompt: "Fetch Apple SEC financial reports.",
     accent: "from-emerald-500/15 to-teal-500/5",
     icon: (
       <svg className="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    id: "rag-annual",
+    title: "Full 10-K for RAG",
+    description:
+      "Complete annual report document (narrative + risks + MD&A) — appears in the RAG section, not Files.",
+    prompt: "Fetch Walmart 2024 annual report.",
+    accent: "from-indigo-500/15 to-violet-500/5",
+    icon: (
+      <svg className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
       </svg>
     ),
   },

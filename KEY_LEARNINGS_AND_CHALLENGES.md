@@ -236,6 +236,10 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-06-24 | UX + MCP | RAG dashboard: no default panel selection; sidebar section-only (doc list in main panel); MCP disambiguation fetch_sec_financials vs fetch_annual_report (mirror DCF ask-first); fiscal_year on 10-K fetch; ParentChunk item_label in chunk explorer. |
+| 2026-06-24 | Feature | RAG merged into session dashboard: fourth sidebar section + `RagHubPanel`; global Postgres dedup via `resolve_or_ingest` (cache hit links session only); per-session `rag_documents.json`; chunk explorer at `/s/{id}/rag/{docId}/chunks`; session API `/api/sessions/{id}/rag/*`. |
+| 2026-06-30 | Feature | RAG homework Postgres layer: deterministic parent IDs (`TICKER_YEAR_10K_P_NN`), `migrations/001_init.sql`, `PostgresVectorStore` upserts on ingest when `DATABASE_URL` set; embeddings NULL until embed step; same DDL for local pgvector → Aurora. |
+| 2026-06-29 | Feature | RAG homework Phase 1: `homework/rag_markitdown` — fetch latest 10-K (PDF→HTML fallback), MarkItDown convert, shared `pipeline.ingest_*` for MCP `fetch_annual_report` + API upload + CLI; homework lab at `/homework/rag`; `NoOpVectorStore` stub for Phase 2. |
 | 2026-06-24 | Feature | DCF dashboard HITL: `create_dcf_model(ticker, projection_years)` always fetches 5Y SEC reference; forecast grid length = user `projection_years`; `DcfEditor` + PATCH/POST API; UFCF derived not typed. |
 | 2026-06-26 | Fix | Comparative analysis fetches last 2 annual years (gap-based dedup) so `extract_fiscal_snapshot` can compute revenue growth YoY in engine/comps — not in inputs bundle. |
 | 2026-06-26 | Fix | Balance totals in Detailed Analysis cache path (derivations + derive totals from sections); DCF human-in-the-loop (dcf_suggestions read-only, no auto merge on fetch); comparative auto-link/fetch and per-company latest FY. |

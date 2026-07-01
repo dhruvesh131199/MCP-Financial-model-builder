@@ -5,6 +5,7 @@ import type {
   DcfResult,
   FileEntry,
   ModelEntry,
+  RagDocumentEntry,
 } from "../types";
 import { exportComparativeToExcel } from "../utils/exportComparativeExcel";
 import { exportDcfTemplateExcel, exportDcfToExcel } from "../utils/exportDcfExcel";
@@ -14,6 +15,7 @@ import DcfEditor from "./DcfEditor";
 import DcfTable from "./DcfTable";
 import DetailedAnalysisViewer from "./DetailedAnalysisViewer";
 import FileViewer from "./FileViewer";
+import RagHubPanel from "./RagHubPanel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { resolveOrphanModelSelection } from "../lib/sessionAutoSelect";
 
@@ -21,18 +23,22 @@ interface DashboardPanelProps {
   sessionId: string;
   files: FileEntry[];
   models: ModelEntry[];
+  ragDocuments: RagDocumentEntry[];
   selection: DashboardSelection;
   pulseId: string | null;
   onSelect: (selection: DashboardSelection) => void;
+  onRagRefresh: () => void;
 }
 
 export default function DashboardPanel({
   sessionId,
   files,
   models,
+  ragDocuments,
   selection,
   pulseId,
   onSelect,
+  onRagRefresh,
 }: DashboardPanelProps) {
   const [downloading, setDownloading] = useState(false);
 
@@ -96,6 +102,8 @@ export default function DashboardPanel({
     effectiveSelection.kind === "analysis"
       ? displayAnalyses.find((m) => m.id === effectiveSelection.id)
       : undefined;
+
+  const showRagHub = effectiveSelection.kind === "rag_hub";
 
   const activeDraft =
     effectiveSelection.kind === "model" && activeModel?.type === "dcf_draft"
@@ -204,10 +212,21 @@ export default function DashboardPanel({
             ))
           )}
         </SidebarSection>
+
+        <RagSidebarSection
+          hubActive={effectiveSelection.kind === "rag_hub"}
+          onSelectHub={() => onSelect({ kind: "rag_hub" })}
+        />
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col bg-white">
-        {activeDraft?.type === "dcf_draft" ? (
+        {showRagHub ? (
+          <RagHubPanel
+            sessionId={sessionId}
+            documents={ragDocuments}
+            onRefresh={onRagRefresh}
+          />
+        ) : activeDraft?.type === "dcf_draft" ? (
           <DcfEditor
             sessionId={sessionId}
             modelId={activeDraft.id}
@@ -263,8 +282,12 @@ export default function DashboardPanel({
             </div>
           </>
         ) : (
-          <div className="flex h-full items-center justify-center text-sm text-gray-500">
-            Select a file, model, or detailed analysis from the sidebar
+          <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-gray-500">
+            <p>Select a file, model, or analysis from the sidebar.</p>
+            <p className="text-xs text-gray-400">
+              For annual reports (RAG), open the RAG section — or ask in chat, e.g. “Fetch Walmart
+              2024 annual report”.
+            </p>
           </div>
         )}
       </main>
@@ -338,6 +361,33 @@ function ModelHeader({
           {downloading ? "Exporting…" : "Download .xlsx"}
         </button>
       )}
+    </div>
+  );
+}
+
+function RagSidebarSection({
+  hubActive,
+  onSelectHub,
+}: {
+  hubActive: boolean;
+  onSelectHub: () => void;
+}) {
+  return (
+    <div className="flex flex-col border-b border-[var(--border-soft)] p-2">
+      <button
+        type="button"
+        onClick={onSelectHub}
+        className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition ${
+          hubActive ? "bg-indigo-100" : "hover:bg-white/80"
+        }`}
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+          Upload financial document for your questions!
+        </span>
+        <span className="shrink-0 rounded bg-indigo-600 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
+          RAG
+        </span>
+      </button>
     </div>
   );
 }

@@ -37,6 +37,7 @@ from services.detailed_analysis_service import (
 from services.trend_analysis_service import run_trend_analysis_for_session
 from services.comparative import handle_run_comparative_analysis, handle_set_comparative_inputs
 from services.dcf_service import create_dcf_draft
+from homework.rag_markitdown.resolve import resolve_or_ingest_sec
 from session_binding import resolve_workspace_session
 from store import cleanup_expired_sessions
 
@@ -51,8 +52,9 @@ detailed analysis reports, and peer comparative analysis.
 CAPABILITIES:
 1. DCF — create_dcf_model (dashboard editor — see DCF rules)
 2. SEC filings (Files panel) — fetch_sec_financials, fetch_sec_income/balance/cashflow
-3. Detailed Analysis (report panel) — run_detailed_analysis ONLY (see routing below)
-4. Peer comparison — set_comparative_inputs + run_comparative_analysis (auto-fetch/link SEC files)
+3. Annual report document (RAG prep) — fetch_annual_report (full 10-K → markdown; homework Phase 1)
+4. Detailed Analysis (report panel) — run_detailed_analysis ONLY (see routing below)
+5. Peer comparison — set_comparative_inputs + run_comparative_analysis (auto-fetch/link SEC files)
 
 DCF — DASHBOARD HUMAN IN THE LOOP (strict):
 - ALWAYS ask the user: "How many years should the DCF forecast cover?" before creating a model.
@@ -97,6 +99,22 @@ SEC FETCH RULES:
 - Do not pass both unless intentional. When fiscal_years is set, max_years does not pick the year.
 - After fetch, read scope_applied in the response to confirm the right periods were stored.
 - Fiscal year is the company's FY (e.g. Apple FY2025 ends ~Sep 2025), not always calendar year.
+
+SEC DATA TYPE — REQUIRED DISAMBIGUATION (fetch_sec_financials vs fetch_annual_report):
+When the user asks to "fetch financials", "get reports", "fetch 10-K", "annual report", or similar:
+1. ALWAYS ask: "Do you want structured SEC financial tables (Files panel) or the complete 10-K narrative document (RAG)?"
+2. Map answer:
+   - Tables / statements / DCF or comps prep / quarterly → fetch_sec_financials
+   - Full annual report / 10-K document / RAG / narrative / risk factors / MD&A → fetch_annual_report
+3. NEVER call fetch_sec_financials when the user asked for the full 10-K RAG document.
+4. NEVER call fetch_annual_report when the user only wants XBRL tables in Files.
+
+| User says | Tool | Parameters |
+|-----------|------|------------|
+| "Fetch Apple financial statements" / tables for Files | fetch_sec_financials | ticker="AAPL" |
+| "Fetch Apple annual report" / full 10-K for RAG | fetch_annual_report | ticker="AAPL" |
+| "Fetch Walmart 2024 annual report" | fetch_annual_report | ticker="WMT", fiscal_year=2024 |
+| "Latest Apple 10-K document" | fetch_annual_report | ticker="AAPL" (omit fiscal_year) |
 
 UNIVERSAL RULES:
 1. start_session() — ALWAYS first for any workspace task. Share view_url after EVERY tool call.
@@ -352,6 +370,12 @@ def fetch_sec_financials(
     or an in-depth curated breakdown — call run_detailed_analysis instead. This tool is for
     raw SEC Files browsing (single year, quarterly, comparative prep).
 
+    NOT FOR full 10-K RAG: If the user asked for the complete annual report document
+    (narrative, risk factors, MD&A, footnotes for RAG) — call fetch_annual_report instead.
+    This tool returns structured XBRL tables only.
+
+    DISAMBIGUATION: When intent is unclear, ask whether they want Files tables or full 10-K RAG.
+
     PARAMETER GUIDE (max_years default 1, include_quarterly default false):
     - Latest annual only: omit optional scope args (or max_years=1).
     - Specific FY: fiscal_years=[2023] — targeted 10-K, not latest year.
@@ -403,6 +427,92 @@ def fetch_sec_financials(
         statements=valid_stmts,
     )
     return _with_session(sid, result)
+
+
+@mcp.tool()
+def fetch_annual_report(
+    ctx: Context,
+    ticker: str,
+    fiscal_year: int | None = None,
+    session_id: str | None = None,
+) -> dict:
+    """
+    Fetch a primary 10-K annual report (business, risk factors, MD&A,
+    financial statements, footnotes) and convert to markdown for RAG prep.
+
+    NOT the same as fetch_sec_financials:
+    - fetch_sec_financials → structured XBRL tables in Files panel (models/comps)
+    - fetch_annual_report → entire filed 10-K document as markdown (narrative + statements)
+
+    NOT FOR structured Files/XBRL only — use fetch_sec_financials for statement tables.
+
+    DISAMBIGUATION: When intent is unclear, ask whether they want Files tables or full 10-K RAG.
+
+    USER PHRASE → CALL:
+    | User says | Call |
+    | "Fetch Apple's annual report" | ticker="AAPL" |
+    | "Fetch Walmart 2024 annual report" | ticker="WMT", fiscal_year=2024 |
+    | "Get Walmart 10-K for RAG" | ticker="WMT" (latest if year omitted) |
+
+    Saves to session RAG index. Dashboard: RAG sidebar section on view_url.
+    """
+    try:
+        sid = resolve_workspace_session(ctx, session_id)
+    except ValueError as exc:
+        return {"error": str(exc)}
+
+    sym = (ticker or "").strip().upper()
+    if not sym:
+        return _with_session(sid, {"error": "ticker is required"})
+
+    try:
+        resolved = resolve_or_ingest_sec(
+            session_id=sid, ticker=sym, fiscal_year=fiscal_year
+        )
+    except ValueError as exc:
+        return _with_session(sid, {"error": str(exc)})
+    except KeyError:
+        return _with_session(sid, {"error": "Session not found"})
+
+    if not resolved.success:
+        return _with_session(
+            sid,
+            {
+                "success": False,
+                "error": resolved.error,
+                "filing_key": resolved.filing_key,
+                "rag_entry_id": resolved.rag_entry_id,
+            },
+        )
+
+    doc_id = resolved.document_id
+    report_path = f"/api/sessions/{sid}/rag/documents/{doc_id}/report"
+    cache_note = " (loaded from library)" if resolved.from_cache else ""
+    return _with_session(
+        sid,
+        {
+            "success": True,
+            "document_id": doc_id,
+            "ticker": sym,
+            "from_cache": resolved.from_cache,
+            "filing_key": resolved.filing_key,
+            "parent_count": resolved.parent_count,
+            "subchunk_count": resolved.subchunk_count,
+            "items_found": (
+                resolved.ingest.section_outline.items_found
+                if getattr(resolved, "ingest", None)
+                and resolved.ingest
+                and resolved.ingest.section_outline
+                else None
+            ),
+            "report_api_path": report_path,
+            "message": (
+                f"{'Linked' if resolved.from_cache else 'Fetched'} latest 10-K for {sym}"
+                f"{cache_note}. Chunks: {resolved.parent_count} parent / "
+                f"{resolved.subchunk_count} sub."
+            ),
+        },
+    )
 
 
 def _fetch_sec_statement_tool(
