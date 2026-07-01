@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS_DIR = Path(__file__).resolve().parent / "migrations"
 INIT_SQL = MIGRATIONS_DIR / "001_init.sql"
+EMBED_768_SQL = MIGRATIONS_DIR / "002_embed_768.sql"
 _env_loaded = False
 
 
@@ -39,20 +40,24 @@ def schema_is_ready(conn) -> bool:
 
 
 def run_migrations(database_url: str | None = None) -> None:
-    """Apply 001_init.sql (idempotent)."""
+    """Apply 001_init.sql and 002_embed_768.sql (idempotent where possible)."""
     import psycopg
 
     url = database_url or get_database_url()
     if not url:
         raise SystemExit("DATABASE_URL is not set")
 
-    sql = INIT_SQL.read_text(encoding="utf-8")
+    migration_files = [INIT_SQL, EMBED_768_SQL]
     with psycopg.connect(url) as conn:
         conn.autocommit = True
         with conn.cursor() as cur:
-            cur.execute(sql)
+            for path in migration_files:
+                if not path.exists():
+                    raise SystemExit(f"Migration file not found: {path}")
+                cur.execute(path.read_text(encoding="utf-8"))
+                print(f"Applied {path.name}")
         if schema_is_ready(conn):
-            print(f"Schema ready ({INIT_SQL.name})")
+            print("Schema ready (parent_chunks + sub_chunks)")
         else:
             raise SystemExit("Migration ran but parent_chunks table not found")
 

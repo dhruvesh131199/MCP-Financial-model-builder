@@ -12,6 +12,8 @@ Learn the ingest path before merging into production and adding vector search.
 
 This is **not** the same as `fetch_report(just_financials)`, which stores structured XBRL tables for the Files panel.
 
+Phase 2 (production): when `DATABASE_URL` is set, ingest **embeds sub-chunks** via Hugging Face (`BAAI/bge-base-en-v1.5`, 768-dim) into Postgres. Cache hits backfill any rows still missing embeddings. Vector search / `query_rag` MCP is not wired yet.
+
 ## Flow
 
 ```
@@ -22,7 +24,7 @@ CLI run.py --ticker ──────┘                              ├──
                                                          └──► report.html (outline viewer)
 ```
 
-Phase 2 will add: embed sub-chunks → Chroma → query tool. `vector_store.py` logs sub-chunk count today.
+Phase 2a (homework CLI): same HF client re-exported from `hf_embed.py` for offline embed smoke tests. See [Embed homework](#phase-2a-embed-homework-hf) below.
 
 ## Section outline
 
@@ -81,7 +83,7 @@ API: `GET /api/homework/rag/documents/{id}/chunks`
 
 ## Local Postgres + pgvector (optional)
 
-When `DATABASE_URL` is set in `backend/.env`, ingest **also** upserts into Postgres (same schema works on Aurora later). Embeddings stay `NULL` until a future embed step.
+When `DATABASE_URL` is set in `backend/.env`, ingest upserts into Postgres and **embeds** sub-chunks (768-dim HF). Requires `HF_TOKEN` in `backend/.env`.
 
 **1. Create DB in Postico** (e.g. `fmb_rag`) and enable extension:
 
@@ -94,19 +96,22 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ```bash
 cd backend && source .venv/bin/activate
 pip install -r requirements-homework-rag.txt
-# Option A — Python (reads DATABASE_URL from .env)
+# Applies 001_init.sql then 002_embed_768.sql (002 truncates RAG tables — run once before deploy)
 python -m homework.rag_markitdown.db migrate
-# Option B — psql
-psql "$DATABASE_URL" -f homework/rag_markitdown/migrations/001_init.sql
 ```
 
 **3. Configure** `backend/.env`:
 
 ```bash
 DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/fmb_rag
+HF_TOKEN=hf_...
+# optional:
+HF_EMBED_MODEL=BAAI/bge-base-en-v1.5
 ```
 
-**4. Ingest** via UI or API — parents + subs land in `parent_chunks` / `sub_chunks`. Re-fetch same `ticker/year/doctype` replaces rows for that filing.
+**4. Ingest** via UI or API — parents + subs land in `parent_chunks` / `sub_chunks` with embeddings. Re-fetch same `ticker/year/doctype` replaces rows for that filing.
+
+After migrating to 768-dim, **re-fetch** 10-Ks (`fetch_report(full_report)`) so Postgres repopulates with embedded chunks.
 
 **Verify in Postico:**
 
@@ -114,7 +119,7 @@ DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/fmb_rag
 SELECT id, chunk_index, char_count, approx_tokens
 FROM parent_chunks WHERE ticker = 'AAPL' ORDER BY chunk_index LIMIT 5;
 
-SELECT COUNT(*) FROM sub_chunks;
+SELECT COUNT(*) FROM sub_chunks WHERE embedding IS NULL;
 ```
 
 Without `DATABASE_URL`, behavior is unchanged (`chunks.json` only, noop vector store).
@@ -153,6 +158,44 @@ RAG lives in the main workspace sidebar (fourth section) — not a separate home
 ## Narrative check
 
 After convert, `meta.json` includes booleans for phrases like `risk factors` and `management` in the markdown — quick sanity check that narrative sections survived conversion.
+
+## Phase 2a: Embed homework (HF)
+
+Homework-only smoke test for **embed → cosine search** on sub-chunks. Uses the same `HF_TOKEN` as income homework, but HF **feature-extraction** (not chat Llama).
+
+| Piece | Location |
+|-------|----------|
+| HF embed client | `hf_embed.py` (production); `embed_homework/hf_embed_client.py` re-exports for CLI |
+| Cosine rank | `embed_homework/similarity.py` |
+| CLI | `embed_homework/run_embed_test.py` |
+| Report | `output/embed_test_{timestamp}/embed_test_report.json` + `.html` |
+
+**Default model:** `BAAI/bge-base-en-v1.5` (768 dimensions). Override with `HF_EMBED_MODEL` in `backend/.env`.
+
+**Homework only:** cosine rank CLI — no Postgres/MCP vector search from this path.
+
+```bash
+cd backend && source .venv/bin/activate
+# HF_TOKEN in backend/.env
+
+# Fixture (no SEC fetch) — ~3 sub-chunks from sample_10k_items.md
+python -m homework.rag_markitdown.embed_homework.run_embed_test \
+  --limit 8 \
+  --query "What are the company's risk factors?"
+
+# Real ingest output (5–10+ sub-chunks) — prefer --ticker (picks latest ingest)
+python -m homework.rag_markitdown.run --ticker AAPL
+python -m homework.rag_markitdown.embed_homework.run_embed_test \
+  --ticker AAPL \
+  --limit 10 \
+  --query "supply chain risk" \
+  --open
+
+# Or quote the glob so the shell does not expand it to many paths:
+# --chunks 'homework/rag_markitdown/output/AAPL_*/chunks.json'
+```
+
+Success check: query about risk factors should rank an **Item 1A** sub-chunk highest. Production ingest uses the same model in Postgres `vector(768)`.
 
 ## Merge criteria (later)
 

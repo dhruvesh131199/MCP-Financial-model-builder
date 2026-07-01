@@ -174,8 +174,10 @@ def test_lookup_filing_hit_after_ingest():
 @patch("homework.rag_markitdown.resolve.lookup_filing")
 @patch("homework.rag_markitdown.resolve.get_database_url", return_value="postgresql://x")
 @patch("homework.rag_markitdown.resolve.peek_latest_annual_filing_meta")
+@patch("homework.rag_markitdown.resolve.count_unembedded", return_value=0)
+@patch("homework.rag_markitdown.resolve.embed_document")
 def test_sec_resolve_skips_ingest_on_cache_hit(
-    mock_peek, _mock_db_url, mock_lookup, mock_ingest
+    mock_embed, mock_count, mock_peek, _mock_db_url, mock_lookup, mock_ingest
 ):
     sid = create_session()
     mock_peek.return_value = _mock_filing_meta()
@@ -196,6 +198,7 @@ def test_sec_resolve_skips_ingest_on_cache_hit(
     assert result.from_cache is True
     assert result.document_id == "cached-doc"
     mock_ingest.assert_not_called()
+    mock_embed.assert_not_called()
 
     docs = list_rag_documents(sid)
     assert len(docs) == 1
@@ -204,6 +207,35 @@ def test_sec_resolve_skips_ingest_on_cache_hit(
     ws = load_workspace(sid)
     assert ws is not None
     assert len(ws["rag_documents"]) == 1
+
+
+@patch("homework.rag_markitdown.resolve.ingest_from_sec")
+@patch("homework.rag_markitdown.resolve.lookup_filing")
+@patch("homework.rag_markitdown.resolve.get_database_url", return_value="postgresql://x")
+@patch("homework.rag_markitdown.resolve.peek_latest_annual_filing_meta")
+@patch("homework.rag_markitdown.resolve.count_unembedded", return_value=5)
+@patch("homework.rag_markitdown.resolve.embed_document")
+def test_sec_resolve_backfills_embed_on_cache_hit(
+    mock_embed, mock_count, mock_peek, _mock_db_url, mock_lookup, mock_ingest
+):
+    sid = create_session()
+    mock_peek.return_value = _mock_filing_meta()
+    mock_lookup.return_value = FilingLookup(
+        document_id="cached-doc",
+        ticker="AAPL",
+        year=2025,
+        doctype="10K",
+        source="sec_annual",
+        parent_count=3,
+        subchunk_count=12,
+        created_at="2026-01-01",
+    )
+
+    result = resolve_or_ingest_sec(session_id=sid, ticker="AAPL")
+
+    assert result.from_cache is True
+    mock_ingest.assert_not_called()
+    mock_embed.assert_called_once_with("cached-doc")
 
 
 @patch("homework.rag_markitdown.resolve.ingest_from_sec")
@@ -232,7 +264,9 @@ def test_sec_resolve_full_ingest_on_miss(
 @patch("homework.rag_markitdown.resolve.ingest_from_upload")
 @patch("homework.rag_markitdown.resolve.lookup_filing")
 @patch("homework.rag_markitdown.resolve.get_database_url", return_value="postgresql://x")
-def test_upload_resolve_dedup(mock_db_url, mock_lookup, mock_ingest, tmp_path):
+@patch("homework.rag_markitdown.resolve.count_unembedded", return_value=0)
+@patch("homework.rag_markitdown.resolve.embed_document")
+def test_upload_resolve_dedup(mock_embed, mock_count, mock_db_url, mock_lookup, mock_ingest, tmp_path):
     sid = create_session()
     upload = tmp_path / "filing.html"
     upload.write_text("<html>test</html>", encoding="utf-8")

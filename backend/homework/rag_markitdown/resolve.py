@@ -16,6 +16,7 @@ from homework.rag_markitdown.chunk_ids import (
 from homework.rag_markitdown.db import get_database_url
 from homework.rag_markitdown.fetch_annual import peek_latest_annual_filing_meta
 from homework.rag_markitdown.pipeline import ingest_from_sec, ingest_from_upload
+from homework.rag_markitdown.postgres_embed import count_unembedded, embed_document
 from homework.rag_markitdown.postgres_read import lookup_filing
 from homework.rag_markitdown.schema import DocumentSource, IngestResult
 from homework.rag_markitdown.vector_store import VectorStore, get_vector_store
@@ -129,6 +130,8 @@ def resolve_or_ingest_sec(
                 filing_key.ticker, filing_key.year, filing_key.doctype
             )
             if hit:
+                if count_unembedded(hit.document_id) > 0:
+                    embed_document(hit.document_id)
                 entry = _link_to_session(
                     session_id,
                     document_id=hit.document_id,
@@ -228,6 +231,8 @@ def resolve_or_ingest_upload(
         if get_database_url():
             hit = lookup_filing(sym, year, filing_key.doctype)
             if hit:
+                if count_unembedded(hit.document_id) > 0:
+                    embed_document(hit.document_id)
                 entry = _link_to_session(
                     session_id,
                     document_id=hit.document_id,

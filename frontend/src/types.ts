@@ -323,6 +323,7 @@ export interface DcfComputeResponse {
 export interface Workspace {
   session_id: string;
   updated_at: string | null;
+  guide_seen?: boolean;
   models: ModelEntry[];
   files: FileEntry[];
   rag_documents?: RagDocumentEntry[];

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { fetchSessionWorkspace, API_BASE } from "../api";
+import { fetchSessionWorkspace, markSessionGuideSeen, API_BASE } from "../api";
 import DashboardPanel from "../components/DashboardPanel";
 import SessionGuideModal, { SessionGuideButton } from "../components/SessionGuideModal";
 import type { DashboardSelection, FileEntry, ModelEntry, RagDocumentEntry } from "../types";
@@ -9,7 +9,6 @@ import {
 } from "../lib/sessionAutoSelect";
 
 const POLL_MS = 3000;
-const guideSeenKey = (sessionId: string) => `session-guide-seen:${sessionId}`;
 
 export default function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -26,6 +25,7 @@ export default function SessionPage() {
   const analysisSnapshotRef = useRef<Map<string, string>>(new Map());
   const selectionRef = useRef(selection);
   const initialSyncDoneRef = useRef(false);
+  const guideCheckedRef = useRef(false);
 
   useEffect(() => {
     selectionRef.current = selection;
@@ -42,14 +42,6 @@ export default function SessionPage() {
 
   useEffect(() => {
     if (!sessionId) return;
-    if (!sessionStorage.getItem(guideSeenKey(sessionId))) {
-      setGuideOpen(true);
-      sessionStorage.setItem(guideSeenKey(sessionId), "1");
-    }
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (!sessionId) return;
     const sid = sessionId;
 
     let cancelled = false;
@@ -61,6 +53,13 @@ export default function SessionPage() {
         if (cancelled) return;
         setError(null);
         setNotFound(!workspace.exists);
+
+        if (workspace.exists && !guideCheckedRef.current) {
+          guideCheckedRef.current = true;
+          if (workspace.guide_seen === false) {
+            setGuideOpen(true);
+          }
+        }
 
         if (workspace.updated_at !== lastUpdated) {
           lastUpdated = workspace.updated_at;
@@ -156,9 +155,18 @@ export default function SessionPage() {
     }
   }, [sessionId]);
 
+  const dismissGuide = useCallback(() => {
+    setGuideOpen(false);
+    if (sessionId) {
+      void markSessionGuideSeen(sessionId).catch(() => {
+        /* best-effort; user can reopen via button */
+      });
+    }
+  }, [sessionId]);
+
   return (
     <div className="flex h-screen flex-col">
-      <SessionGuideModal open={guideOpen} onClose={() => setGuideOpen(false)} />
+      <SessionGuideModal open={guideOpen} onClose={dismissGuide} />
 
       <header className="shrink-0 border-b border-[var(--border-soft)] bg-white px-4 py-3">
         <div className="flex items-center justify-between gap-4">

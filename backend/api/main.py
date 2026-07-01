@@ -17,7 +17,13 @@ from services.dcf_service import (
     summarize_dcf_draft,
     update_dcf_draft,
 )
-from store import cleanup_expired_sessions, get_model_entry, load_workspace, session_exists
+from store import (
+    cleanup_expired_sessions,
+    get_model_entry,
+    load_workspace,
+    mark_session_guide_seen,
+    session_exists,
+)
 
 load_dotenv()
 
@@ -96,6 +102,17 @@ def get_session_workspace(session_id: str) -> dict:
     if workspace is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return workspace
+
+
+@app.post("/api/sessions/{session_id}/guide-seen")
+def post_session_guide_seen(session_id: str) -> dict:
+    if not session_exists(session_id):
+        raise HTTPException(status_code=404, detail="Session not found")
+    try:
+        mark_session_guide_seen(session_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"session_id": session_id, "guide_seen": True}
 
 
 @app.get("/api/sessions/{session_id}/model")

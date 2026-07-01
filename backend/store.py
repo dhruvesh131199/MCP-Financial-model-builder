@@ -52,7 +52,7 @@ def create_session() -> str:
     (session_dir / "models").mkdir(exist_ok=True)
     (session_dir / "files").mkdir(exist_ok=True)
     (session_dir / "inputs").mkdir(exist_ok=True)
-    meta = {"session_id": session_id, "created_at": _utc_now()}
+    meta = {"session_id": session_id, "created_at": _utc_now(), "guide_seen": False}
     (session_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return session_id
 
@@ -462,6 +462,33 @@ def _session_created_at(session_dir: Path) -> datetime | None:
         return None
 
 
+def _session_guide_seen(session_dir: Path) -> bool:
+    """True if guide was dismissed; legacy sessions without field default to True."""
+    meta_path = session_dir / "meta.json"
+    if not meta_path.exists():
+        return True
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        if "guide_seen" not in meta:
+            return True
+        return bool(meta.get("guide_seen"))
+    except (json.JSONDecodeError, TypeError):
+        return True
+
+
+def mark_session_guide_seen(session_id: str) -> None:
+    sid = _validate_session_id(session_id)
+    session_dir = _session_dir(sid)
+    if not session_dir.is_dir():
+        raise ValueError("Session not found")
+    meta_path = session_dir / "meta.json"
+    meta: dict = {}
+    if meta_path.exists():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    meta["guide_seen"] = True
+    meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+
+
 def cleanup_expired_sessions() -> int:
     """Delete session folders older than SESSION_TTL_SECONDS. Returns count removed."""
     if not SESSIONS_DIR.exists():
@@ -505,6 +532,7 @@ def load_workspace(session_id: str) -> dict | None:
     return {
         "session_id": session_id,
         "updated_at": updated_at,
+        "guide_seen": _session_guide_seen(session_dir),
         "models": models,
         "files": files,
         "rag_documents": rag_documents,

@@ -19,9 +19,19 @@ from ingest.edgar_identity import ensure_edgar_identity
 
 ensure_edgar_identity()
 
+import importlib
 import importlib.util
 import sys
 import os
+
+# Load local app package without registering as `mcp` (pip package uses that name).
+_app_mcp_spec = importlib.util.spec_from_file_location(
+    "app_mcp",
+    BACKEND_ROOT / "mcp" / "__init__.py",
+    submodule_search_locations=[str(BACKEND_ROOT / "mcp")],
+)
+_app_mcp_pkg = importlib.util.module_from_spec(_app_mcp_spec)
+_app_mcp_spec.loader.exec_module(_app_mcp_pkg)
 
 # Find the installed mcp package
 import site
@@ -50,6 +60,8 @@ FastMCP = real_mcp_server_fastmcp.FastMCP
 
 sys.path.pop(0)
 
+sys.modules["mcp"] = _app_mcp_pkg
+
 from engine.dcf_prefill import suggest_dcf_inputs
 from ingest.normalize import FinancialStatements
 from services.sec_client import resolve_ticker as sec_resolve_ticker
@@ -66,7 +78,6 @@ from services.detailed_analysis_service import (
 from services.trend_analysis_service import run_trend_analysis_for_session
 from services.comparative import handle_run_comparative_analysis, handle_set_comparative_inputs
 from services.dcf_service import create_dcf_draft
-from mcp.fetch_report import run_fetch_report
 from session_binding import resolve_workspace_session
 from store import cleanup_expired_sessions
 
@@ -358,6 +369,10 @@ def _handle_cached_sec_fetch(
             f"{cache_note}. Open {_view_url(sid)} → Detailed Analysis sidebar."
         )
     return response
+
+
+sys.modules["mcp.server"] = sys.modules[__name__]
+from mcp.fetch_report import run_fetch_report
 
 
 @mcp.tool()

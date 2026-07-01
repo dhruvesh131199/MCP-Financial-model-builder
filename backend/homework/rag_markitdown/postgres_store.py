@@ -1,4 +1,4 @@
-"""Persist chunk plan to Postgres (pgvector). Embeddings filled in a later step."""
+"""Persist chunk plan to Postgres (pgvector) and embed sub-chunks via HF."""
 
 from __future__ import annotations
 
@@ -6,13 +6,14 @@ import logging
 import uuid
 
 from homework.rag_markitdown.db import get_database_url, schema_is_ready
+from homework.rag_markitdown.postgres_embed import embed_document
 from homework.rag_markitdown.schema import IngestResult
 
 logger = logging.getLogger(__name__)
 
 
 class PostgresVectorStore:
-    """Upsert documents + parent/sub chunks from ingest. embedding stays NULL until embed step."""
+    """Upsert documents + parent/sub chunks, then embed sub-chunks (768-dim HF)."""
 
     def __init__(self, database_url: str | None = None) -> None:
         self._url = database_url or get_database_url()
@@ -34,15 +35,18 @@ class PostgresVectorStore:
                 )
             with conn.transaction():
                 self._upsert_filing(conn, result)
-            logger.info(
-                "postgres_store: document_id=%s %s_%s_%s parents=%s subchunks=%s",
-                result.document_id,
-                plan.ticker,
-                plan.year,
-                plan.doctype,
-                plan.parent_count,
-                plan.subchunk_count,
-            )
+
+        stats = embed_document(result.document_id, database_url=self._url)
+        logger.info(
+            "postgres_store: document_id=%s %s_%s_%s parents=%s subchunks=%s embedded=%s",
+            result.document_id,
+            plan.ticker,
+            plan.year,
+            plan.doctype,
+            plan.parent_count,
+            plan.subchunk_count,
+            stats.embedded_count,
+        )
 
     def _upsert_filing(self, conn, result: IngestResult) -> None:
         plan = result.chunk_plan

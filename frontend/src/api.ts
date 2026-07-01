@@ -43,6 +43,15 @@ export async function fetchSessionWorkspace(
   return { ...data, exists: true };
 }
 
+export async function markSessionGuideSeen(sessionId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/guide-seen`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`);
+  }
+}
+
 export async function patchDcfDraft(
   sessionId: string,
   modelId: string,

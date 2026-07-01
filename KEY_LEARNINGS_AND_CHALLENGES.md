@@ -236,6 +236,8 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-07-01 | Feature | RAG production embed: migration `002_embed_768.sql` (truncate + `vector(768)` + HNSW), `hf_embed.py` + `postgres_embed.py` on ingest and cache-hit backfill (`BAAI/bge-base-en-v1.5`); session guide `guide_seen` in `meta.json` + `POST /api/sessions/{id}/guide-seen` (cross-tab once per session). |
+| 2026-07-01 | Homework | RAG Phase 2a: `embed_homework/` — HF feature-extraction (`BAAI/bge-base-en-v1.5`, 768-dim) on 5–10 sub-chunks, cosine retrieval in Python, JSON/HTML report; not merged to Postgres/MCP until approved. |
 | 2026-06-30 | UX + MCP | Unified `fetch_report` MCP tool: consolidated `fetch_sec_financials`, `fetch_annual_report`, and statement fetchers into one tool with required `report_type` (`just_financials` vs `full_report`) to solve host LLM routing confusion. |
 | 2026-06-24 | UX + MCP | RAG dashboard: no default panel selection; sidebar section-only (doc list in main panel); MCP disambiguation fetch_sec_financials vs fetch_annual_report (mirror DCF ask-first); fiscal_year on 10-K fetch; ParentChunk item_label in chunk explorer. |
 | 2026-06-24 | Feature | RAG merged into session dashboard: fourth sidebar section + `RagHubPanel`; global Postgres dedup via `resolve_or_ingest` (cache hit links session only); per-session `rag_documents.json`; chunk explorer at `/s/{id}/rag/{docId}/chunks`; session API `/api/sessions/{id}/rag/*`. |

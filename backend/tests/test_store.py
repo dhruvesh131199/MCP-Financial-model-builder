@@ -13,6 +13,7 @@ from store import (
     find_file_by_dedup_key,
     find_financials_file_for_ticker,
     load_workspace,
+    mark_session_guide_seen,
     merge_model_inputs,
     save_dcf_model,
     save_detailed_analysis_model,
@@ -60,6 +61,32 @@ def test_create_session_makes_folder():
     sid = create_session()
     assert session_exists(sid)
     assert (store_module.SESSIONS_DIR / sid / "models").is_dir()
+
+
+def test_new_session_guide_seen_false():
+    sid = create_session()
+    ws = load_workspace(sid)
+    assert ws is not None
+    assert ws["guide_seen"] is False
+
+
+def test_mark_session_guide_seen():
+    sid = create_session()
+    mark_session_guide_seen(sid)
+    ws = load_workspace(sid)
+    assert ws is not None
+    assert ws["guide_seen"] is True
+
+
+def test_legacy_session_guide_seen_defaults_true(tmp_path):
+    sid = create_session()
+    meta_path = store_module.SESSIONS_DIR / sid / "meta.json"
+    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    del meta["guide_seen"]
+    meta_path.write_text(json.dumps(meta), encoding="utf-8")
+    ws = load_workspace(sid)
+    assert ws is not None
+    assert ws["guide_seen"] is True
 
 
 def test_save_multiple_models():
