@@ -13,3 +13,21 @@ body {
   color: #1f2937;
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+button:not(:disabled),
+a[href],
+select:not(:disabled),
+summary,
+input[type="button"],
+input[type="submit"],
+input[type="reset"],
+input[type="checkbox"],
+input[type="radio"],
+label[for] {
+  cursor: pointer;
+}
+
+input:not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="checkbox"]):not([type="radio"]),
+textarea {
+  cursor: text;
+}

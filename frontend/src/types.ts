@@ -320,6 +320,23 @@ export interface DcfComputeResponse {
   result: DcfResult;
 }
 
+export interface FinancialsFetchLogEntry {
+  id: string;
+  created_at?: string;
+  source?: string;
+  tickers: string[];
+  years: number[] | null;
+  max_years: number | null;
+  status: "success" | "partial" | "error";
+  results?: Array<{
+    ticker: string;
+    success: boolean;
+    file_id?: string;
+    error?: string;
+  }>;
+  errors?: string[];
+}
+
 export interface Workspace {
   session_id: string;
   updated_at: string | null;
@@ -327,6 +344,7 @@ export interface Workspace {
   models: ModelEntry[];
   files: FileEntry[];
   rag_documents?: RagDocumentEntry[];
+  financials_fetch_log?: FinancialsFetchLogEntry[];
 }
 
 export interface RagDocumentEntry {
@@ -351,7 +369,9 @@ export type DashboardSelection =
   | { kind: "file"; id: string }
   | { kind: "model"; id: string }
   | { kind: "analysis"; id: string }
-  | { kind: "rag_hub" };
+  | { kind: "financials_hub" }
+  | { kind: "rag_hub" }
+  | { kind: "models_hub" };
 
 export interface ModelRecord {
   session_id?: string;

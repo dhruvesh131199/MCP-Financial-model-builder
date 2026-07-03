@@ -148,7 +148,24 @@ def update_model_entry(session_id: str, model_id: str, *, data: dict | None = No
     return entry
 
 
-def save_dcf_draft_model(session_id: str, payload: dict) -> dict:
+def _dedupe_display_name(name: str, existing: list[str]) -> str:
+    base = name.strip()
+    if not base:
+        return base
+    if base not in existing:
+        return base
+    n = 2
+    while f"{base} ({n})" in existing:
+        n += 1
+    return f"{base} ({n})"
+
+
+def save_dcf_draft_model(
+    session_id: str,
+    payload: dict,
+    *,
+    name: str | None = None,
+) -> dict:
     session_dir = _session_dir(session_id)
     if not session_dir.is_dir():
         raise KeyError("Session not found")
@@ -160,10 +177,14 @@ def save_dcf_draft_model(session_id: str, payload: dict) -> dict:
     existing_names = [m["name"] for m in _load_model_entries(session_dir)]
     company = payload.get("company_name")
     years = int(payload.get("projection_years") or 5)
+    if name and name.strip():
+        display_name = _dedupe_display_name(name.strip(), existing_names)
+    else:
+        display_name = _build_dcf_name(company, years, existing_names)
     model_id = str(uuid.uuid4())
     entry = {
         "id": model_id,
-        "name": _build_dcf_name(company, years, existing_names),
+        "name": display_name,
         "type": "dcf_draft",
         "created_at": _utc_now(),
         "data": payload,
@@ -407,6 +428,36 @@ def update_file_entry(session_id: str, file_id: str, updates: dict) -> dict:
     return record
 
 
+def delete_file_entry(session_id: str, file_id: str) -> bool:
+    """Remove a Files panel entry. Does not affect saved models."""
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+    path = session_dir / "files" / f"{file_id}.json"
+    if not path.exists():
+        return False
+    path.unlink()
+    return True
+
+
+def delete_model_entry(session_id: str, model_id: str) -> bool:
+    """Remove a model entry; deletes linked DCF computed twin when removing a draft."""
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+    path = session_dir / "models" / f"{model_id}.json"
+    if not path.exists():
+        return False
+    entry = json.loads(path.read_text(encoding="utf-8"))
+    if entry.get("type") == "dcf_draft":
+        twin = find_dcf_computed_for_draft(session_id, model_id)
+        if twin:
+            twin_path = session_dir / "models" / f"{twin['id']}.json"
+            twin_path.unlink(missing_ok=True)
+    path.unlink()
+    return True
+
+
 def _entry_timestamp(entry: dict) -> str | None:
     """Latest activity time for a model or file entry."""
     candidates = [entry.get("updated_at"), entry.get("created_at")]
@@ -508,6 +559,47 @@ def cleanup_expired_sessions() -> int:
     return removed
 
 
+def _financials_fetch_log_path(session_id: str) -> Path:
+    inputs_dir = _inputs_dir(session_id)
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    return inputs_dir / "financials_fetch_log.json"
+
+
+def list_financials_fetch_log(session_id: str) -> list[dict]:
+    path = _financials_fetch_log_path(session_id)
+    if not path.exists():
+        return []
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    return sorted(data, key=lambda e: e.get("created_at", ""), reverse=True)
+
+
+def append_financials_fetch_log(session_id: str, entry: dict) -> dict:
+    if not session_exists(session_id):
+        raise KeyError("Session not found")
+    path = _financials_fetch_log_path(session_id)
+    existing: list[dict] = []
+    if path.exists():
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(raw, list):
+                existing = raw
+        except json.JSONDecodeError:
+            existing = []
+    record = {
+        **entry,
+        "id": entry.get("id") or str(uuid.uuid4()),
+        "created_at": entry.get("created_at") or _utc_now(),
+    }
+    existing.append(record)
+    path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
+    return record
+
+
 def load_workspace(session_id: str) -> dict | None:
     if not session_exists(session_id):
         return None
@@ -519,15 +611,24 @@ def load_workspace(session_id: str) -> dict | None:
     models = _load_model_entries(session_dir)
     files = _load_file_entries(session_dir)
     rag_documents = list_rag_documents(session_id)
+    financials_fetch_log = list_financials_fetch_log(session_id)
     stmt_path = session_dir / "inputs" / "statements.json"
     stmt_mtime: str | None = None
     if stmt_path.exists():
         stmt_mtime = datetime.fromtimestamp(
             stmt_path.stat().st_mtime, tz=timezone.utc
         ).isoformat()
+    fetch_log_path = session_dir / "inputs" / "financials_fetch_log.json"
+    fetch_log_mtime: str | None = None
+    if fetch_log_path.exists():
+        fetch_log_mtime = datetime.fromtimestamp(
+            fetch_log_path.stat().st_mtime, tz=timezone.utc
+        ).isoformat()
     rag_mtime = rag_index_mtime(session_id)
     updated_at = _workspace_updated_at(
-        models, files, extra_timestamps=[stmt_mtime, rag_mtime]
+        models,
+        files,
+        extra_timestamps=[stmt_mtime, rag_mtime, fetch_log_mtime],
     )
     return {
         "session_id": session_id,
@@ -536,6 +637,7 @@ def load_workspace(session_id: str) -> dict | None:
         "models": models,
         "files": files,
         "rag_documents": rag_documents,
+        "financials_fetch_log": financials_fetch_log,
     }
 
 
@@ -557,7 +659,7 @@ OPTIONAL_DCF_FIELDS = ["net_debt", "shares_outstanding", "company_name"]
 
 ALL_DCF_FIELDS = REQUIRED_DCF_FIELDS + OPTIONAL_DCF_FIELDS
 
-MAX_COMPARATIVE_PEERS = 10
+MAX_COMPARATIVE_PEERS = 5
 
 
 def _inputs_dir(session_id: str) -> Path:
@@ -874,7 +976,7 @@ def summarize_comparative_bundle(session_id: str) -> dict:
         missing.append("target.ticker")
     peers = bundle.get("peers") or []
     if len(peers) < 1:
-        missing.append("peers (need 1–10)")
+        missing.append("peers (need 1–5)")
     if len(peers) > MAX_COMPARATIVE_PEERS:
         missing.append(f"peers (max {MAX_COMPARATIVE_PEERS})")
 
@@ -914,9 +1016,14 @@ def summarize_comparative_bundle(session_id: str) -> dict:
 
     next_step = "Call run_comparative_analysis()."
     if not target or not target.get("ticker"):
-        next_step = "Set target company (ticker or name) via set_comparative_inputs."
+        next_step = (
+            "Call run_comparative_analysis(values={target: {ticker: '...'}, peers: [...]})."
+        )
     elif len(peers) < 1:
-        next_step = "Add 1–10 peer companies via set_comparative_inputs."
+        next_step = (
+            "Call run_comparative_analysis(values={peers: [{ticker: '...'}, ...]}) "
+            "with 1–5 peers."
+        )
     elif any(not c.get("file_id") for c in companies):
         next_step = (
             "Ensure SEC Files exist for each ticker (fetch_report) or call "
@@ -953,7 +1060,12 @@ def _build_comparative_name(target_ticker: str | None, peer_count: int, existing
     return f"{base}_{n}"
 
 
-def save_comparative_model(session_id: str, payload: dict) -> dict:
+def save_comparative_model(
+    session_id: str,
+    payload: dict,
+    *,
+    name: str | None = None,
+) -> dict:
     session_dir = _session_dir(session_id)
     if not session_dir.is_dir():
         raise KeyError("Session not found")
@@ -965,10 +1077,14 @@ def save_comparative_model(session_id: str, payload: dict) -> dict:
     existing_names = [m["name"] for m in _load_model_entries(session_dir)]
     target_ticker = (payload.get("target") or {}).get("ticker")
     peer_count = len(payload.get("peers") or [])
+    if name and name.strip():
+        display_name = _dedupe_display_name(name.strip(), existing_names)
+    else:
+        display_name = _build_comparative_name(target_ticker, peer_count, existing_names)
     model_id = str(uuid.uuid4())
     entry = {
         "id": model_id,
-        "name": _build_comparative_name(target_ticker, peer_count, existing_names),
+        "name": display_name,
         "type": "comparative",
         "created_at": _utc_now(),
         "data": payload,

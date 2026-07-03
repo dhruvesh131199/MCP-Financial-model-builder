@@ -83,28 +83,26 @@ def test_save_detailed_analysis_from_cache_creates_model():
 
 @patch("services.sec_financials.fetch_edgar_statements")
 @patch("services.sec_financials.resolve_ticker")
-def test_fetch_5y_populates_detailed_analysis_via_cache(mock_resolve, mock_edgar):
+def test_fetch_5y_does_not_auto_populate_detailed_analysis(mock_resolve, mock_edgar):
     sid = create_session()
     mock_resolve.return_value = {"ticker": "AAPL", "cik": "1", "entity_name": "Apple Inc."}
     mock_edgar.return_value = _fin([2025, 2024, 2023, 2022, 2021])
 
-    from services.sec_financials import fetch_and_cache_statements
+    from services.sec_fetch_handler import handle_cached_sec_fetch
 
-    assert should_sync_detailed_analysis_on_fetch(
+    result = handle_cached_sec_fetch(
+        sid,
+        company_name=None,
+        ticker="AAPL",
+        fiscal_years=None,
         max_years=5,
         include_annual=True,
+        include_quarterly=False,
         statements=["income", "balance", "cashflow"],
     )
 
-    fetch_and_cache_statements(
-        sid,
-        ticker="AAPL",
-        max_years=5,
-        statements=["income", "balance", "cashflow"],
-    )
-    result = save_detailed_analysis_from_cache(sid, "AAPL", max_years=5)
-    assert result is not None
-    assert find_detailed_analysis_by_ticker(sid, "AAPL") is not None
+    assert "analysis_id" not in result
+    assert find_detailed_analysis_by_ticker(sid, "AAPL") is None
 
 
 def test_detailed_analysis_derives_balance_totals_from_sections():

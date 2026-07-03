@@ -4,6 +4,7 @@ import type {
   DcfModelEntry,
   DcfResult,
   FileEntry,
+  FinancialsFetchLogEntry,
   ModelEntry,
   RagDocumentEntry,
 } from "../types";
@@ -15,6 +16,8 @@ import DcfEditor from "./DcfEditor";
 import DcfTable from "./DcfTable";
 import DetailedAnalysisViewer from "./DetailedAnalysisViewer";
 import FileViewer from "./FileViewer";
+import FetchFinancialsHubPanel from "./FetchFinancialsHubPanel";
+import ModelsHubPanel from "./ModelsHubPanel";
 import RagHubPanel from "./RagHubPanel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { resolveOrphanModelSelection } from "../lib/sessionAutoSelect";
@@ -24,10 +27,15 @@ interface DashboardPanelProps {
   files: FileEntry[];
   models: ModelEntry[];
   ragDocuments: RagDocumentEntry[];
+  financialsFetchLog: FinancialsFetchLogEntry[];
   selection: DashboardSelection;
   pulseId: string | null;
   onSelect: (selection: DashboardSelection) => void;
   onRagRefresh: () => void;
+  onFinancialsRefresh: () => void;
+  onModelsRefresh: () => void;
+  onDeleteFile: (fileId: string) => void | Promise<void>;
+  onDeleteModel: (modelId: string) => void | Promise<void>;
 }
 
 export default function DashboardPanel({
@@ -35,10 +43,15 @@ export default function DashboardPanel({
   files,
   models,
   ragDocuments,
+  financialsFetchLog,
   selection,
   pulseId,
   onSelect,
   onRagRefresh,
+  onFinancialsRefresh,
+  onModelsRefresh,
+  onDeleteFile,
+  onDeleteModel,
 }: DashboardPanelProps) {
   const [downloading, setDownloading] = useState(false);
 
@@ -71,6 +84,8 @@ export default function DashboardPanel({
       effectiveSelection.kind === selection.kind &&
       (effectiveSelection.kind === "none" ||
         effectiveSelection.kind === "rag_hub" ||
+        effectiveSelection.kind === "financials_hub" ||
+        effectiveSelection.kind === "models_hub" ||
         ((effectiveSelection.kind === "file" ||
           effectiveSelection.kind === "model" ||
           effectiveSelection.kind === "analysis") &&
@@ -109,6 +124,8 @@ export default function DashboardPanel({
       : undefined;
 
   const showRagHub = effectiveSelection.kind === "rag_hub";
+  const showFinancialsHub = effectiveSelection.kind === "financials_hub";
+  const showModelsHub = effectiveSelection.kind === "models_hub";
 
   const activeDraft =
     effectiveSelection.kind === "model" && activeModel?.type === "dcf_draft"
@@ -168,37 +185,25 @@ export default function DashboardPanel({
   return (
     <div className="flex h-full min-h-0">
       <aside className="flex w-[20%] min-w-[180px] flex-col overflow-y-auto border-r border-[var(--border-soft)] bg-[var(--bg-sidebar)]">
-        <SidebarSection title="Files">
-          {displayFiles.length === 0 ? (
-            <EmptyHint text="Fetched files will appear here" />
-          ) : (
-            displayFiles.map((file) => (
-              <SidebarItem
-                key={file.id}
-                label={file.data.ticker || file.name}
-                active={effectiveSelection.kind === "file" && effectiveSelection.id === file.id}
-                pulse={pulseId === file.id}
-                onClick={() => onSelect({ kind: "file", id: file.id })}
-              />
-            ))
-          )}
-        </SidebarSection>
+        <FetchFinancialsSidebarSection
+          hubActive={effectiveSelection.kind === "financials_hub"}
+          onSelectHub={() => onSelect({ kind: "financials_hub" })}
+          files={displayFiles}
+          activeFileId={effectiveSelection.kind === "file" ? effectiveSelection.id : null}
+          pulseId={pulseId}
+          onSelectFile={(id) => onSelect({ kind: "file", id })}
+          onDeleteFile={onDeleteFile}
+        />
 
-        <SidebarSection title="Models">
-          {sidebarModels.length === 0 ? (
-            <EmptyHint text="Built models will appear here" />
-          ) : (
-            sidebarModels.map((model) => (
-              <SidebarItem
-                key={model.id}
-                label={model.name}
-                active={effectiveSelection.kind === "model" && effectiveSelection.id === model.id}
-                pulse={pulseId === model.id}
-                onClick={() => onSelect({ kind: "model", id: model.id })}
-              />
-            ))
-          )}
-        </SidebarSection>
+        <ModelsSidebarSection
+          hubActive={effectiveSelection.kind === "models_hub"}
+          onSelectHub={() => onSelect({ kind: "models_hub" })}
+          models={sidebarModels}
+          activeModelId={effectiveSelection.kind === "model" ? effectiveSelection.id : null}
+          pulseId={pulseId}
+          onSelectModel={(id) => onSelect({ kind: "model", id })}
+          onDeleteModel={onDeleteModel}
+        />
 
         <SidebarSection title="Detailed Analysis">
           {displayAnalyses.length === 0 ? (
@@ -225,7 +230,19 @@ export default function DashboardPanel({
       </aside>
 
       <main className="flex min-w-0 flex-1 flex-col bg-white">
-        {showRagHub ? (
+        {showModelsHub ? (
+          <ModelsHubPanel
+            sessionId={sessionId}
+            onRefresh={onModelsRefresh}
+            onCreated={(modelId) => onSelect({ kind: "model", id: modelId })}
+          />
+        ) : showFinancialsHub ? (
+          <FetchFinancialsHubPanel
+            sessionId={sessionId}
+            fetchLog={financialsFetchLog}
+            onRefresh={onFinancialsRefresh}
+          />
+        ) : showRagHub ? (
           <RagHubPanel
             sessionId={sessionId}
             documents={ragDocuments}
@@ -290,8 +307,8 @@ export default function DashboardPanel({
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-gray-500">
             <p>Select a file, model, or analysis from the sidebar.</p>
             <p className="text-xs text-gray-400">
-              For annual reports (RAG), open the RAG section — or ask in chat, e.g. “Fetch Walmart
-              2024 annual report”.
+              Use <span className="font-medium">Fetch Financials</span> for structured SEC tables,
+              or the RAG section for full 10-K documents.
             </p>
           </div>
         )}
@@ -361,11 +378,117 @@ function ModelHeader({
           type="button"
           onClick={onDownload}
           disabled={downloading}
-          className="rounded-lg border border-indigo-200/80 bg-white px-3 py-1.5 text-xs font-medium text-indigo-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 disabled:opacity-50"
+          className="rounded-lg border border-indigo-200/80 bg-white px-3 py-1.5 text-xs font-medium text-indigo-600 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {downloading ? "Exporting…" : "Download .xlsx"}
         </button>
       )}
+    </div>
+  );
+}
+
+function ModelsSidebarSection({
+  hubActive,
+  onSelectHub,
+  models,
+  activeModelId,
+  pulseId,
+  onSelectModel,
+  onDeleteModel,
+}: {
+  hubActive: boolean;
+  onSelectHub: () => void;
+  models: ModelEntry[];
+  activeModelId: string | null;
+  pulseId: string | null;
+  onSelectModel: (id: string) => void;
+  onDeleteModel: (id: string) => void | Promise<void>;
+}) {
+  return (
+    <div className="flex flex-col border-b border-[var(--border-soft)] p-2">
+      <button
+        type="button"
+        onClick={onSelectHub}
+        className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition ${
+          hubActive ? "bg-violet-100" : "hover:bg-white/80"
+        }`}
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+          Models
+        </span>
+        <span className="shrink-0 rounded bg-violet-600 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
+          New
+        </span>
+      </button>
+      <div className="mt-1 flex flex-col gap-0.5">
+        {models.length === 0 ? (
+          <EmptyHint text="Built models appear here" />
+        ) : (
+          models.map((model) => (
+            <SidebarItem
+              key={model.id}
+              label={model.name}
+              active={activeModelId === model.id}
+              pulse={pulseId === model.id}
+              onClick={() => onSelectModel(model.id)}
+              onDelete={() => void onDeleteModel(model.id)}
+            />
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FetchFinancialsSidebarSection({
+  hubActive,
+  onSelectHub,
+  files,
+  activeFileId,
+  pulseId,
+  onSelectFile,
+  onDeleteFile,
+}: {
+  hubActive: boolean;
+  onSelectHub: () => void;
+  files: FileEntry[];
+  activeFileId: string | null;
+  pulseId: string | null;
+  onSelectFile: (id: string) => void;
+  onDeleteFile: (id: string) => void | Promise<void>;
+}) {
+  return (
+    <div className="flex flex-col border-b border-[var(--border-soft)] p-2">
+      <button
+        type="button"
+        onClick={onSelectHub}
+        className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition ${
+          hubActive ? "bg-emerald-100" : "hover:bg-white/80"
+        }`}
+      >
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
+          Fetch Financials
+        </span>
+        <span className="shrink-0 rounded bg-emerald-600 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
+          SEC
+        </span>
+      </button>
+      <div className="mt-1 flex flex-col gap-0.5">
+        {files.length === 0 ? (
+          <EmptyHint text="Fetched tickers appear here" />
+        ) : (
+          files.map((file) => (
+            <SidebarItem
+              key={file.id}
+              label={file.data.ticker || file.name}
+              active={activeFileId === file.id}
+              pulse={pulseId === file.id}
+              onClick={() => onSelectFile(file.id)}
+              onDelete={() => void onDeleteFile(file.id)}
+            />
+          ))
+        )}
+      </div>
     </div>
   );
 }
@@ -419,24 +542,61 @@ function SidebarItem({
   active,
   pulse,
   onClick,
+  onDelete,
 }: {
   label: string;
   active: boolean;
   pulse: boolean;
   onClick: () => void;
+  onDelete?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`truncate rounded-lg px-2 py-1.5 text-left text-xs transition ${
-        active
-          ? "bg-indigo-100 font-medium text-indigo-900"
-          : "text-gray-700 hover:bg-white/80"
+    <div
+      className={`group flex items-center gap-0.5 rounded-lg transition ${
+        active ? "bg-indigo-100" : "hover:bg-white/80"
       } ${pulse ? "ring-2 ring-indigo-300" : ""}`}
     >
-      {label}
-    </button>
+      <button
+        type="button"
+        onClick={onClick}
+        className={`min-w-0 flex-1 truncate px-2 py-1.5 text-left text-xs ${
+          active ? "font-medium text-indigo-900" : "text-gray-700"
+        }`}
+      >
+        {label}
+      </button>
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          aria-label={`Delete ${label}`}
+          className="mr-1 shrink-0 rounded p-1 text-gray-400 opacity-0 transition hover:text-red-600 group-hover:opacity-100"
+        >
+          <TrashIcon />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 16 16"
+      fill="currentColor"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
+      <path
+        fillRule="evenodd"
+        d="M5 3.25V4H2.75a.75.75 0 0 0 0 1.5h.317l.856 8.384A1.75 1.75 0 0 0 5.676 15h4.648a1.75 1.75 0 0 0 1.742-1.616l.856-8.384h.317a.75.75 0 0 0 0-1.5H11v-.75A1.75 1.75 0 0 0 9.25 2h-2.5A1.75 1.75 0 0 0 5 3.25Zm2.25-.75a.25.25 0 0 1 .25-.25h2.5a.25.25 0 0 1 .25.25V4H7.25ZM4.14 6.002l.807 7.884a.25.25 0 0 0 .249.228h4.648a.25.25 0 0 0 .249-.228l.807-7.884H4.14Z"
+        clipRule="evenodd"
+      />
+    </svg>
   );
 }
 

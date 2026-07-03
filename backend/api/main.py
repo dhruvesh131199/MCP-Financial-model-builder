@@ -10,7 +10,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from api.homework_rag import router as homework_rag_router
+from api.session_financials import router as session_financials_router
+from api.session_models import router as session_models_router
 from api.session_rag import router as session_rag_router
+from api.session_workspace import router as session_workspace_router
 from services.dcf_service import (
     compute_dcf_from_draft,
     preview_dcf_from_draft,
@@ -65,7 +68,7 @@ def _cors_origins() -> list[str]:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
-    allow_methods=["GET", "PATCH", "POST"],
+    allow_methods=["GET", "PATCH", "POST", "DELETE"],
     allow_headers=["*"],
 )
 
@@ -86,6 +89,9 @@ class DcfDraftPatchBody(BaseModel):
 
 app.include_router(homework_rag_router)
 app.include_router(session_rag_router)
+app.include_router(session_financials_router)
+app.include_router(session_models_router)
+app.include_router(session_workspace_router)
 
 
 @app.get("/health")

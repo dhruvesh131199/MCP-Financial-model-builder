@@ -52,6 +52,32 @@ export async function markSessionGuideSeen(sessionId: string): Promise<void> {
   }
 }
 
+export async function deleteSessionFile(
+  sessionId: string,
+  fileId: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/files/${fileId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `Delete failed: ${res.status}`);
+  }
+}
+
+export async function deleteSessionModel(
+  sessionId: string,
+  modelId: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/models/${modelId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as { detail?: string }).detail ?? `Delete failed: ${res.status}`);
+  }
+}
+
 export async function patchDcfDraft(
   sessionId: string,
   modelId: string,

@@ -67,25 +67,65 @@ export interface RagResolveResponse {
   error: string | null;
 }
 
+const inFlight = new Map<string, Promise<RagResolveResponse>>();
+const listeners = new Set<() => void>();
+
+function notifyInFlightChanged(): void {
+  listeners.forEach((listener) => listener());
+}
+
+function runSharedRagRequest(
+  key: string,
+  runner: () => Promise<RagResolveResponse>,
+): Promise<RagResolveResponse> {
+  const existing = inFlight.get(key);
+  if (existing) return existing;
+  const promise = runner().finally(() => {
+    inFlight.delete(key);
+    notifyInFlightChanged();
+  });
+  inFlight.set(key, promise);
+  notifyInFlightChanged();
+  return promise;
+}
+
+export function subscribeRagInFlight(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function isRagInFlight(sessionId: string): boolean {
+  const prefix = `${sessionId}:`;
+  for (const key of inFlight.keys()) {
+    if (key.startsWith(prefix)) return true;
+  }
+  return false;
+}
+
 export async function fetchSessionRag(
   sessionId: string,
   ticker: string,
   fiscalYear?: number,
 ): Promise<RagResolveResponse> {
-  const payload: { ticker: string; fiscal_year?: number } = { ticker };
-  if (fiscalYear != null) payload.fiscal_year = fiscalYear;
-  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/rag/ingest/fetch`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
+  const normalizedTicker = ticker.trim().toUpperCase();
+  const key = `${sessionId}:fetch:${normalizedTicker}:${fiscalYear ?? "latest"}`;
+  return runSharedRagRequest(key, async () => {
+    const payload: { ticker: string; fiscal_year?: number } = { ticker: normalizedTicker };
+    if (fiscalYear != null) payload.fiscal_year = fiscalYear;
+    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/rag/ingest/fetch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      keepalive: true,
+    });
+    const body = (await res.json().catch(() => ({}))) as RagResolveResponse & {
+      detail?: string;
+    };
+    if (!res.ok) {
+      throw new Error(body.detail ?? body.error ?? `Fetch failed: ${res.status}`);
+    }
+    return body;
   });
-  const body = (await res.json().catch(() => ({}))) as RagResolveResponse & {
-    detail?: string;
-  };
-  if (!res.ok) {
-    throw new Error(body.detail ?? body.error ?? `Fetch failed: ${res.status}`);
-  }
-  return body;
 }
 
 export async function uploadSessionRag(
@@ -93,22 +133,26 @@ export async function uploadSessionRag(
   file: File,
   meta: { ticker: string; year: number; doctype: string },
 ): Promise<RagResolveResponse> {
-  const form = new FormData();
-  form.append("file", file);
-  form.append("ticker", meta.ticker.trim().toUpperCase());
-  form.append("year", String(meta.year));
-  form.append("doctype", meta.doctype);
-  const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/rag/ingest/upload`, {
-    method: "POST",
-    body: form,
+  const normalizedTicker = meta.ticker.trim().toUpperCase();
+  const key = `${sessionId}:upload:${normalizedTicker}:${meta.year}:${meta.doctype}:${file.name}:${file.size}:${file.lastModified}`;
+  return runSharedRagRequest(key, async () => {
+    const form = new FormData();
+    form.append("file", file);
+    form.append("ticker", normalizedTicker);
+    form.append("year", String(meta.year));
+    form.append("doctype", meta.doctype);
+    const res = await fetch(`${API_BASE}/api/sessions/${sessionId}/rag/ingest/upload`, {
+      method: "POST",
+      body: form,
+    });
+    const body = (await res.json().catch(() => ({}))) as RagResolveResponse & {
+      detail?: string;
+    };
+    if (!res.ok) {
+      throw new Error(body.detail ?? body.error ?? `Upload failed: ${res.status}`);
+    }
+    return body;
   });
-  const body = (await res.json().catch(() => ({}))) as RagResolveResponse & {
-    detail?: string;
-  };
-  if (!res.ok) {
-    throw new Error(body.detail ?? body.error ?? `Upload failed: ${res.status}`);
-  }
-  return body;
 }
 
 export async function getSessionRagChunks(

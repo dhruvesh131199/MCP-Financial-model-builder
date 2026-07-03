@@ -102,66 +102,93 @@ def validate_projection_years(projection_years: int | None) -> int:
     return n
 
 
+def _empty_reference_history() -> dict[str, Any]:
+    return {
+        "ticker": "",
+        "company_name": None,
+        "fiscal_years": [],
+        "rows": [],
+        "latest_revenue_usd": None,
+        "hints": {},
+        "units_note": "All amounts in $M USD.",
+    }
+
+
 def create_dcf_draft(
     session_id: str,
     *,
     ticker: str | None = None,
     company_name: str | None = None,
     projection_years: int,
+    model_name: str | None = None,
+    base_revenue: float | None = None,
 ) -> dict:
-    """Fetch 5Y SEC reference data and create an empty N-year forecast draft."""
+    """Create an N-year forecast draft; optionally fetch 5Y SEC reference when ticker given."""
     n = validate_projection_years(projection_years)
 
-    resolved = resolve_ticker(company_name=company_name, ticker=ticker)
-    if "error" in resolved:
-        return resolved
+    sym = (ticker or "").strip().upper() or None
+    entity_name = company_name
+    reference_dump = _empty_reference_history()
 
-    sym = resolved["ticker"]
-    entity_name = resolved.get("entity_name") or company_name
+    if sym or (company_name and company_name.strip()):
+        resolved = resolve_ticker(company_name=company_name, ticker=sym)
+        if "error" in resolved:
+            return resolved
 
-    financials, _, _, _, _ = fetch_and_cache_statements(
-        session_id,
-        company_name=entity_name,
-        ticker=sym,
-        fiscal_years=None,
-        max_years=DCF_REFERENCE_FETCH_YEARS,
-        include_annual=True,
-        include_quarterly=False,
-        statements=["income", "balance", "cashflow"],
-    )
+        sym = resolved["ticker"]
+        entity_name = resolved.get("entity_name") or company_name
 
-    ensure_financial_derivations(financials)
-    dump = financials.model_dump()
-    shares_hints = _shares_hint_m(dump, sym)
-    reference = build_dcf_reference_history(
-        financials,
-        max_years=DCF_REFERENCE_FETCH_YEARS,
-        hints=shares_hints,
-    )
+        financials, _, _, _, _ = fetch_and_cache_statements(
+            session_id,
+            company_name=entity_name,
+            ticker=sym,
+            fiscal_years=None,
+            max_years=DCF_REFERENCE_FETCH_YEARS,
+            include_annual=True,
+            include_quarterly=False,
+            statements=["income", "balance", "cashflow"],
+        )
+
+        ensure_financial_derivations(financials)
+        dump = financials.model_dump()
+        shares_hints = _shares_hint_m(dump, sym)
+        reference = build_dcf_reference_history(
+            financials,
+            max_years=DCF_REFERENCE_FETCH_YEARS,
+            hints=shares_hints,
+        )
+        reference_dump = reference.model_dump()
 
     inputs = _empty_draft_inputs(n)
-    if reference.hints.base_revenue_m is not None:
-        inputs["base_revenue"] = reference.hints.base_revenue_m
-    if reference.hints.shares_outstanding_m is not None:
-        inputs["shares_outstanding"] = reference.hints.shares_outstanding_m
+    hints = reference_dump.get("hints") or {}
+    if hints.get("base_revenue_m") is not None:
+        inputs["base_revenue"] = hints["base_revenue_m"]
+    if hints.get("shares_outstanding_m") is not None:
+        inputs["shares_outstanding"] = hints["shares_outstanding_m"]
+    if base_revenue is not None:
+        inputs["base_revenue"] = float(base_revenue)
 
     payload = {
         "type": "dcf_draft",
-        "ticker": sym,
-        "company_name": entity_name,
+        "ticker": sym or "",
+        "company_name": entity_name or model_name,
         "projection_years": n,
-        "reference_history": reference.model_dump(),
+        "reference_history": reference_dump,
         "inputs": inputs,
         "defaults": _empty_defaults(),
     }
-    entry = save_dcf_draft_model(session_id, payload)
+    entry = save_dcf_draft_model(session_id, payload, name=model_name)
     return {
         "success": True,
         "model_id": entry["id"],
         "model_name": entry["name"],
-        "ticker": sym,
+        "ticker": sym or None,
         "projection_years": n,
-        "reference_years": len(reference.fiscal_years),
+        "reference_years": len(reference_dump.get("fiscal_years") or []),
+        "prefilled": {
+            "base_revenue": inputs.get("base_revenue"),
+            "shares_outstanding": inputs.get("shares_outstanding"),
+        },
     }
 
 

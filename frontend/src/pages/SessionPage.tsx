@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { fetchSessionWorkspace, markSessionGuideSeen, API_BASE } from "../api";
+import { fetchSessionWorkspace, markSessionGuideSeen, deleteSessionFile, deleteSessionModel, API_BASE } from "../api";
 import DashboardPanel from "../components/DashboardPanel";
 import SessionGuideModal, { SessionGuideButton } from "../components/SessionGuideModal";
-import type { DashboardSelection, FileEntry, ModelEntry, RagDocumentEntry } from "../types";
+import type { DashboardSelection, FileEntry, ModelEntry, FinancialsFetchLogEntry, RagDocumentEntry } from "../types";
 import {
   resolveNewModelAutoSelect,
 } from "../lib/sessionAutoSelect";
@@ -15,6 +15,7 @@ export default function SessionPage() {
   const [files, setFiles] = useState<FileEntry[]>([]);
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [ragDocuments, setRagDocuments] = useState<RagDocumentEntry[]>([]);
+  const [financialsFetchLog, setFinancialsFetchLog] = useState<FinancialsFetchLogEntry[]>([]);
   const [selection, setSelection] = useState<DashboardSelection>({ kind: "none" });
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +74,7 @@ export default function SessionPage() {
             setModels(workspace.models);
             setFiles(workspace.files);
             setRagDocuments(workspace.rag_documents ?? []);
+            setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
             for (const model of workspace.models) {
               if (model.type !== "detailed_analysis") continue;
               const ts =
@@ -89,6 +91,7 @@ export default function SessionPage() {
           setModels(workspace.models);
           setFiles(workspace.files);
           setRagDocuments(workspace.rag_documents ?? []);
+          setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
 
           let analysisToSelect: ModelEntry | undefined;
           for (const model of workspace.models) {
@@ -147,6 +150,7 @@ export default function SessionPage() {
       const workspace = await fetchSessionWorkspace(sessionId);
       if (workspace.exists) {
         setRagDocuments(workspace.rag_documents ?? []);
+        setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
         setModels(workspace.models);
         setFiles(workspace.files);
       }
@@ -154,6 +158,30 @@ export default function SessionPage() {
       /* poll will retry */
     }
   }, [sessionId]);
+
+  const handleDeleteFile = useCallback(
+    async (fileId: string) => {
+      if (!sessionId) return;
+      await deleteSessionFile(sessionId, fileId);
+      setSelection((current) =>
+        current.kind === "file" && current.id === fileId ? { kind: "none" } : current,
+      );
+      await refreshWorkspace();
+    },
+    [sessionId, refreshWorkspace],
+  );
+
+  const handleDeleteModel = useCallback(
+    async (modelId: string) => {
+      if (!sessionId) return;
+      await deleteSessionModel(sessionId, modelId);
+      setSelection((current) =>
+        current.kind === "model" && current.id === modelId ? { kind: "none" } : current,
+      );
+      await refreshWorkspace();
+    },
+    [sessionId, refreshWorkspace],
+  );
 
   const dismissGuide = useCallback(() => {
     setGuideOpen(false);
@@ -199,10 +227,15 @@ export default function SessionPage() {
             files={files}
             models={models}
             ragDocuments={ragDocuments}
+            financialsFetchLog={financialsFetchLog}
             selection={selection}
             pulseId={pulseId}
             onSelect={setSelection}
             onRagRefresh={() => void refreshWorkspace()}
+            onFinancialsRefresh={() => void refreshWorkspace()}
+            onModelsRefresh={() => void refreshWorkspace()}
+            onDeleteFile={handleDeleteFile}
+            onDeleteModel={handleDeleteModel}
           />
         )}
       </div>

@@ -62,21 +62,10 @@ sys.path.pop(0)
 
 sys.modules["mcp"] = _app_mcp_pkg
 
-from engine.dcf_prefill import suggest_dcf_inputs
-from ingest.normalize import FinancialStatements
 from services.sec_client import resolve_ticker as sec_resolve_ticker
-from services.sec_financials import (
-    build_scope_applied,
-    fetch_and_cache_statements,
-    financials_summary,
-)
-from services.detailed_analysis_service import (
-    run_detailed_analysis_for_session,
-    save_detailed_analysis_from_cache,
-    should_sync_detailed_analysis_on_fetch,
-)
-from services.trend_analysis_service import run_trend_analysis_for_session
-from services.comparative import handle_run_comparative_analysis, handle_set_comparative_inputs
+from services.sec_fetch_handler import handle_cached_sec_fetch
+from services.comparative import run_comparative_analysis_from_mcp
+from services.detailed_analysis_service import run_detailed_analysis_for_session
 from services.dcf_service import create_dcf_draft
 from session_binding import resolve_workspace_session
 from store import cleanup_expired_sessions
@@ -92,8 +81,8 @@ detailed analysis reports, and peer comparative analysis.
 CAPABILITIES:
 1. DCF — create_dcf_model (dashboard editor — see DCF rules)
 2. Fetch SEC data — fetch_report (Files tables OR full 10-K RAG)
-3. Detailed Analysis (report panel) — run_detailed_analysis ONLY (see routing below)
-4. Peer comparison — set_comparative_inputs + run_comparative_analysis (auto-fetch/link SEC files)
+3. Detailed Analysis (report panel) — run_detailed_analysis ONLY (includes trend table)
+4. Peer comparison — run_comparative_analysis (pass target + peers in one call)
 
 DCF — DASHBOARD HUMAN IN THE LOOP (strict):
 - ALWAYS ask the user: "How many years should the DCF forecast cover?" before creating a model.
@@ -117,11 +106,8 @@ run_detailed_analysis fills the **Detailed Analysis** sidebar (curated income/ba
 plus Trend analysis table). fetch_report(just_financials) fills **Files** only (raw XBRL browse/compare) —
 use for single-year fetch, quarterly, or comparative prep, NOT when the user asked for detailed analysis.
 
-TREND ANALYSIS ROUTING:
-| User says | Tool |
-|-----------|------|
-| "detailed analysis for AAPL" | run_detailed_analysis (includes trend) |
-| "update trend analysis" / "trend table only" / "refresh trend" | run_trend_analysis |
+TREND ANALYSIS: always included in run_detailed_analysis. For "update trend" / "refresh trend table",
+call run_detailed_analysis again for the same ticker (rebuilds trend from SEC cache).
 
 SEC DATA TYPE — REQUIRED DISAMBIGUATION (fetch_report):
 When the user asks to "fetch financials", "get reports", "fetch 10-K", "annual report", or similar:
@@ -193,9 +179,11 @@ def start_session(ctx: Context) -> dict:
 @mcp.tool()
 def create_dcf_model(
     ctx: Context,
-    ticker: str,
     projection_years: int,
+    ticker: str | None = None,
     company_name: str | None = None,
+    model_name: str | None = None,
+    base_revenue: float | None = None,
     session_id: str | None = None,
 ) -> dict:
     """
@@ -203,13 +191,14 @@ def create_dcf_model(
 
     WORKFLOW:
     1. Ask the user how many forecast years (projection_years) they want — required, no default.
-    2. create_dcf_model(ticker="MU", projection_years=5) — fetches 5Y SEC reference, builds N-year grid.
+    2. create_dcf_model(projection_years=5, ticker="MU") — fetches 5Y SEC reference when ticker given.
     3. User opens view_url → fills WACC, terminal g, base revenue, per-year rows → Update model.
 
     RULES:
     - projection_years is REQUIRED (1–10). Never omit or guess.
-    - SEC fetch is always 5 years for reference history, regardless of projection_years.
-    - Forecast grid has projection_years columns; reference panel always shows 5 fiscal years.
+    - ticker is optional — omit for blank template (user enters base revenue manually).
+    - SEC fetch is always 5 years for reference history when ticker provided.
+    - base_revenue ($M) optional — overrides SEC prefill when ticker given.
     - Do NOT collect DCF assumptions in chat — dashboard editor only.
     """
     try:
@@ -217,25 +206,34 @@ def create_dcf_model(
     except ValueError as exc:
         return {"error": str(exc)}
 
+    if not ticker and not company_name and not model_name:
+        return _with_session(
+            sid,
+            {"error": "Provide ticker, company_name, or model_name for the template"},
+        )
+
     _touch_session_writes()
     result = create_dcf_draft(
         sid,
         ticker=ticker,
         company_name=company_name,
         projection_years=projection_years,
+        model_name=model_name,
+        base_revenue=base_revenue,
     )
     if "error" in result:
         return _with_session(sid, result)
 
     url = _view_url(sid)
     n = result.get("projection_years")
-    ref = result.get("reference_years", 5)
+    ref = result.get("reference_years", 0)
+    ref_note = f", {ref}-year SEC reference" if ref else ", no SEC reference"
     return _with_session(
         sid,
         {
             **result,
             "message": (
-                f"DCF draft created ({n}-year forecast, {ref}-year SEC reference). "
+                f"DCF draft created ({n}-year forecast{ref_note}). "
                 f"Open {url} → fill assumptions in the editor → click Update model."
             ),
         },
@@ -285,90 +283,17 @@ def _handle_cached_sec_fetch(
     include_quarterly: bool,
     statements: list[str],
 ) -> dict:
-    resolved = sec_resolve_ticker(company_name=company_name, ticker=ticker)
-    if "error" in resolved:
-        return resolved
-
-    sym = resolved["ticker"]
-
     _touch_session_writes()
-
-    try:
-        financials, gaps_filled, had_fetch, file_id, file_name = fetch_and_cache_statements(
-            sid,
-            company_name=company_name,
-            ticker=ticker,
-            fiscal_years=fiscal_years,
-            max_years=max_years,
-            include_annual=include_annual,
-            include_quarterly=include_quarterly,
-            statements=statements,
-        )
-    except ValueError as exc:
-        return {"error": str(exc)}
-    except Exception as exc:
-        return {
-            "error": f"SEC fetch failed for {sym}: {exc}",
-            "hint": "Retry one company at a time; on small EC2 try include_quarterly=false.",
-        }
-
-    dcf_suggested = suggest_dcf_inputs(financials)
-    dcf_response = {
-        "dcf_suggestions": dcf_suggested,
-        "dcf_hitl_note": (
-            "dcf_suggestions are read-only SEC hints. For DCF, ask projection years "
-            "and call create_dcf_model — fill assumptions on the dashboard editor."
-        ),
-    }
-
-    scope = build_scope_applied(
+    return handle_cached_sec_fetch(
+        sid,
+        company_name=company_name,
+        ticker=ticker,
         fiscal_years=fiscal_years,
         max_years=max_years,
         include_annual=include_annual,
         include_quarterly=include_quarterly,
         statements=statements,
-        financials=financials,
     )
-    summary = financials_summary(financials, scope_applied=scope)
-    cache_note = (
-        " (from session cache)" if not had_fetch and not gaps_filled else ""
-    )
-
-    analysis_sync: dict | None = None
-    if should_sync_detailed_analysis_on_fetch(
-        max_years=max_years,
-        include_annual=include_annual,
-        statements=statements,
-    ):
-        analysis_sync = save_detailed_analysis_from_cache(
-            sid, sym, max_years=max_years
-        )
-
-    response = {
-        **summary,
-        **dcf_response,
-        "file_id": file_id,
-        "file_name": file_name,
-        "deduplicated": True,
-        "refreshed": bool(had_fetch or gaps_filled),
-        "statements_cached": not had_fetch and not gaps_filled,
-        "gaps_filled": gaps_filled,
-        "message": (
-            f"Saved '{file_name}' to Files{cache_note}. "
-            f"This fetch scope: FY {scope['fiscal_years_included']}; "
-            f"quarterly FYs: {scope['quarterly_fiscal_years_included'] or 'none'}. "
-            f"Open {_view_url(sid)} to browse."
-        ),
-    }
-    if analysis_sync:
-        response["analysis_id"] = analysis_sync["analysis_id"]
-        response["analysis_name"] = analysis_sync["analysis_name"]
-        response["periods_count"] = analysis_sync["periods_count"]
-        response["message"] = (
-            f"Saved '{file_name}' to Files and Detailed Analysis ({analysis_sync['periods_count']} periods)"
-            f"{cache_note}. Open {_view_url(sid)} → Detailed Analysis sidebar."
-        )
-    return response
 
 
 sys.modules["mcp.server"] = sys.modules[__name__]
@@ -477,7 +402,7 @@ def _fetch_sec_financials_impl(
     - statements optional: income, balance, cashflow (default all three).
     - Values are SEC XBRL only in Files — host must not calculate or invent figures.
     - Response includes scope_applied — verify fiscal_years_included matches user intent.
-    - Returns file_id — link via set_comparative_inputs(link={{ticker, file_id}}).
+    - Returns file_id — link via run_comparative_analysis(values={{link: {{ticker, file_id}}}}).
   """
     try:
         sid = resolve_workspace_session(ctx, session_id)
@@ -733,6 +658,8 @@ def run_detailed_analysis(
 
     For partial raw SEC data only (Files panel), use fetch_report(just_financials).
     Repeat calls skip SEC fetch when cache is complete (statements_cached=true).
+
+    TREND TABLE: included automatically. To refresh trend only, call this tool again for the ticker.
     """
     try:
         sid = resolve_workspace_session(ctx, session_id)
@@ -769,108 +696,34 @@ def run_detailed_analysis(
 
 
 @mcp.tool()
-def run_trend_analysis(
+def run_comparative_analysis(
     ctx: Context,
-    company_name: str | None = None,
-    ticker: str | None = None,
-    max_years: int = 5,
+    values: dict[str, Any] | None = None,
+    model_name: str | None = None,
     session_id: str | None = None,
 ) -> dict:
     """
-    Rebuild or refresh the Trend analysis table for a ticker (standalone).
+    Build a peer comparison report (target + 1–5 peers) in one call.
 
-    Use when the user asks to update trend analysis only — not a full detailed analysis rerun.
-    Requires cached annual statements (from fetch_report or run_detailed_analysis).
-    Upserts the `trend_analysis` block on the ticker's Detailed Analysis model.
-
-    USER PHRASE → CALL:
-    | User says | Call |
-    | "Update trend analysis for Apple" | run_trend_analysis(ticker="AAPL") |
-    | "Refresh trend table" | run_trend_analysis(ticker=...) |
-    | "Detailed analysis for Apple" | run_detailed_analysis (includes trend) — NOT this tool |
+    Pass `values` with target and peers on first use. Omit `values` to rerun from session inputs.
 
     WORKFLOW:
     1. start_session() first
-    2. run_trend_analysis(ticker="AAPL", max_years=5)
-    3. Open view_url → Detailed Analysis → scroll to Trend analysis section
-    """
-    try:
-        sid = resolve_workspace_session(ctx, session_id)
-    except ValueError as exc:
-        return {"error": str(exc)}
+    2. run_comparative_analysis(values={{
+         "target": {{"ticker": "KO", "company_name": "Coca-Cola"}},
+         "peers": [{{"ticker": "PEP"}}, {{"ticker": "KDP"}}],
+       }})
+    3. Open view_url → Comparative model in sidebar
 
-    if not company_name and not ticker:
-        return _with_session(sid, {"error": "Provide company_name or ticker"})
-
-    resolved = sec_resolve_ticker(company_name=company_name, ticker=ticker)
-    if "error" in resolved:
-        return _with_session(sid, resolved)
-
-    _touch_session_writes()
-    result = run_trend_analysis_for_session(
-        sid,
-        resolved["ticker"],
-        max_years=max_years,
-    )
-    if "error" in result:
-        return _with_session(sid, result)
-
-    url = _view_url(sid)
-    return _with_session(
-        sid,
-        {
-            **result,
-            "view_url": url,
-            "message": (
-                f"Trend analysis updated for {result.get('ticker')}. "
-                f"{result.get('trend_row_count', 0)} rows. "
-                f"Open {url} → Detailed Analysis → Trend analysis."
-            ),
-        },
-    )
-
-
-@mcp.tool()
-def set_comparative_inputs(
-    values: dict[str, Any],
-    ctx: Context,
-    session_id: str | None = None,
-) -> dict:
-    """
-    Set up a peer comparison: target company + 1–10 peers.
-
-    WORKFLOW:
-    1. set_comparative_inputs with target + peers tickers
-    2. run_comparative_analysis — auto-fetches last 2 annual years if missing (YoY growth), links ticker Files, builds report
-
-    Optional: fetch_report(just_financials) per company first; values.link still supported for manual file_id.
-
-    COMPARATIVE RULES:
+    VALUES (all optional on repeat calls):
     - values.target: {{ticker, company_name?}}
-    - values.peers: list of {{ticker, company_name?}} (1–10)
-    - values.fiscal_year: optional int — same FY for all; omit to use each company's latest annual FY
-    - values.link: {{ticker, file_id}} optional when Files already exist
-    - run_comparative_analysis fetches Finnhub market data and SEC fundamentals per company
-    """
-    try:
-        sid = resolve_workspace_session(ctx, session_id)
-    except ValueError as exc:
-        return {"error": str(exc)}
-
-    _touch_session_writes()
-    result = handle_set_comparative_inputs(sid, values)
-    if "error" in result and "session_id" not in result:
-        return _with_session(sid, result)
-    return _with_session(sid, result)
-
-
-@mcp.tool()
-def run_comparative_analysis(ctx: Context, session_id: str | None = None) -> dict:
-    """
-    Build comparative report for target + peers registered via set_comparative_inputs.
+    - values.peers: list of {{ticker, company_name?}} (1–5)
+    - values.fiscal_year: optional int — same FY for all; omit for each company's latest annual FY
+    - values.link: {{ticker, file_id}} when Files already exist
+    - model_name: optional display name (default "{target} vs {peer1} vs …" from tickers on full create)
 
     Auto-fetches last 2 annual SEC years per ticker when cache gaps exist (YoY revenue growth),
-    links by ticker, uses each company's latest annual FY unless fiscal_year was set.
+    links by ticker, fetches Finnhub market data, and builds the comparative report.
     """
     try:
         sid = resolve_workspace_session(ctx, session_id)
@@ -878,7 +731,7 @@ def run_comparative_analysis(ctx: Context, session_id: str | None = None) -> dic
         return {"error": str(exc)}
 
     _touch_session_writes()
-    result = handle_run_comparative_analysis(sid)
+    result = run_comparative_analysis_from_mcp(sid, values=values, model_name=model_name)
     url = _view_url(sid)
     return {**result, "session_id": sid, "view_url": url}
 

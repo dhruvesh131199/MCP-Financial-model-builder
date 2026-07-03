@@ -6,6 +6,8 @@ import type { RagDocumentEntry } from "../types";
 
 vi.mock("../api/sessionRag", () => ({
   fetchSessionRag: vi.fn(),
+  isRagInFlight: vi.fn(() => false),
+  subscribeRagInFlight: vi.fn(() => () => {}),
   uploadSessionRag: vi.fn(),
 }));
 

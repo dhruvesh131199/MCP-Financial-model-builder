@@ -113,3 +113,37 @@ def test_compute_draft_after_fill(mock_resolve, mock_fetch, session_id):
 
     computed2 = compute_dcf_from_draft(session_id, model_id)
     assert computed2["model_id"] == computed["model_id"]
+
+
+def test_create_draft_without_ticker_template_only(session_id):
+    result = create_dcf_draft(
+        session_id,
+        projection_years=4,
+        model_name="Custom blank",
+        base_revenue=500.0,
+    )
+    assert result["success"]
+    assert result["ticker"] is None
+    assert result["reference_years"] == 0
+    assert result["prefilled"]["base_revenue"] == 500.0
+
+    entry = get_model_entry(session_id, result["model_id"])
+    assert entry["name"] == "Custom blank"
+    assert entry["data"]["reference_history"]["fiscal_years"] == []
+
+
+@patch("services.dcf_service.fetch_and_cache_statements")
+@patch("services.dcf_service.resolve_ticker")
+def test_create_draft_base_revenue_override(mock_resolve, mock_fetch, session_id):
+    mock_resolve.return_value = {"ticker": "MU", "entity_name": "Micron", "cik": "1"}
+    mock_fetch.return_value = (_mock_financials(), [], True, "f1", "MU")
+
+    result = create_dcf_draft(
+        session_id,
+        ticker="MU",
+        projection_years=2,
+        base_revenue=777.0,
+    )
+    assert result["prefilled"]["base_revenue"] == 777.0
+    entry = get_model_entry(session_id, result["model_id"])
+    assert entry["data"]["inputs"]["base_revenue"] == 777.0

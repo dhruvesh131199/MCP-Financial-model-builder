@@ -214,7 +214,9 @@ export default function DcfEditor({
         </div>
       ) : (
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-          <DcfReferencePanel reference={draft.reference_history} />
+          {draft.reference_history.fiscal_years.length > 0 && (
+            <DcfReferencePanel reference={draft.reference_history} />
+          )}
           <DcfAssumptionsForm
             inputs={inputs}
             defaults={defaults}

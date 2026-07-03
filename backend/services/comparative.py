@@ -7,9 +7,11 @@ from typing import Any
 from engine.comps import build_comparative_report, extract_fiscal_snapshot
 from ingest.normalize import FinancialStatements
 from services.market_data import fetch_market_snapshot
+from services.sec_client import resolve_ticker
 from services.sec_financials import fetch_and_cache_statements
 from services.statements_store import compute_fetch_gaps
 from store import (
+    MAX_COMPARATIVE_PEERS,
     apply_comparative_file_links,
     get_file_entry,
     latest_annual_fiscal_year,
@@ -22,6 +24,31 @@ from store import (
 
 COMPARATIVE_SEC_MAX_YEARS = 2
 COMPARATIVE_STATEMENTS = ["income", "balance", "cashflow"]
+
+
+def _default_comparative_name(target_ticker: str, peer_tickers: list[str]) -> str:
+    return " vs ".join([target_ticker, *peer_tickers])
+
+
+def _resolve_ticker(label: str) -> dict[str, str]:
+    raw = label.strip()
+    if not raw:
+        raise ValueError("Ticker is required")
+    sym = raw.upper()
+    result = resolve_ticker(ticker=sym)
+    if "error" in result:
+        raise ValueError(result["error"])
+    return {
+        "ticker": result["ticker"],
+        "company_name": result.get("entity_name") or sym,
+    }
+
+
+def _company_slot_to_label(slot: dict[str, Any]) -> str:
+    ticker = (slot.get("ticker") or "").strip().upper()
+    if not ticker:
+        raise ValueError("Ticker is required for each company slot")
+    return ticker
 
 
 def _annual_income_years(financials_data: dict) -> set[int]:
@@ -56,6 +83,10 @@ def comparative_fetch_gaps(session_id: str, ticker: str) -> list:
     )
 
 
+def _values_is_full_create(values: dict[str, Any]) -> bool:
+    return values.get("target") is not None and values.get("peers") is not None
+
+
 def handle_set_comparative_inputs(session_id: str, values: dict[str, Any]) -> dict:
     if not values:
         return {
@@ -81,7 +112,7 @@ def handle_set_comparative_inputs(session_id: str, values: dict[str, Any]) -> di
     return {**summary, "message": msg}
 
 
-def ensure_comparative_sec_files(session_id: str) -> None:
+def ensure_comparative_sec_files(session_id: str, *, fail_fast: bool = False) -> None:
     """Fetch missing SEC periods (last 2 annual years) and auto-link ticker Files."""
     apply_comparative_file_links(session_id)
     bundle = load_comparative_bundle(session_id)
@@ -107,14 +138,35 @@ def ensure_comparative_sec_files(session_id: str) -> None:
                 include_quarterly=False,
                 statements=COMPARATIVE_STATEMENTS,
             )
-        except (ValueError, OSError, RuntimeError):
+        except (ValueError, OSError, RuntimeError) as exc:
+            if fail_fast:
+                raise ValueError(f"SEC fetch failed for {ticker}: {exc}") from exc
             continue
 
     apply_comparative_file_links(session_id)
 
 
-def handle_run_comparative_analysis(session_id: str) -> dict:
-    ensure_comparative_sec_files(session_id)
+def handle_run_comparative_analysis(
+    session_id: str,
+    values: dict[str, Any] | None = None,
+    *,
+    model_name: str | None = None,
+    fail_fast: bool = False,
+) -> dict:
+    """Merge optional inputs, then build comparative report from session bundle."""
+    if values:
+        staged = handle_set_comparative_inputs(session_id, values)
+        if "error" in staged:
+            return staged
+        if not staged.get("ready"):
+            return {
+                "success": False,
+                "missing": staged.get("missing", []),
+                "next_step": staged.get("next_step"),
+                "message": staged.get("message") or staged.get("next_step"),
+            }
+
+    ensure_comparative_sec_files(session_id, fail_fast=fail_fast)
     summary = summarize_comparative_bundle(session_id)
     if not summary["ready"]:
         return {
@@ -180,7 +232,8 @@ def handle_run_comparative_analysis(session_id: str) -> dict:
         set(report.get("market_data_errors", []) + market_data_errors)
     )
 
-    entry = save_comparative_model(session_id, report)
+    save_name = model_name.strip() if model_name and model_name.strip() else None
+    entry = save_comparative_model(session_id, report, name=save_name)
 
     return {
         "success": True,
@@ -194,3 +247,84 @@ def handle_run_comparative_analysis(session_id: str) -> dict:
             f"Companies: {len(report['companies'])}."
         ),
     }
+
+
+def create_comparative_model(
+    session_id: str,
+    *,
+    target: str,
+    peers: list[str],
+    model_name: str | None = None,
+) -> dict:
+    """Resolve companies, fetch SEC (fail-fast), build and save comparative report."""
+    target_raw = target.strip()
+    if not target_raw:
+        raise ValueError("Target is required")
+
+    peer_labels = [p.strip() for p in peers if p and p.strip()]
+    if len(peer_labels) < 1:
+        raise ValueError("At least one peer is required")
+    if len(peer_labels) > MAX_COMPARATIVE_PEERS:
+        raise ValueError(f"At most {MAX_COMPARATIVE_PEERS} peers allowed")
+
+    target_slot = _resolve_ticker(target_raw)
+    peer_slots = [_resolve_ticker(label) for label in peer_labels]
+
+    target_ticker = target_slot["ticker"]
+    peer_tickers = [p["ticker"] for p in peer_slots]
+    if any(p["ticker"] == target_ticker for p in peer_slots):
+        raise ValueError(f"Target {target_ticker} cannot also be a peer")
+
+    values = {
+        "target": {
+            "ticker": target_slot["ticker"],
+            "company_name": target_slot["company_name"],
+        },
+        "peers": [
+            {"ticker": p["ticker"], "company_name": p["company_name"]} for p in peer_slots
+        ],
+    }
+
+    staged = handle_set_comparative_inputs(session_id, values)
+    if "error" in staged:
+        raise ValueError(staged["error"])
+
+    ensure_comparative_sec_files(session_id, fail_fast=True)
+
+    display_name = (model_name or "").strip() or _default_comparative_name(
+        target_ticker, peer_tickers
+    )
+    result = handle_run_comparative_analysis(session_id, model_name=display_name)
+    if not result.get("success"):
+        msg = result.get("message") or result.get("next_step") or "Comparative analysis failed"
+        raise ValueError(msg)
+    return result
+
+
+def run_comparative_analysis_from_mcp(
+    session_id: str,
+    values: dict[str, Any] | None = None,
+    *,
+    model_name: str | None = None,
+) -> dict:
+    """MCP entry: full create uses shared path; partial values use legacy merge."""
+    if values and _values_is_full_create(values) and not values.get("link"):
+        target_label = _company_slot_to_label(values["target"])
+        peer_labels = [_company_slot_to_label(p) for p in values.get("peers") or []]
+        try:
+            return create_comparative_model(
+                session_id,
+                target=target_label,
+                peers=peer_labels,
+                model_name=model_name,
+            )
+        except ValueError as exc:
+            return {"error": str(exc)}
+
+    result = handle_run_comparative_analysis(
+        session_id,
+        values=values,
+        model_name=model_name,
+        fail_fast=bool(values and _values_is_full_create(values)),
+    )
+    return result

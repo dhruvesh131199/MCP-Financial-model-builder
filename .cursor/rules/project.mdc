@@ -26,10 +26,14 @@ alwaysApply: true
 - `backend/api/` — REST for dashboard (GET + DCF draft PATCH/POST)
 - `frontend/` — polls API, no embedded chat
 
+## Dashboard hub forms
+
+Hub panel form UX (validation, red borders, chip labels, tickers-only comparative) is documented in [dashboard-forms.mdc](dashboard-forms.mdc). Follow it when changing Models hub, Fetch Financials hub, or `ChipInput`.
+
 ## MCP tool routing (host)
 
 - **Detailed analysis** (user says "detailed analysis", "analyze in detail", curated report) → `run_detailed_analysis` only — **not** `fetch_sec_financials`
-- **Trend analysis only** (user says "update trend", "trend table", "refresh trend") → `run_trend_analysis` (included automatically in `run_detailed_analysis`)
+- **Trend analysis only** (user says "update trend", "trend table", "refresh trend") → `run_detailed_analysis` (trend table included; rerun for same ticker)
 - **Raw SEC / Files panel** (fetch 2023, quarterly, browse statements) → `fetch_sec_financials` or `fetch_sec_income`/`balance`/`cashflow`
-- **DCF** → always ask user for `projection_years`; `create_dcf_model(ticker, projection_years)` fetches **5Y SEC reference** and opens dashboard editor; user clicks Update model (never chat-collect assumptions)
-- **Peers** → `set_comparative_inputs` + `run_comparative_analysis` (auto-fetch/link SEC Files)
+- **DCF** → always ask user for `projection_years`; `create_dcf_model(ticker, projection_years)` or dashboard **Models hub** (`POST /api/sessions/{id}/models/dcf`) fetches **5Y SEC reference** when ticker given; user clicks Update model (never chat-collect assumptions)
+- **Peers** → `run_comparative_analysis(values={target, peers})` or dashboard **Models hub** (`POST /api/sessions/{id}/models/comparative`) — auto-fetch/link SEC Files, 1–5 peers

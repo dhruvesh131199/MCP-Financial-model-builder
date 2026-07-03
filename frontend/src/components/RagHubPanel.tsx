@@ -1,6 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   fetchSessionRag,
+  isRagInFlight,
+  subscribeRagInFlight,
   uploadSessionRag,
   type RagDocumentEntry,
 } from "../api/sessionRag";
@@ -27,16 +29,20 @@ export default function RagHubPanel({
   const [uploadDoctype, setUploadDoctype] = useState("10K");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => isRagInFlight(sessionId));
   const [banner, setBanner] = useState<string | null>(null);
 
+  useEffect(() => {
+    const sync = () => setLoading(isRagInFlight(sessionId));
+    sync();
+    return subscribeRagInFlight(sync);
+  }, [sessionId]);
+
   async function handleFetch() {
-    setLoading(true);
     setBanner(null);
     const year = fetchYear.trim() ? parseInt(fetchYear, 10) : undefined;
     if (fetchYear.trim() && Number.isNaN(year)) {
       setBanner("Enter a valid fiscal year or leave blank for latest");
-      setLoading(false);
       return;
     }
     try {
@@ -51,8 +57,6 @@ export default function RagHubPanel({
     } catch (err) {
       setBanner(err instanceof Error ? err.message : "Fetch failed");
       onRefresh();
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -66,7 +70,6 @@ export default function RagHubPanel({
       setBanner("Upload requires a valid ticker and year");
       return;
     }
-    setLoading(true);
     setBanner(null);
     try {
       const result = await uploadSessionRag(sessionId, selectedFile, {
@@ -86,8 +89,6 @@ export default function RagHubPanel({
     } catch (err) {
       setBanner(err instanceof Error ? err.message : "Upload failed");
       onRefresh();
-    } finally {
-      setLoading(false);
     }
   }
 

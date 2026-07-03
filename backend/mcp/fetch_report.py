@@ -6,7 +6,7 @@ from typing import Literal
 
 from homework.rag_markitdown.fetch_annual import list_10k_fiscal_years
 from homework.rag_markitdown.resolve import resolve_or_ingest_sec
-from mcp.server import _handle_cached_sec_fetch
+from services.sec_fetch_handler import handle_cached_sec_fetch
 
 ReportType = Literal["full_report", "just_financials"]
 
@@ -38,7 +38,7 @@ def run_fetch_report(
 
     for ticker in clean_tickers:
         if report_type == "just_financials":
-            result = _handle_cached_sec_fetch(
+            result = handle_cached_sec_fetch(
                 session_id,
                 company_name=None,
                 ticker=ticker,

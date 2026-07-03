@@ -5,7 +5,13 @@ from unittest.mock import patch
 import pytest
 
 import store as store_module
-from services.comparative import handle_run_comparative_analysis, handle_set_comparative_inputs
+from services.comparative import (
+    _default_comparative_name,
+    create_comparative_model,
+    handle_run_comparative_analysis,
+    handle_set_comparative_inputs,
+    run_comparative_analysis_from_mcp,
+)
 from store import create_session, save_file_entry
 
 
@@ -71,6 +77,30 @@ def test_set_comparative_inputs_stages():
     )
     assert result["ready"] is False
     assert "fetch_report" in result["next_step"] or "run_comparative_analysis" in result["next_step"]
+
+
+def test_run_comparative_analysis_merges_values_one_shot(block_comparative_sec_fetch):
+    sid = create_session()
+    ko = save_file_entry(
+        sid,
+        {"name": "KO", "type": "financials", "dedup_key": "k1", "data": _financials("KO")},
+    )
+    pep = save_file_entry(
+        sid,
+        {"name": "PEP", "type": "financials", "dedup_key": "p1", "data": _financials("PEP")},
+    )
+    handle_set_comparative_inputs(sid, {"link": {"ticker": "KO", "file_id": ko["id"]}})
+    handle_set_comparative_inputs(sid, {"link": {"ticker": "PEP", "file_id": pep["id"]}})
+
+    with patch("services.comparative.fetch_market_snapshot") as mock_market:
+        mock_market.return_value = {"ok": True, "price": 50.0, "market_cap": 1e11}
+        result = handle_run_comparative_analysis(
+            sid,
+            values={"target": {"ticker": "KO"}, "peers": [{"ticker": "PEP"}]},
+        )
+
+    assert result["success"] is True
+    assert result["model_id"]
 
 
 def test_run_not_ready_without_sec_files(block_comparative_sec_fetch):
@@ -281,3 +311,66 @@ def test_finnhub_failure_still_saves(block_comparative_sec_fetch):
 
     assert result["success"] is True
     assert "PEP" in result["market_data_errors"]
+
+
+@patch("services.comparative.fetch_market_snapshot")
+@patch("services.comparative.fetch_and_cache_statements")
+@patch("services.comparative.resolve_ticker")
+def test_create_comparative_model_custom_name(mock_resolve, mock_fetch, mock_market):
+    from store import save_file_entry
+
+    sid = create_session()
+    mock_resolve.side_effect = lambda **kw: {
+        "ticker": kw.get("ticker"),
+        "entity_name": kw.get("ticker"),
+        "cik": "1",
+        "matched_by": "ticker",
+    }
+
+    def _fake_fetch(session_id, **kw):
+        ticker = kw["ticker"]
+        data = _financials(ticker, prior_revenue=8e8)
+        entry = save_file_entry(
+            session_id,
+            {
+                "name": ticker,
+                "type": "financials",
+                "dedup_key": f"dk-{ticker}",
+                "data": data,
+            },
+        )
+        return (data, [], True, entry["id"], ticker)
+
+    mock_fetch.side_effect = _fake_fetch
+    mock_market.return_value = {"ok": True, "price": 50.0, "market_cap": 1e11}
+
+    result = create_comparative_model(
+        sid,
+        target="KO",
+        peers=["PEP"],
+        model_name="Beverage comps",
+    )
+    assert result["success"] is True
+    assert result["model_name"] == "Beverage comps"
+
+
+def test_default_comparative_name():
+    assert _default_comparative_name("NVDA", ["AMD", "TSMC"]) == "NVDA vs AMD vs TSMC"
+
+
+@patch("services.comparative.create_comparative_model")
+def test_mcp_full_create_uses_shared_path(mock_create):
+    sid = create_session()
+    mock_create.return_value = {"success": True, "model_id": "m1", "model_name": "Target vs Peers"}
+    result = run_comparative_analysis_from_mcp(
+        sid,
+        values={"target": {"ticker": "KO"}, "peers": [{"ticker": "PEP"}]},
+        model_name="Custom",
+    )
+    assert result["success"] is True
+    mock_create.assert_called_once_with(
+        sid,
+        target="KO",
+        peers=["PEP"],
+        model_name="Custom",
+    )

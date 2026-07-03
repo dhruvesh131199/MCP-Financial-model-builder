@@ -44,7 +44,7 @@ def test_validation_errors():
     assert "valid ticker strings" in res["error"]
 
 
-@patch("mcp.fetch_report._handle_cached_sec_fetch")
+@patch("mcp.fetch_report.handle_cached_sec_fetch")
 def test_just_financials_routing(mock_sec):
     mock_sec.return_value = {"file_id": "file-1", "scope_applied": {}}
     res = run_fetch_report(

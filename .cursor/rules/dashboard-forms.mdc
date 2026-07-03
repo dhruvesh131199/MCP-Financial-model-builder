@@ -1,0 +1,77 @@
+---
+description: Dashboard hub form UX — Models hub, Fetch Financials hub, shared ChipInput
+alwaysApply: false
+---
+
+# Dashboard hub forms
+
+Reference when adding or changing **Models hub**, **Fetch Financials hub**, or shared **`ChipInput`** / **`hubFormValidation`** behavior.
+
+## Shared conventions
+
+| Rule | Detail |
+|------|--------|
+| Submit buttons | Always clickable except while a request is **in flight** (`loading`). Never disable for empty required fields. |
+| Missing required | Show banner: **"Please fill all required values."** (`FILL_REQUIRED_MSG` in `frontend/src/utils/hubFormValidation.ts`) |
+| Field highlight | Every missing/invalid **required** field gets a **red border** (`inputFieldClass` / `ChipInput error`) until the user edits it. |
+| Chip placeholder | Input bar always shows: `Type ticker and press enter` (sentence case, not ALL CAPS). |
+| Chip labels | Show limit on the **label**: e.g. `Peers (up to 5)`, `Tickers (up to 5)`. Do not repeat long helper paragraphs above the field. |
+| Max items | Do not show a permanent "max N" hint under the chip bar. On add over limit, show inline amber hint (`Maximum N items`). |
+| Ticker typing | No forced uppercase while typing; normalize to uppercase on submit / chip commit. Placeholders use lowercase examples (`e.g. aapl`, `e.g. nvda`). |
+| In-flight UX | Use shared in-flight maps (`sessionModels.ts`, `sessionFinancials.ts`, `sessionRag.ts`) so navigation away does not reset loading state. |
+
+## Models hub — DCF tab
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| Model name | Yes | Red border if empty on Create |
+| Ticker | No | Optional; fetches 5Y SEC reference when set |
+| Projection years | Yes | Default `5`; red border if not 1–10 |
+| Base revenue ($M) | No | If typed, must be valid number or red border + specific message |
+| Button | `Create template` | → `POST /api/sessions/{id}/models/dcf` |
+
+## Models hub — Comparative tab
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| Model name | No | Custom name; if omitted backend names `{target} vs {peer1} vs …` |
+| Target | Yes | **Ticker only** (no company-name resolution); red border if empty |
+| Peers | Yes (1–5) | `ChipInput`, tickers only; red border if empty on submit |
+| Button | `Do comparative analysis` | → `POST /api/sessions/{id}/models/comparative` |
+
+Backend: `create_comparative_model` in `backend/services/comparative.py` — fail-fast SEC fetch, max 5 peers.
+
+## Fetch Financials hub
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| Tickers | Yes (up to 5) | `ChipInput`; red border if empty on Fetch |
+| Fiscal years | No | Up to 10 chips |
+| Last N fiscal years | No | Disabled when specific year chips are set |
+| Button | `Fetch financials` | → `POST /api/sessions/{id}/financials/fetch` |
+
+## Files
+
+- `frontend/src/components/ModelsHubPanel.tsx`
+- `frontend/src/components/FetchFinancialsHubPanel.tsx`
+- `frontend/src/components/ChipInput.tsx`
+- `frontend/src/components/DashboardPanel.tsx` — sidebar chips + delete
+- `frontend/src/utils/hubFormValidation.ts`
+- `frontend/src/api/sessionModels.ts`
+- `frontend/src/api/sessionFinancials.ts`
+- `backend/api/session_workspace.py` — `DELETE` files/models
+
+## Sidebar delete (Files + Models chips)
+
+| Rule | Detail |
+|------|--------|
+| UX | Trash icon on **right end** of chip; visible on row hover only; minimal icon |
+| Scope | Files sidebar + Models sidebar only (not Detailed Analysis / RAG yet) |
+| Backend | `DELETE /api/sessions/{id}/files/{file_id}` and `DELETE .../models/{model_id}` remove JSON from disk |
+| Decoupling | Deleting a **file** does not break saved **models** (snapshot data lives in model JSON) |
+| DCF draft delete | Also removes linked computed `dcf` twin (`draft_id`) |
+| Selection | If deleted item was open, clear main panel selection |
+
+## Global pointer cursor
+
+Interactive elements use `cursor: pointer` via `frontend/src/index.css` (`button`, `a`, `select`, `label[for]`, etc.). Text inputs keep `cursor: text`.

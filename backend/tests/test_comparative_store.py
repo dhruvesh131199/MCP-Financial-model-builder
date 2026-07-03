@@ -56,10 +56,10 @@ def test_comparative_not_ready_without_file_ids():
     assert any("KO.file_id" in m or m == "KO.file_id" for m in summary["missing"])
 
 
-def test_reject_more_than_ten_peers():
+def test_reject_more_than_five_peers():
     sid = create_session()
-    peers = [{"ticker": f"P{i}"} for i in range(11)]
-    with pytest.raises(ValueError, match="At most 10 peers"):
+    peers = [{"ticker": f"P{i}"} for i in range(6)]
+    with pytest.raises(ValueError, match="At most 5 peers"):
         merge_comparative_inputs(sid, {"target": {"ticker": "KO"}, "peers": peers})
 
 
