@@ -24,7 +24,7 @@ CLI run.py --ticker ──────┘                              ├──
                                                          └──► report.html (outline viewer)
 ```
 
-Phase 2a (homework CLI): pgvector top-25 + HF rerank with two-stage HTML report. See [Retrieve homework](#phase-2a-retrieve-homework-pgvector--hf-rerank) below.
+Phase 2 (retrieval): vector search + rerank for MCP/dashboard not wired yet. Homework retrieve prototype kept off main — see git tag `before-loop-engineering-retrieval`.
 
 ## Section outline
 
@@ -154,34 +154,6 @@ Session dashboard RAG hub (`RagHubPanel`) + `POST /api/sessions/{id}/rag/*` repl
 ## Narrative check
 
 After convert, `meta.json` includes booleans for phrases like `risk factors` and `management` in the markdown — quick sanity check that narrative sections survived conversion.
-
-## Phase 2a: Retrieve homework (pgvector + HF rerank)
-
-Homework CLI for **query → embed → Postgres top-25 → HF rerank** with a two-stage HTML report.
-
-| Piece | Location |
-|-------|----------|
-| Vector search | `postgres_search.py` |
-| HF rerank client | `hf_rerank.py` (`BAAI/bge-reranker-v2-m3`, override `HF_RERANK_MODEL`) |
-| HF token helper | `integrations/hf_client.py` |
-| CLI | `retrieve_homework/run_retrieve_test.py` |
-| Report | `output/retrieve_test_{timestamp}/retrieve_test_report.json` + `.html` |
-
-**Embed model:** `BAAI/bge-base-en-v1.5` (768-dim, same as Postgres). **Requires** `DATABASE_URL`, `HF_TOKEN`, and embedded NVDA (or other) rows in Postgres.
-
-```bash
-cd backend && source .venv/bin/activate
-pip install -r requirements-homework-rag.txt
-# DATABASE_URL + HF_TOKEN in backend/.env
-
-python -m homework.rag_markitdown.retrieve_homework.run_retrieve_test \
-  --query "What are NVIDIA's principal risk factors?" \
-  --ticker NVDA --open
-```
-
-Optional: `--year 2025`, `--limit 25`. Report shows vector ranks, rerank scores, and rank deltas (Δ).
-
-**Not in MCP/dashboard yet** — Phase 2b wires `postgres_search` + `hf_rerank` into `query_rag` MCP + session search API after homework sign-off.
 
 ## Merge criteria (later)
 
