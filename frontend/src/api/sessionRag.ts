@@ -48,6 +48,10 @@ export interface RagDocumentEntry {
   linked_at?: string;
   parent_count?: number;
   subchunk_count?: number;
+  report_url?: string;
+  raw_url?: string;
+  chunks_url?: string;
+  has_report?: boolean;
 }
 
 export interface RagResolveResponse {
@@ -166,4 +170,19 @@ export async function getSessionRagChunks(
     throw new Error(`Chunks load failed: ${res.status}`);
   }
   return res.json() as Promise<ChunkPlan>;
+}
+
+export function sessionRagChunksPath(sessionId: string, documentId: string): string {
+  return `/s/${sessionId}/rag/${documentId}/chunks`;
+}
+
+export function sessionRagRawHref(
+  sessionId: string,
+  doc: Pick<RagDocumentEntry, "document_id" | "raw_url" | "report_url" | "has_report">,
+): string | null {
+  if (!doc.document_id) return null;
+  if (doc.raw_url) return `${API_BASE}${doc.raw_url}`;
+  if (doc.report_url) return `${API_BASE}${doc.report_url}`;
+  if (doc.has_report === false) return null;
+  return `${API_BASE}/api/sessions/${sessionId}/rag/documents/${doc.document_id}/raw`;
 }

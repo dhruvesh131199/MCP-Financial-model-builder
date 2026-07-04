@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   fetchSessionRag,
   isRagInFlight,
+  sessionRagChunksPath,
+  sessionRagRawHref,
   subscribeRagInFlight,
   uploadSessionRag,
   type RagDocumentEntry,
@@ -275,14 +277,26 @@ export default function RagHubPanel({
                           Done
                         </span>
                         {doc.document_id && (
-                          <a
-                            href={`/s/${sessionId}/rag/${doc.document_id}/chunks`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="rounded-lg border border-indigo-200 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
-                          >
-                            View chunks
-                          </a>
+                          <>
+                            <a
+                              href={sessionRagChunksPath(sessionId, doc.document_id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="rounded-lg border border-indigo-200 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                            >
+                              View chunks
+                            </a>
+                            {sessionRagRawHref(sessionId, doc) && (
+                              <a
+                                href={sessionRagRawHref(sessionId, doc)!}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="rounded-lg border border-indigo-200 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                              >
+                                View 10-K
+                              </a>
+                            )}
+                          </>
                         )}
                       </>
                     )}

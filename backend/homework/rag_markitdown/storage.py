@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -65,3 +66,30 @@ def find_homework_document_by_id(document_id: str) -> Path | None:
         if meta.get("document_id") == document_id:
             return meta_path.parent
     return None
+
+
+def ensure_session_document_dir(session_id: str, document_id: str) -> Path | None:
+    """Return session document dir, copying from homework lab output if needed."""
+    try:
+        return find_document_dir(session_id, document_id)
+    except FileNotFoundError:
+        pass
+    hw_dir = find_homework_document_by_id(document_id)
+    if hw_dir is None:
+        return None
+    dest = DATA_DIR / "sessions" / session_id / "documents" / document_id
+    dest.mkdir(parents=True, exist_ok=True)
+    for item in hw_dir.iterdir():
+        if item.is_file():
+            shutil.copy2(item, dest / item.name)
+    return dest
+
+
+def session_document_has_report(session_id: str, document_id: str) -> bool:
+    try:
+        out_dir = find_document_dir(session_id, document_id)
+    except FileNotFoundError:
+        out_dir = ensure_session_document_dir(session_id, document_id)
+    if out_dir is None:
+        return False
+    return (out_dir / "report.html").is_file()

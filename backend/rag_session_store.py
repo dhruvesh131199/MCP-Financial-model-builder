@@ -13,6 +13,15 @@ from store import _session_dir, session_exists
 RAG_INDEX_FILE = "rag_documents.json"
 
 
+def rag_document_api_urls(session_id: str, document_id: str) -> dict[str, str]:
+    base = f"/api/sessions/{session_id}/rag/documents/{document_id}"
+    return {
+        "report_url": f"{base}/report",
+        "raw_url": f"{base}/raw",
+        "chunks_url": f"{base}/chunks",
+    }
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 

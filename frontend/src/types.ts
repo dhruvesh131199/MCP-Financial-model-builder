@@ -362,6 +362,10 @@ export interface RagDocumentEntry {
   linked_at?: string;
   parent_count?: number;
   subchunk_count?: number;
+  report_url?: string;
+  raw_url?: string;
+  chunks_url?: string;
+  has_report?: boolean;
 }
 
 export type DashboardSelection =

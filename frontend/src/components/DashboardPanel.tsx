@@ -21,6 +21,7 @@ import ModelsHubPanel from "./ModelsHubPanel";
 import RagHubPanel from "./RagHubPanel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { resolveOrphanModelSelection } from "../lib/sessionAutoSelect";
+import { ragDocumentDisplayLabel } from "../lib/ragDocumentLabel";
 
 interface DashboardPanelProps {
   sessionId: string;
@@ -226,6 +227,7 @@ export default function DashboardPanel({
         <RagSidebarSection
           hubActive={effectiveSelection.kind === "rag_hub"}
           onSelectHub={() => onSelect({ kind: "rag_hub" })}
+          documents={ragDocuments}
         />
       </aside>
 
@@ -496,10 +498,13 @@ function FetchFinancialsSidebarSection({
 function RagSidebarSection({
   hubActive,
   onSelectHub,
+  documents,
 }: {
   hubActive: boolean;
   onSelectHub: () => void;
+  documents: RagDocumentEntry[];
 }) {
+  const readyDocs = documents.filter((doc) => doc.status === "ready");
   return (
     <div className="flex flex-col border-b border-[var(--border-soft)] p-2">
       <button
@@ -516,6 +521,19 @@ function RagSidebarSection({
           RAG
         </span>
       </button>
+      {readyDocs.length > 0 && (
+        <ul className="mt-1.5 space-y-0.5 px-2">
+          {readyDocs.map((doc) => (
+            <li
+              key={doc.id}
+              className="truncate py-0.5 text-xs text-gray-600"
+              title={ragDocumentDisplayLabel(doc)}
+            >
+              {ragDocumentDisplayLabel(doc)}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

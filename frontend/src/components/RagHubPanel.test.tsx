@@ -9,6 +9,9 @@ vi.mock("../api/sessionRag", () => ({
   isRagInFlight: vi.fn(() => false),
   subscribeRagInFlight: vi.fn(() => () => {}),
   uploadSessionRag: vi.fn(),
+  sessionRagChunksPath: (sessionId: string, documentId: string) =>
+    `/s/${sessionId}/rag/${documentId}/chunks`,
+  sessionRagRawHref: () => "http://localhost:8000/api/sessions/sess-1/rag/documents/doc-uuid-1/raw",
 }));
 
 import { uploadSessionRag } from "../api/sessionRag";
@@ -25,6 +28,10 @@ const readyDoc: RagDocumentEntry = {
   status: "ready",
   error: null,
   from_cache: false,
+  raw_url: "/api/sessions/sess-1/rag/documents/doc-uuid-1/raw",
+  report_url: "/api/sessions/sess-1/rag/documents/doc-uuid-1/report",
+  chunks_url: "/api/sessions/sess-1/rag/documents/doc-uuid-1/chunks",
+  has_report: true,
 };
 
 const errorDoc: RagDocumentEntry = {
@@ -61,11 +68,14 @@ describe("RagHubPanel", () => {
     expect(screen.getByText("RAG")).toBeTruthy();
   });
 
-  it("shows ready doc with Done and View chunks link", () => {
+  it("shows ready doc with Done, View chunks, and View 10-K links", () => {
     renderPanel([readyDoc]);
     expect(screen.getByText("Done")).toBeTruthy();
-    const link = screen.getByText("View chunks");
-    expect(link.getAttribute("target")).toBe("_blank");
+    const chunksLink = screen.getByText("View chunks");
+    expect(chunksLink.getAttribute("target")).toBe("_blank");
+    const reportLink = screen.getByText("View 10-K");
+    expect(reportLink.getAttribute("target")).toBe("_blank");
+    expect(reportLink.getAttribute("href")).toContain("/raw");
   });
 
   it("does not upload until Upload button clicked", () => {

@@ -7,16 +7,44 @@ import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
 from homework.rag_markitdown.chunk_ids import ALLOWED_DOCTYPES
 from homework.rag_markitdown.postgres_read import load_chunk_plan_from_db
 from homework.rag_markitdown.resolve import resolve_or_ingest_sec, resolve_or_ingest_upload
-from homework.rag_markitdown.storage import find_document_dir, load_meta
+from homework.rag_markitdown.storage import (
+    ensure_session_document_dir,
+    find_document_dir,
+    load_meta,
+    session_document_has_report,
+)
 from store import session_exists
-from rag_session_store import find_rag_document, find_rag_document_by_document_id
+from rag_session_store import find_rag_document_by_document_id, rag_document_api_urls
 
 router = APIRouter(prefix="/api/sessions/{session_id}/rag", tags=["session-rag"])
+
+_RAW_MEDIA = {
+    ".pdf": "application/pdf",
+    ".htm": "text/html",
+    ".html": "text/html",
+}
+
+
+def _raw_media_type(filename: str) -> str:
+    ext = Path(filename).suffix.lower()
+    return _RAW_MEDIA.get(ext, "application/octet-stream")
+
+
+def _document_api_urls(session_id: str, document_id: str) -> dict[str, str]:
+    return rag_document_api_urls(session_id, document_id)
+
+
+def _resolve_session_doc_dir(session_id: str, document_id: str) -> Path:
+    out_dir = ensure_session_document_dir(session_id, document_id)
+    if out_dir is None:
+        raise HTTPException(status_code=404, detail="Document files not found for session")
+    return out_dir
 
 
 class RagFetchBody(BaseModel):
@@ -110,23 +138,16 @@ def get_rag_document(session_id: str, document_id: str) -> dict:
     if entry is None:
         raise HTTPException(status_code=404, detail="Document not in session")
     out: dict = {"session_id": session_id, **entry}
+    out.update(_document_api_urls(session_id, document_id))
+    out["has_report"] = session_document_has_report(session_id, document_id)
     try:
         out_dir = find_document_dir(session_id, document_id)
         meta = load_meta(out_dir)
         out["has_local_files"] = True
         out["markdown_chars"] = meta.get("markdown_chars")
-        out["report_url"] = (
-            f"/api/sessions/{session_id}/rag/documents/{document_id}/report"
-        )
-        out["raw_url"] = (
-            f"/api/sessions/{session_id}/rag/documents/{document_id}/raw"
-        )
     except FileNotFoundError:
         out["has_local_files"] = False
-        out["from_cache_only"] = True
-    out["chunks_url"] = (
-        f"/api/sessions/{session_id}/rag/documents/{document_id}/chunks"
-    )
+        out["from_cache_only"] = not out["has_report"]
     return out
 
 
@@ -137,3 +158,37 @@ def get_rag_chunks(session_id: str, document_id: str) -> dict:
     if entry is None:
         raise HTTPException(status_code=404, detail="Document not in session")
     return _load_chunks_for_document(session_id, document_id)
+
+
+@router.get("/documents/{document_id}/raw")
+def get_rag_document_raw(session_id: str, document_id: str) -> FileResponse:
+    _require_session(session_id)
+    entry = find_rag_document_by_document_id(session_id, document_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Document not in session")
+    out_dir = _resolve_session_doc_dir(session_id, document_id)
+    meta = load_meta(out_dir)
+    raw_name = meta.get("raw_filename")
+    if not raw_name:
+        raise HTTPException(status_code=404, detail="Raw file not found")
+    raw_path = out_dir / raw_name
+    if not raw_path.is_file():
+        raise HTTPException(status_code=404, detail="Raw file not found")
+    return FileResponse(
+        path=raw_path,
+        media_type=_raw_media_type(raw_name),
+        filename=raw_name,
+    )
+
+
+@router.get("/documents/{document_id}/report")
+def get_rag_document_report(session_id: str, document_id: str) -> HTMLResponse:
+    _require_session(session_id)
+    entry = find_rag_document_by_document_id(session_id, document_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Document not in session")
+    out_dir = _resolve_session_doc_dir(session_id, document_id)
+    report = out_dir / "report.html"
+    if not report.is_file():
+        raise HTTPException(status_code=404, detail="Report not found")
+    return HTMLResponse(content=report.read_text(encoding="utf-8"))

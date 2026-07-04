@@ -20,7 +20,15 @@ from homework.rag_markitdown.postgres_embed import count_unembedded, embed_docum
 from homework.rag_markitdown.postgres_read import lookup_filing
 from homework.rag_markitdown.schema import DocumentSource, IngestResult
 from homework.rag_markitdown.vector_store import VectorStore, get_vector_store
-from rag_session_store import record_rag_error, upsert_rag_document
+from homework.rag_markitdown.storage import (
+    ensure_session_document_dir,
+    session_document_has_report,
+)
+from rag_session_store import (
+    rag_document_api_urls,
+    record_rag_error,
+    upsert_rag_document,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +83,11 @@ def _link_to_session(
     parent_count: int,
     subchunk_count: int,
 ) -> dict[str, Any]:
+    if from_cache:
+        ensure_session_document_dir(session_id, document_id)
     fkey = filing_key_string(filing_key.ticker, filing_key.year, filing_key.doctype)
+    urls = rag_document_api_urls(session_id, document_id)
+    has_report = session_document_has_report(session_id, document_id)
     return upsert_rag_document(
         session_id,
         {
@@ -93,6 +105,8 @@ def _link_to_session(
             "from_cache": from_cache,
             "parent_count": parent_count,
             "subchunk_count": subchunk_count,
+            **urls,
+            "has_report": has_report,
         },
     )
 
