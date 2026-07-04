@@ -9,7 +9,6 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from api.homework_rag import router as homework_rag_router
 from api.session_financials import router as session_financials_router
 from api.session_models import router as session_models_router
 from api.session_rag import router as session_rag_router
@@ -87,7 +86,6 @@ class DcfDraftPatchBody(BaseModel):
     defaults: dict[str, float | None] | None = None
 
 
-app.include_router(homework_rag_router)
 app.include_router(session_rag_router)
 app.include_router(session_financials_router)
 app.include_router(session_models_router)

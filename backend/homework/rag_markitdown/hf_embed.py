@@ -7,7 +7,7 @@ from typing import Any
 
 import httpx
 
-from homework.huggingface_test.hf_client import HuggingFaceError, get_hf_token
+from integrations.hf_client import HuggingFaceError, get_hf_token
 
 DEFAULT_EMBED_MODEL = "BAAI/bge-base-en-v1.5"
 EXPECTED_DIMENSION = 768

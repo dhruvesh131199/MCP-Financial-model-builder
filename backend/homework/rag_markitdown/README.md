@@ -24,7 +24,7 @@ CLI run.py --ticker ──────┘                              ├──
                                                          └──► report.html (outline viewer)
 ```
 
-Phase 2a (homework CLI): same HF client re-exported from `hf_embed.py` for offline embed smoke tests. See [Embed homework](#phase-2a-embed-homework-hf) below.
+Phase 2a (homework CLI): pgvector top-25 + HF rerank with two-stage HTML report. See [Retrieve homework](#phase-2a-retrieve-homework-pgvector--hf-rerank) below.
 
 ## Section outline
 
@@ -149,53 +149,39 @@ RAG lives in the main workspace sidebar (fourth section) — not a separate home
 
 ## Homework UI (dev only)
 
-- React lab page source: `frontend/src/pages/homework/RagMarkitdownPage.tsx` (route removed from main `App.tsx`)
-- API: `POST /api/homework/rag/ingest/fetch`, `POST /api/homework/rag/ingest/upload` (upload Form: `file`, `ticker`, `year`, `doctype`)
-- `GET /api/homework/rag/documents/{id}` — includes `section_outline` + chunk counts
-- `GET /api/homework/rag/documents/{id}/chunks` — full chunk tree
-- `GET /api/homework/rag/documents/{id}/raw` — stream original HTML/PDF
+Session dashboard RAG hub (`RagHubPanel`) + `POST /api/sessions/{id}/rag/*` replace the old homework lab API and React page (removed).
 
 ## Narrative check
 
 After convert, `meta.json` includes booleans for phrases like `risk factors` and `management` in the markdown — quick sanity check that narrative sections survived conversion.
 
-## Phase 2a: Embed homework (HF)
+## Phase 2a: Retrieve homework (pgvector + HF rerank)
 
-Homework-only smoke test for **embed → cosine search** on sub-chunks. Uses the same `HF_TOKEN` as income homework, but HF **feature-extraction** (not chat Llama).
+Homework CLI for **query → embed → Postgres top-25 → HF rerank** with a two-stage HTML report.
 
 | Piece | Location |
 |-------|----------|
-| HF embed client | `hf_embed.py` (production); `embed_homework/hf_embed_client.py` re-exports for CLI |
-| Cosine rank | `embed_homework/similarity.py` |
-| CLI | `embed_homework/run_embed_test.py` |
-| Report | `output/embed_test_{timestamp}/embed_test_report.json` + `.html` |
+| Vector search | `postgres_search.py` |
+| HF rerank client | `hf_rerank.py` (`BAAI/bge-reranker-v2-m3`, override `HF_RERANK_MODEL`) |
+| HF token helper | `integrations/hf_client.py` |
+| CLI | `retrieve_homework/run_retrieve_test.py` |
+| Report | `output/retrieve_test_{timestamp}/retrieve_test_report.json` + `.html` |
 
-**Default model:** `BAAI/bge-base-en-v1.5` (768 dimensions). Override with `HF_EMBED_MODEL` in `backend/.env`.
-
-**Homework only:** cosine rank CLI — no Postgres/MCP vector search from this path.
+**Embed model:** `BAAI/bge-base-en-v1.5` (768-dim, same as Postgres). **Requires** `DATABASE_URL`, `HF_TOKEN`, and embedded NVDA (or other) rows in Postgres.
 
 ```bash
 cd backend && source .venv/bin/activate
-# HF_TOKEN in backend/.env
+pip install -r requirements-homework-rag.txt
+# DATABASE_URL + HF_TOKEN in backend/.env
 
-# Fixture (no SEC fetch) — ~3 sub-chunks from sample_10k_items.md
-python -m homework.rag_markitdown.embed_homework.run_embed_test \
-  --limit 8 \
-  --query "What are the company's risk factors?"
-
-# Real ingest output (5–10+ sub-chunks) — prefer --ticker (picks latest ingest)
-python -m homework.rag_markitdown.run --ticker AAPL
-python -m homework.rag_markitdown.embed_homework.run_embed_test \
-  --ticker AAPL \
-  --limit 10 \
-  --query "supply chain risk" \
-  --open
-
-# Or quote the glob so the shell does not expand it to many paths:
-# --chunks 'homework/rag_markitdown/output/AAPL_*/chunks.json'
+python -m homework.rag_markitdown.retrieve_homework.run_retrieve_test \
+  --query "What are NVIDIA's principal risk factors?" \
+  --ticker NVDA --open
 ```
 
-Success check: query about risk factors should rank an **Item 1A** sub-chunk highest. Production ingest uses the same model in Postgres `vector(768)`.
+Optional: `--year 2025`, `--limit 25`. Report shows vector ranks, rerank scores, and rank deltas (Δ).
+
+**Not in MCP/dashboard yet** — Phase 2b wires `postgres_search` + `hf_rerank` into `query_rag` MCP + session search API after homework sign-off.
 
 ## Merge criteria (later)
 

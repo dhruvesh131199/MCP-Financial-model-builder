@@ -82,7 +82,7 @@ The host calls `fetch_report(just_financials)`; reports appear in the **Files** 
 
 **Defaults:** latest annual 10-K only (`max_years=1`, `include_quarterly=false`). See MCP tool docstring for FY-specific and quarterly scopes.
 
-Homework / exploration scripts: `backend/homework/statement_fetch.py`.
+Homework / exploration: RAG retrieve CLI at `backend/homework/rag_markitdown/retrieve_homework/` (see `rag_markitdown/README.md`).
 
 ## Manual start (3 terminals)
 

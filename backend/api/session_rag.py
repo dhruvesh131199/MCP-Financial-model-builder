@@ -64,9 +64,9 @@ def _load_chunks_for_document(session_id: str, document_id: str) -> dict:
         if chunks_path.is_file():
             return json.loads(chunks_path.read_text(encoding="utf-8"))
         meta = load_meta(out_dir)
-        from api.homework_rag import _load_chunk_plan
+        from homework.rag_markitdown.chunk_loader import load_chunk_plan
 
-        plan = _load_chunk_plan(out_dir, meta)
+        plan = load_chunk_plan(out_dir, meta)
         if plan:
             return plan
     except FileNotFoundError:
