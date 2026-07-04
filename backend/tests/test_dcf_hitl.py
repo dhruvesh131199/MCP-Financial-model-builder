@@ -35,7 +35,7 @@ def _fin() -> FinancialStatements:
     )
 
 
-def test_sec_fetch_returns_dcf_suggestions_without_persisting(tmp_path, monkeypatch):
+def test_sec_fetch_does_not_return_dcf_suggestions_or_persist_inputs(tmp_path, monkeypatch):
     monkeypatch.setattr(store_module, "SESSIONS_DIR", tmp_path / "sessions")
     monkeypatch.setattr(store_module, "DATA_DIR", tmp_path)
     sid = create_session()
@@ -53,8 +53,8 @@ def test_sec_fetch_returns_dcf_suggestions_without_persisting(tmp_path, monkeypa
             statements=["income", "balance", "cashflow"],
         )
 
-    assert "dcf_suggestions" in result
-    assert result["dcf_suggestions"].get("base_revenue") is not None
+    assert "dcf_suggestions" not in result
     assert "dcf_prefilled" not in result
+    assert result.get("file_id") == "f1"
     bundle = load_input_bundle(sid)
     assert bundle.get("values") == {}

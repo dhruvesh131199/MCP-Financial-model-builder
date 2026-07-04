@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 
-from engine.dcf_prefill import suggest_dcf_inputs
 from services.sec_client import resolve_ticker as sec_resolve_ticker
 from services.sec_financials import (
     build_scope_applied,
@@ -55,15 +54,6 @@ def handle_cached_sec_fetch(
             "hint": "Retry one company at a time; on small EC2 try include_quarterly=false.",
         }
 
-    dcf_suggested = suggest_dcf_inputs(financials)
-    dcf_response = {
-        "dcf_suggestions": dcf_suggested,
-        "dcf_hitl_note": (
-            "dcf_suggestions are read-only SEC hints. For DCF, ask projection years "
-            "and call create_dcf_model — fill assumptions on the dashboard editor."
-        ),
-    }
-
     scope = build_scope_applied(
         fiscal_years=fiscal_years,
         max_years=max_years,
@@ -79,7 +69,6 @@ def handle_cached_sec_fetch(
 
     return {
         **summary,
-        **dcf_response,
         "file_id": file_id,
         "file_name": file_name,
         "deduplicated": True,

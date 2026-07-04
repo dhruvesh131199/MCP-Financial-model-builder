@@ -236,6 +236,7 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-07-03 | Decision + Refactor | Explicit MCP `session_id`: removed `session_binding.py` / `mcp_bindings.json` header guessing; `session_resolve.resolve_or_create_session`; uniform tool envelope (`session_id`, `data`, `system_note`); host must echo `session_id` on every call. |
 | 2026-07-02 | Feature | Sidebar delete for Files + Models chips: hover trash → `DELETE` API removes session JSON; models stay independent of files; DCF draft delete cascades to computed twin; global `cursor: pointer` on interactive elements. |
 | 2026-07-02 | Feature | Comparative Models hub + REST: enabled Comparative tab in `ModelsHubPanel` (target + peer chips, optional name defaulting to ticker-based `{target} vs {peers}`), `POST /api/sessions/{id}/models/comparative` sharing `create_comparative_model` with MCP — fail-fast SEC fetch errors, max 5 peers, redirect to `ComparativeTable`. |
 | 2026-07-02 | Feature | Models hub + REST DCF create: clickable Models sidebar, `ModelsHubPanel` DCF tab, `POST /api/sessions/{id}/models/dcf` sharing `create_dcf_draft` with MCP — custom name, optional ticker, projection years, base revenue override; template-only path skips SEC reference panel. |

@@ -49,15 +49,15 @@ From current MCP descriptors, the active tools are:
 ## High-Level Call Graph
 
 ```text
-start_session
-  -> resolve_workspace_session
+start_session | any tool
+  -> resolve_or_create_session(session_id?)
+  -> _tool_response(session_id, data, system_note)
 
 fetch_report
   -> run_fetch_report
      -> just_financials:
         -> _handle_cached_sec_fetch
            -> fetch_and_cache_statements
-           -> suggest_dcf_inputs
            -> build_scope_applied + financials_summary
      -> full_report:
         -> resolve_or_ingest_sec (RAG ingestion/linking)
@@ -86,24 +86,43 @@ create_dcf_model
 
 ---
 
+## Session management (2026-07-03)
+
+- **No** `mcp_bindings.json` or HTTP header guessing.
+- Every tool accepts optional `session_id`; blank → `create_session()`.
+- Missing/expired folder with explicit UUID → new session (lenient).
+- Every response envelope:
+
+```json
+{
+  "session_id": "uuid",
+  "data": { "view_url": "...", "...": "..." },
+  "system_note": "CRITICAL: Pass this session_id into all future tool calls."
+}
+```
+
+Module: [`backend/session_resolve.py`](backend/session_resolve.py)
+
+---
+
 ## Tool-by-Tool Details
 
 ## `start_session`
 
 **Purpose**
-- Create/reuse session workspace and return dashboard URL.
+- Create or attach to a workspace and return dashboard URL.
 
 **Inputs**
-- none
+- `session_id?: string` — omit for new workspace; pass UUID to reopen existing
 
 **Main function chain**
 - `start_session(...)`
-  - `resolve_workspace_session(ctx)`
+  - `resolve_or_create_session(session_id?)`
   - `_touch_session_writes()`
 
 **Writes / side effects**
 - Session lifecycle maintenance (cleanup).
-- Returns `session_id`, `view_url`.
+- Returns envelope with `data.view_url`, `data.created_new`, `data.reused_existing`.
 
 ---
 
@@ -147,12 +166,8 @@ create_dcf_model
       - `_handle_cached_sec_fetch(...)`
         - `fetch_and_cache_statements(...)`
         - `upsert_ticker_file_from_cache(...)`
-        - `suggest_dcf_inputs(...)`
         - `build_scope_applied(...)`
         - `financials_summary(...)`
-        - conditional:
-          - `should_sync_detailed_analysis_on_fetch(...)`
-          - `save_detailed_analysis_from_cache(...)`
     - `report_type="full_report"`:
       - if `years` missing: `list_10k_fiscal_years(...)`
       - `resolve_or_ingest_sec(session_id, ticker, fiscal_year=year)`
@@ -160,8 +175,7 @@ create_dcf_model
 **Writes / side effects**
 - `just_financials`:
   - updates statement cache
-  - upserts Files entry
-  - may also write Detailed Analysis model (conditional coupling)
+  - upserts Files entry only (no Detailed Analysis)
 - `full_report`:
   - updates/links RAG document index and chunks
 
@@ -256,7 +270,7 @@ create_dcf_model
 |---|---|---|---|---|---|
 | `start_session` | no | no | no | no | no |
 | `resolve_ticker` | no | no | no | no | no |
-| `fetch_report(just_financials)` | yes | **sometimes yes** (5-year full annual all-statements) | no | no | no |
+| `fetch_report(just_financials)` | yes | no | no | no | no |
 | `fetch_report(full_report)` | no | no | no | no | yes |
 | `run_detailed_analysis` | yes | yes | no | no | no |
 | `run_comparative_analysis` | maybe (auto-fetch for gaps) | no | yes | no | no |
@@ -279,24 +293,20 @@ This is likely meant as convenience, but it creates orchestration ambiguity.
 
 ## Recommended Improvements (orchestration-focused)
 
-1) Decouple fetch and analysis by default
-- Change `should_sync_detailed_analysis_on_fetch` to always return `False`, or gate behind an explicit flag.
+**Done (2026-07-02):** fetch and Detailed Analysis decoupled — `just_financials` no longer auto-writes Detailed Analysis.
 
-2) Add explicit intent flag to `fetch_report`
-- Example: `sync_detailed_analysis: bool = false`.
-- Only create/update Detailed Analysis when explicitly true.
+**Still useful:**
 
-3) Add response field for side effects
+1) Add response field for side effects
 - For every tool response, include:
   - `side_effects: ["files_updated", "detailed_analysis_updated", ...]`
 - Makes host orchestration deterministic.
 
-4) Keep `run_detailed_analysis` as sole writer for Detailed Analysis
-- Cleaner mental model: one tool, one panel responsibility.
+2) Keep `run_detailed_analysis` as sole writer for Detailed Analysis
+- One tool, one panel responsibility.
 
-5) Tighten docs in MCP tool descriptors
-- In `fetch_report` description, explicitly mention auto-sync behavior if kept.
-- Or remove mention if behavior is removed.
+3) Tighten docs in MCP tool descriptors
+- Docstrings in `backend/mcp/server.py` + `INSTRUCTIONS` block.
 
 ---
 

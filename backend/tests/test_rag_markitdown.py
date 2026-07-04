@@ -84,19 +84,23 @@ def test_mcp_tool_response_shape():
     import sys
 
     server_path = Path(__file__).resolve().parent.parent / "mcp" / "server.py"
-    
+
     # We need to make sure mcp package is available
     import types
     sys.modules['mcp.fetch_report'] = types.ModuleType('mcp.fetch_report')
     sys.modules['mcp.fetch_report'].run_fetch_report = lambda *a, **kw: None
     sys.modules['mcp.fetch_report'].ReportType = str
-    
-    spec = importlib.util.spec_from_file_location("fm_mcp_server", server_path)
-    assert spec and spec.loader
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
 
-    with patch.object(mod, "resolve_workspace_session", return_value="sess-1"):
+    mod_name = "fm_mcp_server_rag_shape"
+    mod = sys.modules.get(mod_name)
+    if mod is None:
+        spec = importlib.util.spec_from_file_location(mod_name, server_path)
+        assert spec and spec.loader
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[mod_name] = mod
+        spec.loader.exec_module(mod)
+
+    with patch.object(mod, "resolve_or_create_session", return_value=("sess-1", True)):
         with patch.object(
             mod,
             "run_fetch_report",
@@ -118,15 +122,17 @@ def test_mcp_tool_response_shape():
             },
         ):
             out = mod.fetch_report(
-                ctx=None,
                 report_type="full_report",
                 tickers=["AAPL"],
+                session_id="sess-1",
             )
 
-    assert out["success"] is True
-    assert out["report_type"] == "full_report"
-    assert len(out["results"]) == 1
-    assert out["results"][0]["document_id"] == "doc-1"
+    assert out["session_id"] == "sess-1"
+    assert out["system_note"] == mod.SYSTEM_NOTE
+    assert out["data"]["success"] is True
+    assert out["data"]["report_type"] == "full_report"
+    assert len(out["data"]["results"]) == 1
+    assert out["data"]["results"][0]["document_id"] == "doc-1"
 
 
 def test_approx_tokens_formula():

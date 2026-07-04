@@ -70,9 +70,10 @@ def test_mcp_instructions_contain_phrase_mapping():
     from pathlib import Path
 
     text = Path(__file__).resolve().parents[1].joinpath("mcp", "server.py").read_text()
-    assert "Fetch Apple reports" in text
+    assert "Fetch Apple financial statements" in text
     assert "fiscal_years=[2023]" in text
-    assert "scope_applied" in text
+    assert "session_id" in text
+    assert "system_note" in text
 
 
 def test_fetch_report_docstring_contains_examples():
