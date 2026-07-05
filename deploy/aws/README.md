@@ -242,6 +242,19 @@ See **[DEPLOY.md](../../DEPLOY.md)** at repo root for the big picture.
 bash ~/financial-models/deploy/aws/update-ec2.sh
 ```
 
+`update-ec2.sh` will automatically:
+- apply sparse checkout if `frontend/` is still on disk
+- recreate `backend/.venv` if it was deleted
+- pull, install deps, restart API + MCP
+
+**If `.venv` is missing** (e.g. after a bad sparse-checkout run):
+
+```bash
+bash ~/financial-models/deploy/aws/ensure-venv.sh
+bash ~/financial-models/deploy/aws/install-systemd.sh   # only if services need reinstalling
+sudo systemctl restart financial-models-api financial-models-mcp
+```
+
 ### Backend only on EC2 (no frontend)
 
 EC2 runs API + MCP only — **Render** hosts the React app. Frontend files on the server are unused.
@@ -304,6 +317,7 @@ curl -s http://checkip.amazonaws.com
 | `README.md` | This guide |
 | `Caddyfile.example` | HTTPS config template |
 | `install-systemd.sh` | One-time: API + MCP run in background |
+| `ensure-venv.sh` | Create/recreate backend `.venv` if missing |
 | `setup-sparse-checkout.sh` | One-time: EC2 pulls backend only (no frontend) |
 | `update-ec2.sh` | After `git push`: pull + restart on EC2 |
 | `diagnose-ec2.sh` | Local + HTTPS troubleshooting on the VM |
