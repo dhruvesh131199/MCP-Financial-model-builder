@@ -252,7 +252,7 @@ EC2 runs API + MCP only — **Render** hosts the React app. Frontend files on th
 bash ~/financial-models/deploy/aws/setup-sparse-checkout.sh
 ```
 
-That keeps only `backend/`, `deploy/`, and `DEPLOY.md` on disk. Safe to run on a fresh clone or an existing full clone (removes `frontend/`).
+That keeps only `backend/` and `deploy/` on disk. Safe to run on a fresh clone or an existing full clone (removes `frontend/`).
 
 Or manually:
 

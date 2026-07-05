@@ -14,7 +14,7 @@ cd "${APP_ROOT}"
 
 echo "Enabling sparse checkout (backend + deploy only)..."
 git sparse-checkout init --cone
-git sparse-checkout set backend deploy DEPLOY.md
+git sparse-checkout set backend deploy
 
 # Apply sparse tree and remove previously checked-out frontend files
 git read-tree -mu HEAD
