@@ -52,6 +52,14 @@ ssh -i ~/Downloads/your-key.pem ec2-user@YOUR_PUBLIC_IP
 bash ~/financial-models/deploy/aws/update-ec2.sh
 ```
 
+**First time only** — if the EC2 clone still has `frontend/`, drop it and use sparse checkout:
+
+```bash
+bash ~/financial-models/deploy/aws/setup-sparse-checkout.sh
+```
+
+After that, `update-ec2.sh` only pulls backend + deploy files.
+
 ## EC2 `.env` (copy on server)
 
 ```env

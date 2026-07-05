@@ -242,6 +242,18 @@ See **[DEPLOY.md](../../DEPLOY.md)** at repo root for the big picture.
 bash ~/financial-models/deploy/aws/update-ec2.sh
 ```
 
+### Backend only on EC2 (no frontend)
+
+EC2 runs API + MCP only — **Render** hosts the React app. Frontend files on the server are unused.
+
+**One-time** (after SSH in), enable sparse checkout so `git pull` skips `frontend/`:
+
+```bash
+bash ~/financial-models/deploy/aws/setup-sparse-checkout.sh
+```
+
+That keeps only `backend/`, `deploy/`, and `DEPLOY.md` on disk. Safe to run on a fresh clone or an existing full clone (removes `frontend/`).
+
 Or manually:
 
 ```bash
@@ -292,6 +304,7 @@ curl -s http://checkip.amazonaws.com
 | `README.md` | This guide |
 | `Caddyfile.example` | HTTPS config template |
 | `install-systemd.sh` | One-time: API + MCP run in background |
+| `setup-sparse-checkout.sh` | One-time: EC2 pulls backend only (no frontend) |
 | `update-ec2.sh` | After `git push`: pull + restart on EC2 |
 | `diagnose-ec2.sh` | Local + HTTPS troubleshooting on the VM |
 
