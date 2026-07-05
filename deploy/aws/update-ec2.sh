@@ -45,6 +45,14 @@ if [ ! -f "${ENV_FILE}" ]; then
   exit 1
 fi
 
+if grep -qE '^VIEW_BASE_URL=(http://localhost|http://127\.0\.0\.1)' "${ENV_FILE}" 2>/dev/null; then
+  echo ""
+  echo "WARNING: VIEW_BASE_URL is still localhost in ${ENV_FILE}."
+  echo "Render 'Start exploring' will fail CORS until you set:"
+  echo "  VIEW_BASE_URL=https://mcp-financial-model-builder.onrender.com"
+  echo "Then: sudo systemctl restart financial-models-api financial-models-mcp"
+fi
+
 if systemctl list-unit-files financial-models-api.service --no-legend 2>/dev/null | grep -q financial-models-api; then
   sudo systemctl restart financial-models-api financial-models-mcp
   echo "Restarted financial-models-api and financial-models-mcp."

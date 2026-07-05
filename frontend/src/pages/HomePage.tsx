@@ -21,8 +21,14 @@ export default function HomePage() {
     try {
       const { session_id } = await createSession();
       navigate(`/s/${session_id}`);
-    } catch {
-      setError("Could not start a session. Check that the API is running.");
+    } catch (err) {
+      const hint =
+        err instanceof Error && err.message.includes("Failed to fetch")
+          ? "Browser blocked the request (often CORS — set VIEW_BASE_URL on EC2 to your Render URL)."
+          : err instanceof Error
+            ? err.message
+            : "Unknown error";
+      setError(`Could not start a session. ${hint}`);
       setStarting(false);
     }
   }

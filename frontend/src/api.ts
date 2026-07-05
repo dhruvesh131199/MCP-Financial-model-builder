@@ -6,8 +6,9 @@ import type {
   DcfResult,
   Workspace,
 } from "./types";
+import { PUBLIC_API_URL } from "./config/publicUrls";
 
-export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+export const API_BASE = import.meta.env.VITE_API_URL ?? PUBLIC_API_URL;
 
 export interface DcfDraftPatchBody {
   base_revenue?: number | null;
