@@ -23,6 +23,14 @@ export interface DcfDraftPatchBody {
   defaults?: DcfDraftDefaults;
 }
 
+export async function createSession(): Promise<{ session_id: string; view_url: string }> {
+  const res = await fetch(`${API_BASE}/api/sessions`, { method: "POST" });
+  if (!res.ok) {
+    throw new Error(`API error: ${res.status}`);
+  }
+  return res.json() as Promise<{ session_id: string; view_url: string }>;
+}
+
 export async function fetchSessionWorkspace(
   sessionId: string,
 ): Promise<Workspace & { exists: boolean }> {

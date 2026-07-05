@@ -7,6 +7,16 @@ export const PRODUCT_TITLE = `${PRODUCT_NAME} Workspace`;
 export const HOME_TAGLINE =
   "Your AI-powered workspace for SEC filings, valuations, peer comps, and more. Each session gets a private dashboard link — no signup required.";
 
+export const HOME_MCP_TITLE = "Create MCP setup";
+
+export const HOME_MCP_DESCRIPTION =
+  "Start working by giving prompts in Cursor, Claude, or any MCP-compatible host. Connect once, then run fetch, DCF, comps, and 10-K Q&A from chat.";
+
+export const HOME_EXPLORE_TITLE = "Start exploring without MCP setup";
+
+export const HOME_EXPLORE_DESCRIPTION =
+  "Jump straight into the dashboard — fetch SEC filings, build models, and upload 10-Ks from the UI. Add MCP later when you want AI in chat.";
+
 export const SETUP_INTRO =
   "Connect our MCP server in Cursor or Claude Desktop, restart once, and run your financial workflow on a private dashboard.";
 

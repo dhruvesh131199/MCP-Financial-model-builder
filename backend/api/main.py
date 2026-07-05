@@ -21,6 +21,7 @@ from services.dcf_service import (
 )
 from store import (
     cleanup_expired_sessions,
+    create_session,
     get_model_entry,
     load_workspace,
     mark_session_guide_seen,
@@ -95,6 +96,19 @@ app.include_router(session_workspace_router)
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+def _view_url(session_id: str) -> str:
+    base = os.getenv("VIEW_BASE_URL", "http://localhost:5173").rstrip("/")
+    return f"{base}/s/{session_id}"
+
+
+@app.post("/api/sessions")
+def post_create_session() -> dict[str, str]:
+    """Create an anonymous session from the dashboard (no MCP required)."""
+    cleanup_expired_sessions()
+    session_id = create_session()
+    return {"session_id": session_id, "view_url": _view_url(session_id)}
 
 
 @app.get("/api/sessions/{session_id}")
