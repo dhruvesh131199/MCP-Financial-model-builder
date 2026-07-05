@@ -25,11 +25,31 @@ fi
 
 bash "${DEPLOY}/ensure-venv.sh"
 
-if systemctl is-active --quiet financial-models-api 2>/dev/null; then
+ENV_FILE="${BACKEND}/.env"
+if [ ! -f "${ENV_FILE}" ]; then
+  echo ""
+  echo "ERROR: ${ENV_FILE} is missing."
+  echo "systemd cannot start API/MCP without it (see journal: 'Failed to load environment files')."
+  echo ""
+  echo "Recreate from example, then fill in production values:"
+  echo "  cp ${BACKEND}/.env.example ${ENV_FILE}"
+  echo "  nano ${ENV_FILE}"
+  echo ""
+  echo "Minimum for EC2:"
+  echo "  VIEW_BASE_URL=https://mcp-financial-model-builder.onrender.com"
+  echo "  MCP_HOST=0.0.0.0"
+  echo "  MCP_PORT=8080"
+  echo "  SEC_USER_AGENT=YourApp you@yourdomain.com"
+  echo ""
+  echo "Then: bash ${DEPLOY}/install-systemd.sh"
+  exit 1
+fi
+
+if systemctl list-unit-files financial-models-api.service --no-legend 2>/dev/null | grep -q financial-models-api; then
   sudo systemctl restart financial-models-api financial-models-mcp
   echo "Restarted financial-models-api and financial-models-mcp."
 else
-  echo "systemd services not installed. Run: bash deploy/aws/install-systemd.sh"
+  echo "systemd units not installed. Run: bash ${DEPLOY}/install-systemd.sh"
 fi
 
 api_ok=0

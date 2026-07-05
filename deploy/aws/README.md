@@ -247,6 +247,16 @@ bash ~/financial-models/deploy/aws/update-ec2.sh
 - recreate `backend/.venv` if it was deleted
 - pull, install deps, restart API + MCP
 
+**If `.env` is missing** (journal shows `Failed to load environment files`):
+
+Sparse checkout can remove untracked `backend/.env`. Recreate it (not in git):
+
+```bash
+cp ~/financial-models/backend/.env.example ~/financial-models/backend/.env
+nano ~/financial-models/backend/.env
+bash ~/financial-models/deploy/aws/install-systemd.sh
+```
+
 **If `.venv` is missing** (e.g. after a bad sparse-checkout run):
 
 ```bash
