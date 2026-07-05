@@ -71,7 +71,11 @@ from services.comparative import run_comparative_analysis_from_mcp
 from services.dcf_service import create_dcf_draft
 from services.detailed_analysis_service import run_detailed_analysis_for_session
 from services.sec_client import resolve_ticker as sec_resolve_ticker
-from session_resolve import SESSION_ID_PARAM_DESC, resolve_or_create_session
+from session_resolve import (
+    SESSION_ID_PARAM_DESC,
+    require_session,
+    start_session_resolve,
+)
 from store import cleanup_expired_sessions
 
 VIEW_BASE_URL = os.getenv("VIEW_BASE_URL", "http://localhost:5173").rstrip("/")
@@ -90,12 +94,20 @@ INSTRUCTIONS = """
 You are the AI assistant for a private financial analyzer workspace. You help users with financial modeling, SEC financials, detailed analysis reports, and peer comparative analysis.
 
 <session_management>
-CRITICAL: You must explicitly manage the user's workspace state via the `session_id`.
-- Every tool returns `session_id` at the top level, along with a system note.
-- You MUST pass the `session_id` from the previous tool response into your next tool call.
-- Do NOT rely on general chat memory; explicitly extract the `session_id` from the most recent tool JSON response.
-- ONLY omit the `session_id` parameter if the user explicitly asks for a brand new workspace, or if this is the very first action of the chat.
-- `start_session` is optional; any tool with a blank `session_id` creates a new workspace.
+CRITICAL: Workspace state is tied to `session_id`. Only `start_session` may create a new workspace.
+
+HUMAN IN THE LOOP (STRICT): Before the first workspace tool in this chat, if you have NO `session_id` from a prior tool response, you MUST ask:
+"Do you have an existing session id from your dashboard, or should I create a new workspace?"
+
+Then:
+- User pastes UUID (dashboard Session id box or /s/{uuid}) → pass `session_id` on every tool call.
+- User wants new workspace → call `start_session()` with no session_id, then use returned `session_id`.
+- You already have session_id from a prior tool response this chat → pass it on every call (do not re-ask).
+
+Rules:
+- Every tool returns `session_id` at the top level. Extract it from JSON — do not rely on chat memory alone.
+- NEVER omit `session_id` on fetch_report, create_dcf_model, run_detailed_analysis, run_comparative_analysis, query_rag, or resolve_ticker.
+- Other tools return session_required / session_not_found errors if session_id is missing or invalid — ask the user, do not retry blindly.
 </session_management>
 
 <tool_routing>
@@ -121,7 +133,47 @@ Used to build Discounted Cash Flow models in the dashboard.
 
 4. Peer comparison -> `run_comparative_analysis`
 If the user asks to compare companies (e.g. "KO vs PEP"), pass target + peers in `values` (1–5 peers).
+
+5. RAG narrative Q&A -> `query_rag`
+If the user asks a question that needs **10-K narrative evidence** (risks, MD&A, business description, footnotes):
+- Ensure corpus exists first: `fetch_report(report_type="full_report", tickers=[...])` if not already ingested.
+- Loop 1: `query_rag(mode="retrieve", ticker="NVDA", query="...")` — **ticker required on first retrieve**.
+- Loops 2+: `query_rag(mode="retrieve", query="...")` — ticker reused from session state.
+- After each retrieve, **read `new_parent.content`**. If you need more information OR the parent refers to another part of the filing ("see Item 7", "Note 12"), call retrieve again with a **new query**.
+- When satisfied, `query_rag(mode="finalize")` → answer from `combined_context` and append **Sources:** line from `citations`.
+- `query_rag(mode="reset")` clears state for a new question.
 </tool_routing>
+
+<rag_loop_engineering>
+HOST-DRIVEN LOOP RETRIEVAL (query_rag):
+
+After each `retrieve`, read the returned parent chunk and ask:
+1. Do I have enough to answer the user's question?
+2. Does this section refer elsewhere in the filing that I still need?
+
+If YES to either → craft a new search query and call `query_rag(mode="retrieve", query="...")` again.
+If NO → call `query_rag(mode="finalize")` and answer using `combined_context`.
+
+EXAMPLE:
+User: "What are NVIDIA's supply chain and manufacturing risks in the latest 10-K?"
+- Loop 1: retrieve ticker="NVDA" query="NVIDIA supply chain risks 10-K" → read Item 1A parent
+- Loop 2: retrieve query="NVIDIA Item 2 properties manufacturing suppliers" (ticker omitted — reused)
+- finalize → answer user; end with Sources line from citations
+
+Rules:
+- Each loop uses a **new host-authored query** (refined each time).
+- Search is **scoped to ticker** (locked on loop 1); already-collected parents are skipped.
+- Always pass `session_id`. Never exceed 15 retrieve loops — finalize when exhausted or satisfied.
+</rag_loop_engineering>
+
+<rag_citations>
+After `finalize`, always end your user-facing answer with a **Sources** line using `citations[].label`:
+Sources: NVDA · 10-K · FY2025 · section #7; NVDA · 10-K · FY2025 · section #12
+
+- Keep each reference short (use label only — not parent_id or chunk text).
+- You may inline short refs in the body e.g. (NVDA FY2025 §7) when citing a specific fact.
+- Only cite sections you actually used in the answer.
+</rag_citations>
 
 <universal_rules>
 - Share `data.view_url` after EVERY tool call so the user can open their dashboard.
@@ -146,17 +198,28 @@ def _touch_session_writes() -> None:
     cleanup_expired_sessions()
 
 
+def _require_session_or_error(session_id: str | None) -> str | dict[str, Any]:
+    sid, err = require_session(session_id)
+    if err:
+        return _tool_response(None, err.to_dict())
+    return sid
+
+
 @mcp.tool()
 def start_session(session_id: SessionId = None) -> dict:
     """
     Create or attach to a workspace and return the dashboard link.
 
-    Optional convenience tool — any other tool with blank session_id also creates a workspace.
+    SESSION: The ONLY tool that creates a new workspace. Call after the user confirms
+    "create a new workspace". Pass session_id to attach an existing dashboard UUID.
 
-    Pass session_id to reopen an existing dashboard (UUID from /s/{uuid} or a prior tool response).
-    Omit session_id only when the user wants a brand-new workspace.
+    - Omit session_id → create new workspace (after user confirmed new).
+    - Pass session_id → attach existing dashboard; errors if not found or invalid.
     """
-    sid, reused = resolve_or_create_session(session_id)
+    sid, reused, err = start_session_resolve(session_id)
+    if err:
+        return _tool_response(None, err.to_dict())
+
     _touch_session_writes()
     url = _view_url(sid)
     return _tool_response(
@@ -196,8 +259,13 @@ def create_dcf_model(
     - SEC fetch is always 5 years for reference history when ticker provided.
     - base_revenue ($M) optional — overrides SEC prefill when ticker given.
     - Strictly: Do NOT collect DCF assumptions in chat — dashboard editor only.
+
+    SESSION: session_id REQUIRED — from prior tool response or user-pasted dashboard id.
     """
-    sid, _ = resolve_or_create_session(session_id)
+    session_result = _require_session_or_error(session_id)
+    if isinstance(session_result, dict):
+        return session_result
+    sid = session_result
 
     if not ticker and not company_name and not model_name:
         return _tool_response(
@@ -243,8 +311,13 @@ def resolve_ticker(
     Resolve a US public company name or ticker symbol to SEC listing metadata.
     Use when the user says a company name (e.g. "Apple", "Tesla") and you need the ticker.
     At least one of company_name or ticker is required.
+
+    SESSION: session_id REQUIRED — from prior tool response or user-pasted dashboard id.
     """
-    sid, _ = resolve_or_create_session(session_id)
+    session_result = _require_session_or_error(session_id)
+    if isinstance(session_result, dict):
+        return session_result
+    sid = session_result
 
     result = sec_resolve_ticker(company_name=company_name, ticker=ticker)
     if "error" in result:
@@ -295,8 +368,13 @@ def fetch_report(
     - years=[2023, 2024] → Fetch each listed year
     - years omitted, max_years=N → Last N distinct fiscal years
     - years omitted, max_years=1 (default) → Latest filing only
+
+    SESSION: session_id REQUIRED — from prior tool response or user-pasted dashboard id.
     """
-    sid, _ = resolve_or_create_session(session_id)
+    session_result = _require_session_or_error(session_id)
+    if isinstance(session_result, dict):
+        return session_result
+    sid = session_result
     _touch_session_writes()
 
     from typing import cast
@@ -348,8 +426,13 @@ def run_detailed_analysis(
     Repeat calls skip SEC fetch when cache is complete (statements_cached=true).
 
     TREND TABLE: included automatically. To refresh trend only, call this tool again for the ticker.
+
+    SESSION: session_id REQUIRED — from prior tool response or user-pasted dashboard id.
     """
-    sid, _ = resolve_or_create_session(session_id)
+    session_result = _require_session_or_error(session_id)
+    if isinstance(session_result, dict):
+        return session_result
+    sid = session_result
 
     if not company_name and not ticker:
         return _tool_response(sid, {"error": "Provide company_name or ticker"})
@@ -400,10 +483,95 @@ def run_comparative_analysis(
 
     Auto-fetches last 2 annual SEC years per ticker when cache gaps exist (YoY revenue growth),
     links by ticker, fetches Finnhub market data, and builds the comparative report.
+
+    SESSION: session_id REQUIRED — from prior tool response or user-pasted dashboard id.
     """
-    sid, _ = resolve_or_create_session(session_id)
+    session_result = _require_session_or_error(session_id)
+    if isinstance(session_result, dict):
+        return session_result
+    sid = session_result
     _touch_session_writes()
     result = run_comparative_analysis_from_mcp(sid, values=values, model_name=model_name)
+    return _tool_response(sid, result)
+
+
+sys.modules["mcp.server"] = sys.modules[__name__]
+from mcp.query_rag import run_query_rag
+
+
+@mcp.tool()
+def query_rag(
+    mode: str,
+    query: str | None = None,
+    ticker: str | None = None,
+    original_question: str | None = None,
+    top_k: int = 10,
+    session_id: SessionId = None,
+) -> dict:
+    """
+    Loop RAG retrieval over Postgres 10-K corpus — host-driven, max 15 loops.
+
+    Returns parent chunk sections (with full metadata) for the host to read and decide
+    whether to retrieve again or finalize. Python does NOT generate the final answer.
+
+    MODES:
+    - retrieve: embed query → ticker-scoped pgvector top-10 → HF rerank → return best unseen parent
+    - finalize: merge deduped parent texts → combined_context + citations for host to answer
+    - reset: clear session rag_query_state.json
+
+    TICKER (retrieve):
+    - Loop 1: ticker REQUIRED (e.g. NVDA) — locks scope for this run
+    - Loops 2+: omit ticker (reused from state); do not pass a different ticker
+
+    LOOP ENGINEERING (host responsibility):
+    After each retrieve, read `new_parent.content`. If you need more information OR the
+    parent refers to another part of the filing, call retrieve again with a NEW query.
+    When satisfied, call finalize.
+
+    CITATIONS: After finalize, end your answer with Sources: using citations[].label
+
+    USER PHRASE → CALL:
+    | User says | Call |
+    | "What are NVDA supply chain risks in the 10-K?" | retrieve ticker="NVDA" query="NVDA supply chain risks 10-K" |
+    | Parent cites Item 2 | retrieve query="NVDA Item 2 manufacturing suppliers 10-K" |
+    | Enough context gathered | finalize |
+    | New unrelated question | reset then retrieve with new ticker |
+
+    PREREQUISITE: ingest 10-Ks via fetch_report(report_type="full_report") so Postgres has embeddings.
+
+    PARAMETERS:
+    - mode: required — retrieve | finalize | reset
+    - query: required on retrieve — host-crafted search query for THIS loop
+    - ticker: required on loop 1 retrieve only
+    - original_question: optional on loop 1 — user's verbatim question (stored for finalize)
+    - top_k: sub-chunks per loop (default 10)
+    - session_id: REQUIRED — from prior tool response or user-pasted dashboard id
+    """
+    session_result = _require_session_or_error(session_id)
+    if isinstance(session_result, dict):
+        return session_result
+    sid = session_result
+    _touch_session_writes()
+
+    from typing import cast
+
+    from mcp.query_rag import QueryRagMode
+
+    normalized = mode.strip().lower()
+    if normalized not in ("retrieve", "finalize", "reset"):
+        return _tool_response(
+            sid,
+            {"error": f"Invalid mode {mode!r}. Use retrieve, finalize, or reset."},
+        )
+
+    result = run_query_rag(
+        mode=cast(QueryRagMode, normalized),
+        session_id=sid,
+        query=query,
+        ticker=ticker,
+        original_question=original_question,
+        top_k=top_k,
+    )
     return _tool_response(sid, result)
 
 

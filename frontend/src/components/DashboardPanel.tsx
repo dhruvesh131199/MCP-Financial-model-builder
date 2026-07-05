@@ -389,6 +389,22 @@ function ModelHeader({
   );
 }
 
+const sidebarActiveClass =
+  "border-indigo-400/70 bg-white shadow-[0_4px_16px_rgba(99,102,241,0.45)] ring-1 ring-indigo-300/50";
+
+const sidebarHubButtonClass = (active: boolean) =>
+  [
+    "flex w-full cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200/80 bg-gray-50/90 px-2.5 py-2 text-left shadow-sm transition-shadow duration-150",
+    active ? sidebarActiveClass : "hover:shadow-md hover:shadow-indigo-300/30",
+  ].join(" ");
+
+const sidebarItemShellClass = (active: boolean, pulse: boolean) =>
+  [
+    "group flex items-center gap-0.5 rounded-lg border border-gray-200/80 bg-gray-50/90 shadow-sm transition-shadow duration-150",
+    active ? sidebarActiveClass : "hover:shadow-md hover:shadow-indigo-300/30",
+    pulse ? "ring-2 ring-indigo-400/70" : "",
+  ].join(" ");
+
 function ModelsSidebarSection({
   hubActive,
   onSelectHub,
@@ -411,15 +427,10 @@ function ModelsSidebarSection({
       <button
         type="button"
         onClick={onSelectHub}
-        className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition ${
-          hubActive ? "bg-violet-100" : "hover:bg-white/80"
-        }`}
+        className={sidebarHubButtonClass(hubActive)}
       >
         <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
           Models
-        </span>
-        <span className="shrink-0 rounded bg-violet-600 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
-          New
         </span>
       </button>
       <div className="mt-1 flex flex-col gap-0.5">
@@ -464,15 +475,10 @@ function FetchFinancialsSidebarSection({
       <button
         type="button"
         onClick={onSelectHub}
-        className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition ${
-          hubActive ? "bg-emerald-100" : "hover:bg-white/80"
-        }`}
+        className={sidebarHubButtonClass(hubActive)}
       >
         <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
           Fetch Financials
-        </span>
-        <span className="shrink-0 rounded bg-emerald-600 px-1 py-0.5 text-[8px] font-bold uppercase text-white">
-          SEC
         </span>
       </button>
       <div className="mt-1 flex flex-col gap-0.5">
@@ -510,9 +516,7 @@ function RagSidebarSection({
       <button
         type="button"
         onClick={onSelectHub}
-        className={`flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left transition ${
-          hubActive ? "bg-indigo-100" : "hover:bg-white/80"
-        }`}
+        className={sidebarHubButtonClass(hubActive)}
       >
         <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-600">
           Upload financial document for your questions!
@@ -569,11 +573,7 @@ function SidebarItem({
   onDelete?: () => void;
 }) {
   return (
-    <div
-      className={`group flex items-center gap-0.5 rounded-lg transition ${
-        active ? "bg-indigo-100" : "hover:bg-white/80"
-      } ${pulse ? "ring-2 ring-indigo-300" : ""}`}
-    >
+    <div className={sidebarItemShellClass(active, pulse)}>
       <button
         type="button"
         onClick={onClick}

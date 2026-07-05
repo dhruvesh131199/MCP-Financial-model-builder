@@ -24,7 +24,7 @@ CLI run.py --ticker ──────┘                              ├──
                                                          └──► report.html (outline viewer)
 ```
 
-Phase 2 (retrieval): vector search + rerank for MCP/dashboard not wired yet. Homework retrieve prototype kept off main — see git tag `before-loop-engineering-retrieval`.
+Phase 2 (retrieval): `query_rag` MCP tool — host-driven loop retrieval (max 15), global pgvector top-10 + HF rerank. Requires `DATABASE_URL` + `HF_TOKEN`.
 
 ## Section outline
 

@@ -43,15 +43,20 @@ From current MCP descriptors, the active tools are:
 - `run_detailed_analysis`
 - `run_comparative_analysis`
 - `create_dcf_model`
+- `query_rag`
 
 ---
 
 ## High-Level Call Graph
 
 ```text
-start_session | any tool
-  -> resolve_or_create_session(session_id?)
-  -> _tool_response(session_id, data, system_note)
+start_session
+  -> start_session_resolve(session_id?)
+  -> create_session() if blank; attach if exists; error if not found
+
+all other tools
+  -> require_session(session_id) — error if missing/invalid/not found
+  -> _tool_response(session_id, data)
 
 fetch_report
   -> run_fetch_report
@@ -82,26 +87,42 @@ create_dcf_model
      -> fetch_and_cache_statements (always 5-year annual reference)
      -> build_dcf_reference_history
      -> save_dcf_draft_model
+
+query_rag
+  -> run_query_rag
+     -> retrieve: embed_texts -> search_sub_chunks_global -> rerank_hits -> load_parent_chunk -> rag_query_state.json
+     -> finalize: merge deduped parents -> combined_context -> clear state
+     -> reset: clear rag_query_state.json
 ```
 
 ---
 
-## Session management (2026-07-03)
+## Session management (2026-07-05 HITL)
 
-- **No** `mcp_bindings.json` or HTTP header guessing.
-- Every tool accepts optional `session_id`; blank → `create_session()`.
-- Missing/expired folder with explicit UUID → new session (lenient).
-- Every response envelope:
+- **No** silent auto-create on workspace tools — only `start_session` creates a new folder.
+- Host must ask before first tool: *"Do you have an existing session id from your dashboard, or should I create a new workspace?"*
+- User pastes UUID from dashboard Session id box or `/s/{uuid}` → pass on every tool call.
+- User wants new → `start_session()` with no `session_id`, then use returned id.
+
+**Error codes** (`session_id: null` in envelope):
+
+| Code | When |
+|------|------|
+| `session_required` | Tool called without `session_id` |
+| `session_not_found` | UUID valid but folder missing (expired/deleted) |
+| `session_invalid` | Not a valid UUID format |
+
+**Success envelope:**
 
 ```json
 {
   "session_id": "uuid",
   "data": { "view_url": "...", "...": "..." },
-  "system_note": "CRITICAL: Pass this session_id into all future tool calls."
+  "system_note": "CRITICAL: Pass session_id from every tool response..."
 }
 ```
 
-Module: [`backend/session_resolve.py`](backend/session_resolve.py)
+Module: [`backend/session_resolve.py`](backend/session_resolve.py) — `require_session`, `start_session_resolve`
 
 ---
 
@@ -117,7 +138,7 @@ Module: [`backend/session_resolve.py`](backend/session_resolve.py)
 
 **Main function chain**
 - `start_session(...)`
-  - `resolve_or_create_session(session_id?)`
+  - `start_session_resolve(session_id?)`
   - `_touch_session_writes()`
 
 **Writes / side effects**
@@ -264,6 +285,39 @@ Module: [`backend/session_resolve.py`](backend/session_resolve.py)
 
 ---
 
+## `query_rag`
+
+**Purpose**
+- Host-driven loop retrieval over Postgres 10-K corpus (narrative Q&A).
+- Python returns parent chunk context only — host writes the final answer.
+
+**Inputs**
+- `mode: "retrieve" | "finalize" | "reset"` (required)
+- `query?: string` (required on retrieve — host crafts each loop)
+- `ticker?: string` (required on loop 1 retrieve — locks scope for the run; omitted on loops 2+)
+- `original_question?: string` (optional loop 1)
+- `top_k?: int` (default 10 sub-chunks per loop)
+- `session_id?: string`
+
+**Main function chain**
+- `query_rag(...)` (MCP tool)
+  - `run_query_rag(...)`
+    - `retrieve`: `embed_texts` → `search_sub_chunks_global(ticker=...)` (exclude collected parents) → `rerank_hits` → `load_parent_chunk` → `rag_query_state.json`
+    - `finalize`: dedupe parents → `combined_context` + `citations` → clear state
+    - `reset`: clear state
+
+**Writes / side effects**
+- `data/sessions/{uuid}/rag_query_state.json` during retrieve loops (includes locked `ticker`)
+- Cleared on finalize/reset
+- Requires `DATABASE_URL`, `HF_TOKEN`, Postgres embeddings from `fetch_report(full_report)`
+
+**Host loop rule**
+- Loop 1: pass `ticker` (e.g. NVDA). Loops 2+: omit ticker (reused from state).
+- After each retrieve, read `new_parent.content`. If more info needed or parent cross-references another section → retrieve again with new query. Else finalize.
+- After finalize, append **Sources:** line using `citations[].label`.
+
+---
+
 ## Behavior Matrix (what writes where)
 
 | Tool | Files panel | Detailed Analysis panel | Comparative model | DCF draft | RAG 10-K |
@@ -275,6 +329,7 @@ Module: [`backend/session_resolve.py`](backend/session_resolve.py)
 | `run_detailed_analysis` | yes | yes | no | no | no |
 | `run_comparative_analysis` | maybe (auto-fetch for gaps) | no | yes | no | no |
 | `create_dcf_model` | yes (reference cache/file) | no | no | yes | no |
+| `query_rag` | no | no | no | no | reads Postgres corpus |
 
 ---
 
@@ -312,6 +367,11 @@ This is likely meant as convenience, but it creates orchestration ambiguity.
 
 ## Suggested Orchestration Rules (host-side)
 
+0. No session_id from a prior tool response this chat:
+- ask: "Do you have an existing session id from your dashboard, or should I create a new workspace?"
+- user has UUID → pass `session_id` on every call
+- user wants new → `start_session()` first
+
 1. User asks "financials", "tables", "last N years":
 - call `fetch_report(report_type="just_financials", ...)`
 - do not infer detailed analysis unless user asks
@@ -329,6 +389,13 @@ This is likely meant as convenience, but it creates orchestration ambiguity.
 - ask `projection_years`
 - call `create_dcf_model(...)`
 
+6. User asks narrative 10-K question (risks, MD&A, footnotes):
+- ensure corpus via `fetch_report(full_report)` if needed
+- loop 1: `query_rag(mode="retrieve", ticker="NVDA", query="...")`
+- loops 2+: `query_rag(mode="retrieve", query="...")` (ticker reused from state)
+- read each parent; refine query if cross-referenced or incomplete
+- `query_rag(mode="finalize")` → answer from `combined_context`; append Sources from `citations`
+
 ---
 
 ## Relevant Source Files
@@ -345,10 +412,16 @@ This is likely meant as convenience, but it creates orchestration ambiguity.
   - `backend/services/comparative.py`
 - DCF draft lifecycle:
   - `backend/services/dcf_service.py`
+- Loop RAG retrieval:
+  - `backend/mcp/query_rag.py`
+  - `backend/services/rag_loop_retrieval.py`
+  - `backend/services/rag_vector_search.py`
+  - `backend/services/rag_rerank.py`
+  - `backend/rag_query_state.py`
 
 ---
 
 ## Notes
 
-- This reference reflects current behavior on the code version where only the 6 MCP tools listed above are exposed.
+- This reference reflects current behavior on the code version where the MCP tools listed above are exposed.
 - If tool surface changes again, update this file first, then host prompts/instructions.

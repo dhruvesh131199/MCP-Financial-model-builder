@@ -79,56 +79,29 @@ def test_ingest_from_upload_fixture(tmp_path, monkeypatch):
 
 
 def test_mcp_tool_response_shape():
-    import importlib.util
-    from pathlib import Path
-    import sys
+    from mcp.tool_response import SYSTEM_NOTE, tool_response
 
-    server_path = Path(__file__).resolve().parent.parent / "mcp" / "server.py"
-
-    # We need to make sure mcp package is available
-    import types
-    sys.modules['mcp.fetch_report'] = types.ModuleType('mcp.fetch_report')
-    sys.modules['mcp.fetch_report'].run_fetch_report = lambda *a, **kw: None
-    sys.modules['mcp.fetch_report'].ReportType = str
-
-    mod_name = "fm_mcp_server_rag_shape"
-    mod = sys.modules.get(mod_name)
-    if mod is None:
-        spec = importlib.util.spec_from_file_location(mod_name, server_path)
-        assert spec and spec.loader
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[mod_name] = mod
-        spec.loader.exec_module(mod)
-
-    with patch.object(mod, "resolve_or_create_session", return_value=("sess-1", True)):
-        with patch.object(
-            mod,
-            "run_fetch_report",
-            return_value={
+    sid = "sess-1"
+    payload = {
+        "success": True,
+        "report_type": "full_report",
+        "results": [
+            {
+                "ticker": "AAPL",
+                "year": 2025,
                 "success": True,
-                "report_type": "full_report",
-                "results": [
-                    {
-                        "ticker": "AAPL",
-                        "year": 2025,
-                        "success": True,
-                        "document_id": "doc-1",
-                        "filing_key": "AAPL_2025_10K",
-                        "from_cache": False,
-                    }
-                ],
-                "errors": [],
-                "message": "Fetched 1/1",
-            },
-        ):
-            out = mod.fetch_report(
-                report_type="full_report",
-                tickers=["AAPL"],
-                session_id="sess-1",
-            )
+                "document_id": "doc-1",
+                "filing_key": "AAPL_2025_10K",
+                "from_cache": False,
+            }
+        ],
+        "errors": [],
+        "message": "Fetched 1/1",
+    }
+    out = tool_response(sid, payload)
 
-    assert out["session_id"] == "sess-1"
-    assert out["system_note"] == mod.SYSTEM_NOTE
+    assert out["session_id"] == sid
+    assert out["system_note"] == SYSTEM_NOTE
     assert out["data"]["success"] is True
     assert out["data"]["report_type"] == "full_report"
     assert len(out["data"]["results"]) == 1

@@ -11,7 +11,7 @@ alwaysApply: true
 - Phase 1: `start_session` + `create_dcf_model` (dashboard editor only), anonymous session folders, no Groq, no `/chat` endpoint.
 - MCP runs over **HTTP** (`http://localhost:8080/mcp`) — Cursor config uses `url`, not stdio.
 - Each user gets `data/sessions/{uuid}/` — dashboard at `http://localhost:5173/s/{uuid}`.
-- **Session ID:** host LLM must pass `session_id` from every tool response into the next call (`session_resolve.py` — no header/ctx binding).
+- **Session ID:** host LLM must pass `session_id` from every tool response into the next call. **HITL:** if no session exists, ask user for existing id or call `start_session` to create new — other tools reject missing `session_id`.
 
 ## Stack
 
@@ -33,9 +33,10 @@ Hub panel form UX (validation, red borders, chip labels, tickers-only comparativ
 
 ## MCP tool routing (host)
 
-- **Session:** read `session_id` from every tool response; pass it on the next call. Omit only for a new workspace.
+- **Session:** before first tool, ask user for existing session id or create new via `start_session`. Pass `session_id` on every subsequent call. Other tools error if omitted.
 - **Detailed analysis** (user says "detailed analysis", "analyze in detail", curated report) → `run_detailed_analysis` only — **not** `fetch_report(just_financials)` alone
 - **Trend analysis only** (user says "update trend", "trend table", "refresh trend") → `run_detailed_analysis` (trend table included; rerun for same ticker)
 - **Raw SEC / Files panel** (fetch 2023, quarterly, browse statements) → `fetch_report(report_type="just_financials", ...)`
 - **DCF** → always ask user for `projection_years`; `create_dcf_model(ticker, projection_years)` or dashboard **Models hub** (`POST /api/sessions/{id}/models/dcf`) fetches **5Y SEC reference** when ticker given; user clicks Update model (never chat-collect assumptions)
 - **Peers** → `run_comparative_analysis(values={target, peers})` or dashboard **Models hub** (`POST /api/sessions/{id}/models/comparative`) — auto-fetch/link SEC Files, 1–5 peers
+- **RAG narrative Q&A** (10-K risks, MD&A, footnotes) → `query_rag` loop (max 15); ingest via `fetch_report(report_type="full_report")` first; **ticker required on loop 1 retrieve**; host appends **Sources:** from `citations` after finalize

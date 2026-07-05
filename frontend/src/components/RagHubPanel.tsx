@@ -9,6 +9,7 @@ import {
   type RagDocumentEntry,
 } from "../api/sessionRag";
 import { ragDocumentDisplayLabel } from "../lib/ragDocumentLabel";
+import RagLlmRetrieveGuide from "./RagLlmRetrieveGuide";
 
 type IngestTab = "fetch" | "upload";
 
@@ -110,11 +111,7 @@ export default function RagHubPanel({
           this filing and uses them as context—so answers stay grounded in the document, not
           guessed from memory.
         </p>
-        <p className="mt-2 rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2 text-xs text-indigo-900">
-          <span className="font-medium">Ask in chat:</span>{" "}
-          <span className="font-mono">“Fetch Walmart 2024 annual report”</span> — full 10-K
-          narrative for RAG, not structured Files tables.
-        </p>
+        <RagLlmRetrieveGuide sessionId={sessionId} />
       </div>
 
       <div className="flex-1 space-y-6 p-4">

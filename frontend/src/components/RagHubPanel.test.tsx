@@ -61,10 +61,14 @@ function renderPanel(documents: RagDocumentEntry[]) {
 }
 
 describe("RagHubPanel", () => {
-  it("renders chat example and RAG badge", () => {
+  it("renders LLM retrieve guide and RAG badge", () => {
     renderPanel([]);
-    expect(screen.getByText(/Ask in chat/i)).toBeTruthy();
-    expect(screen.getByText(/Fetch Walmart 2024 annual report/i)).toBeTruthy();
+    expect(screen.getByText(/Wanna retrieve information using LLM/i)).toBeTruthy();
+    expect(screen.getByText(/connect Cursor or Claude/i)).toBeTruthy();
+    expect(screen.getByText(/Start my session with session id sess-1/i)).toBeTruthy();
+    expect(
+      screen.getByText(/Get me the risks from the AAPL 10-K using query_rag \(ticker AAPL on first retrieve\)/i),
+    ).toBeTruthy();
     expect(screen.getByText("RAG")).toBeTruthy();
   });
 

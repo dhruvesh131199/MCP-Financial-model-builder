@@ -236,6 +236,9 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-07-05 | Fix + Feature | RAG ticker filter + citations: `query_rag` loop 1 requires `ticker` (persisted in `rag_query_state.json`); pgvector search scoped to ticker (no cross-ticker bleed); finalize returns `citations`; INSTRUCTIONS mandate Sources line in host answer. |
+| 2026-07-05 | Decision + HITL | Session ask-before-create: `require_session` on all tools except `start_session`; errors for missing/expired/invalid UUID (no silent auto-create); INSTRUCTIONS + docstrings require host to ask user for existing id or call `start_session`. |
+| 2026-07-05 | Feature | Loop RAG retrieval MCP: `query_rag` (retrieve/finalize/reset), host-driven loops (max 15), global pgvector top-10 + HF rerank, full parent metadata in `rag_query_state.json`, INSTRUCTIONS loop-engineering block. |
 | 2026-07-03 | Decision + Refactor | Explicit MCP `session_id`: removed `session_binding.py` / `mcp_bindings.json` header guessing; `session_resolve.resolve_or_create_session`; uniform tool envelope (`session_id`, `data`, `system_note`); host must echo `session_id` on every call. |
 | 2026-07-02 | Feature | Sidebar delete for Files + Models chips: hover trash → `DELETE` API removes session JSON; models stay independent of files; DCF draft delete cascades to computed twin; global `cursor: pointer` on interactive elements. |
 | 2026-07-02 | Feature | Comparative Models hub + REST: enabled Comparative tab in `ModelsHubPanel` (target + peer chips, optional name defaulting to ticker-based `{target} vs {peers}`), `POST /api/sessions/{id}/models/comparative` sharing `create_comparative_model` with MCP — fail-fast SEC fetch errors, max 5 peers, redirect to `ComparativeTable`. |

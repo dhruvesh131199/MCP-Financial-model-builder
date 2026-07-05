@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { fetchSessionWorkspace, markSessionGuideSeen, deleteSessionFile, deleteSessionModel, API_BASE } from "../api";
 import DashboardPanel from "../components/DashboardPanel";
 import SessionGuideModal, { SessionGuideButton } from "../components/SessionGuideModal";
+import SessionIdCopy from "../components/SessionIdCopy";
 import type { DashboardSelection, FileEntry, ModelEntry, FinancialsFetchLogEntry, RagDocumentEntry } from "../types";
 import {
   resolveNewModelAutoSelect,
@@ -204,7 +205,12 @@ export default function SessionPage() {
               Private analyzer workspace — updates as you chat with your assistant
             </p>
           </div>
-          <SessionGuideButton onClick={() => setGuideOpen(true)} />
+          <div className="flex shrink-0 flex-col items-end gap-1.5">
+            <SessionGuideButton onClick={() => setGuideOpen(true)} />
+            {sessionId && !notFound && !error && (
+              <SessionIdCopy sessionId={sessionId} />
+            )}
+          </div>
         </div>
       </header>
 

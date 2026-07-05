@@ -73,7 +73,7 @@ def test_mcp_instructions_contain_phrase_mapping():
     assert "Fetch Apple financial statements" in text
     assert "fiscal_years=[2023]" in text
     assert "session_id" in text
-    assert "system_note" in text
+    assert "Do you have an existing session id" in text
 
 
 def test_fetch_report_docstring_contains_examples():

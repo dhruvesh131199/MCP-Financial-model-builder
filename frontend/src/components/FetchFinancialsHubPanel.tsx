@@ -98,9 +98,6 @@ export default function FetchFinancialsHubPanel({
       <div className="border-b border-[var(--border-soft)] bg-gradient-to-r from-white to-emerald-50/40 px-4 py-3">
         <div className="flex items-center gap-2">
           <h2 className="text-sm font-semibold text-gray-900">Fetch Financials</h2>
-          <span className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-            SEC
-          </span>
         </div>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-600">
           {DETAILED_ANALYSIS_DISCLAIMER}
