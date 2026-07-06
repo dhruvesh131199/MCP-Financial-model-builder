@@ -199,20 +199,18 @@ export default function SessionPage() {
 
       <header className="shrink-0 border-b border-[var(--border-soft)] bg-white px-4 py-3">
         <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="text-base font-semibold text-gray-900">Workspace</h1>
-            <p className="text-xs text-gray-500">
-              Private analyzer workspace — updates as you chat with your assistant
-            </p>
-          </div>
-          <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <div className="flex items-center gap-2">
-              <SetupMcpLink />
-              <SessionGuideButton onClick={() => setGuideOpen(true)} />
+            <div className="mt-0.5 flex flex-wrap items-center gap-2">
+              <p className="text-xs text-gray-500">Your private workspace for 1 hour.</p>
+              {sessionId && !notFound && !error && (
+                <SessionIdCopy sessionId={sessionId} />
+              )}
             </div>
-            {sessionId && !notFound && !error && (
-              <SessionIdCopy sessionId={sessionId} />
-            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <SetupMcpLink />
+            <SessionGuideButton onClick={() => setGuideOpen(true)} />
           </div>
         </div>
       </header>
