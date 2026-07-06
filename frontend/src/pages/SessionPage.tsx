@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { fetchSessionWorkspace, markSessionGuideSeen, deleteSessionFile, deleteSessionModel, API_BASE } from "../api";
 import DashboardPanel from "../components/DashboardPanel";
-import SessionGuideModal, { SessionGuideButton } from "../components/SessionGuideModal";
+import SessionGuideModal, { SessionGuideButton, SetupMcpLink } from "../components/SessionGuideModal";
 import SessionIdCopy from "../components/SessionIdCopy";
 import type { DashboardSelection, FileEntry, ModelEntry, FinancialsFetchLogEntry, RagDocumentEntry } from "../types";
 import {
@@ -206,7 +206,10 @@ export default function SessionPage() {
             </p>
           </div>
           <div className="flex shrink-0 flex-col items-end gap-1.5">
-            <SessionGuideButton onClick={() => setGuideOpen(true)} />
+            <div className="flex items-center gap-2">
+              <SetupMcpLink />
+              <SessionGuideButton onClick={() => setGuideOpen(true)} />
+            </div>
             {sessionId && !notFound && !error && (
               <SessionIdCopy sessionId={sessionId} />
             )}
