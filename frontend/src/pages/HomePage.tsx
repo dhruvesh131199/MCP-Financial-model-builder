@@ -22,7 +22,7 @@ export default function HomePage() {
       const { session_id } = await createSession();
       navigate(`/s/${session_id}`);
     } catch {
-      setError("Could not start a session. Is the API running and VIEW_BASE_URL set on EC2?");
+      setError("Could not start a session. Check that the API is running.");
       setStarting(false);
     }
   }
