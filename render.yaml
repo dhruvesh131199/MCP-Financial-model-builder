@@ -16,7 +16,7 @@ services:
       - key: NODE_VERSION
         value: "22"
       - key: VITE_APP_URL
-        value: https://financial-model-dashboard.onrender.com
+        value: https://finsight-mcp-app.onrender.com
       - key: VITE_API_URL
         sync: false
       - key: VITE_PUBLIC_MCP_URL

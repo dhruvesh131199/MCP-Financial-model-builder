@@ -7,7 +7,7 @@ APP_ROOT="${HOME}/financial-models"
 BACKEND="${APP_ROOT}/backend"
 DEPLOY="${APP_ROOT}/deploy/aws"
 # Must match Render VITE_APP_URL exactly (see deploy/production-urls.txt)
-RENDER_APP_URL="${RENDER_APP_URL:-https://financial-model-dashboard.onrender.com}"
+RENDER_APP_URL="${RENDER_APP_URL:-https://finsight-mcp-app.onrender.com}"
 
 cd "${APP_ROOT}"
 

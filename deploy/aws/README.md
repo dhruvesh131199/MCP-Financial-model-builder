@@ -43,7 +43,7 @@ You did **not** upload a zip file to AWS. You:
 
 | Role | Example (this project) |
 |------|-------------------------|
-| Frontend | `https://mcp-financial-model-builder.onrender.com` |
+| Frontend | `https://finsight-mcp-app.onrender.com` |
 | API | `https://myfmdc-api.duckdns.org` |
 | MCP | `https://myfmdc-mcp.duckdns.org/mcp` |
 | EC2 public IP | From AWS console → Instances → Public IPv4 |

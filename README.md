@@ -107,7 +107,7 @@ Copy `backend/.env.example` to `backend/.env`:
 
 ## Deploy (production)
 
-**Live app:** https://mcp-financial-model-builder.onrender.com · **Setup:** [/setup](https://mcp-financial-model-builder.onrender.com/setup)
+**Live app:** https://finsight-mcp-app.onrender.com · **Setup:** [/setup](https://finsight-mcp-app.onrender.com/setup)
 
 | Piece | Host | Auto-deploy on `git push`? |
 |-------|------|----------------------------|

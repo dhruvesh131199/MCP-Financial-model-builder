@@ -7,7 +7,7 @@ You survived. This is the map of what’s live and how updates work.
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  RENDER (auto-deploys on git push)                              │
-│  https://financial-model-dashboard.onrender.com                 │
+│  https://finsight-mcp-app.onrender.com                          │
 │  React dashboard + /setup page                                  │
 └───────────────────────────┬─────────────────────────────────────┘
                             │ polls API
@@ -27,8 +27,8 @@ You survived. This is the map of what’s live and how updates work.
 
 | URL | What |
 |-----|------|
-| https://financial-model-dashboard.onrender.com | Dashboard + setup UI |
-| https://financial-model-dashboard.onrender.com/setup | Claude setup instructions |
+| https://finsight-mcp-app.onrender.com | Dashboard + setup UI |
+| https://finsight-mcp-app.onrender.com/setup | Claude setup instructions |
 | https://myfmdc-api.duckdns.org | Backend API |
 | https://myfmdc-mcp.duckdns.org/mcp | MCP for Claude |
 
@@ -63,7 +63,7 @@ After that, `update-ec2.sh` only pulls backend + deploy files.
 ## EC2 `.env` (copy on server)
 
 ```env
-VIEW_BASE_URL=https://financial-model-dashboard.onrender.com
+VIEW_BASE_URL=https://finsight-mcp-app.onrender.com
 MCP_HOST=0.0.0.0
 MCP_PORT=8080
 ```
@@ -72,7 +72,7 @@ MCP_PORT=8080
 
 | Variable | Value |
 |----------|--------|
-| `VITE_APP_URL` | `https://financial-model-dashboard.onrender.com` |
+| `VITE_APP_URL` | `https://finsight-mcp-app.onrender.com` |
 | `VITE_API_URL` | `https://myfmdc-api.duckdns.org` |
 | `VITE_PUBLIC_MCP_URL` | `https://myfmdc-mcp.duckdns.org/mcp` |
 
