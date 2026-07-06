@@ -1,0 +1,6 @@
+# Canonical production URLs — keep EC2 VIEW_BASE_URL == Render VITE_APP_URL (exact match for CORS).
+#
+# Render service name from render.yaml: financial-model-dashboard
+RENDER_APP_URL=https://financial-model-dashboard.onrender.com
+API_URL=https://myfmdc-api.duckdns.org
+MCP_URL=https://myfmdc-mcp.duckdns.org/mcp

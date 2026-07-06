@@ -242,10 +242,12 @@ See **[DEPLOY.md](../../DEPLOY.md)** at repo root for the big picture.
 bash ~/financial-models/deploy/aws/update-ec2.sh
 ```
 
-`update-ec2.sh` will automatically:
-- apply sparse checkout if `frontend/` is still on disk
-- recreate `backend/.venv` if it was deleted
-- pull, install deps, restart API + MCP
+`update-ec2.sh` runs **before every pull**:
+- `ensure-sparse-checkout.sh` — working tree is `backend/` + `deploy/` only (no `frontend/`)
+- `ensure-venv.sh` — recreate `.venv` if missing
+- restart API + MCP
+
+**CORS:** `VIEW_BASE_URL` in EC2 `.env` must exactly match your Render app URL (`VITE_APP_URL`). See `deploy/production-urls.txt`.
 
 **If `.env` is missing** (journal shows `Failed to load environment files`):
 
@@ -267,15 +269,11 @@ sudo systemctl restart financial-models-api financial-models-mcp
 
 ### Backend only on EC2 (no frontend)
 
-EC2 runs API + MCP only — **Render** hosts the React app. Frontend files on the server are unused.
-
-**One-time** (after SSH in), enable sparse checkout so `git pull` skips `frontend/`:
+EC2 never needs `frontend/` — Render builds it. Sparse checkout is applied automatically by `update-ec2.sh`. Manual run:
 
 ```bash
-bash ~/financial-models/deploy/aws/setup-sparse-checkout.sh
+bash ~/financial-models/deploy/aws/ensure-sparse-checkout.sh
 ```
-
-That keeps only `backend/` and `deploy/` on disk. Safe to run on a fresh clone or an existing full clone (removes `frontend/`).
 
 Or manually:
 
@@ -328,7 +326,8 @@ curl -s http://checkip.amazonaws.com
 | `Caddyfile.example` | HTTPS config template |
 | `install-systemd.sh` | One-time: API + MCP run in background |
 | `ensure-venv.sh` | Create/recreate backend `.venv` if missing |
-| `setup-sparse-checkout.sh` | One-time: EC2 pulls backend only (no frontend) |
+| `ensure-sparse-checkout.sh` | Before pull: backend + deploy only (auto from update-ec2) |
+| `setup-sparse-checkout.sh` | Alias for ensure-sparse-checkout |
 | `update-ec2.sh` | After `git push`: pull + restart on EC2 |
 | `diagnose-ec2.sh` | Local + HTTPS troubleshooting on the VM |
 

@@ -1,6 +1,6 @@
-/** Production URLs — override with VITE_* at Render build time. */
+/** Production URLs — set VITE_* on Render; VIEW_BASE_URL on EC2 must match VITE_APP_URL exactly. */
 export const PUBLIC_APP_URL =
-  import.meta.env.VITE_APP_URL ?? "https://mcp-financial-model-builder.onrender.com";
+  import.meta.env.VITE_APP_URL ?? "https://financial-model-dashboard.onrender.com";
 
 export const PUBLIC_API_URL =
   import.meta.env.VITE_API_URL ?? "https://myfmdc-api.duckdns.org";
