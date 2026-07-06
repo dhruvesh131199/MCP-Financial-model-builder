@@ -68,6 +68,8 @@ MCP_HOST=0.0.0.0
 MCP_PORT=8080
 ```
 
+**RAG (full 10-K + query_rag):** also set `DATABASE_URL`, `HF_TOKEN` in `.env`. After pull, `update-ec2.sh` installs `psycopg` + `markitdown`.
+
 ## Render env vars
 
 | Variable | Value |

@@ -1,2 +1,2 @@
-markitdown[pdf]>=0.1.6
-psycopg[binary]>=3.2.0
+# Homework-only extras (production deps are in requirements.txt)
+# pip install -r requirements-homework-rag.txt  # optional; same as main RAG lines
