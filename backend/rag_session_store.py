@@ -54,7 +54,8 @@ def _save_index(session_id: str, documents: list[dict[str, Any]]) -> None:
 def list_rag_documents(session_id: str) -> list[dict[str, Any]]:
     if not session_exists(session_id):
         return []
-    return _load_index(session_id)
+    docs = _load_index(session_id)
+    return sorted(docs, key=lambda d: d.get("linked_at") or "", reverse=True)
 
 
 def rag_index_mtime(session_id: str) -> str | None:
@@ -90,8 +91,7 @@ def upsert_rag_document(session_id: str, entry: dict[str, Any]) -> dict[str, Any
     )
     if not entry.get("id"):
         entry["id"] = str(uuid.uuid4())
-    if not entry.get("linked_at"):
-        entry["linked_at"] = _utc_now()
+    entry["linked_at"] = _utc_now()
     if existing_idx is not None:
         documents[existing_idx] = {**documents[existing_idx], **entry}
         out = documents[existing_idx]

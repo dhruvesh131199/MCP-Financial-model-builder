@@ -6,10 +6,11 @@ describe("ChipInput", () => {
   it("adds chip on Enter", () => {
     const onChange = vi.fn();
     render(<ChipInput values={[]} onChange={onChange} placeholder="Add ticker" />);
-    const input = screen.getByPlaceholderText("Add ticker");
+    const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "aapl" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onChange).toHaveBeenCalledWith(["aapl"]);
+    expect(screen.getByText("Add ticker")).toBeTruthy();
   });
 
   it("removes last chip on Backspace when input empty", () => {
@@ -37,8 +38,9 @@ describe("ChipInput", () => {
         placeholder="Ticker"
       />,
     );
-    const input = screen.getByPlaceholderText("Ticker");
+    const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "nvda" } });
+    expect(screen.getByText("Ticker")).toBeTruthy();
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onChange).toHaveBeenCalledWith(["NVDA"]);
   });
@@ -51,6 +53,13 @@ describe("ChipInput", () => {
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByText("Maximum 2 items")).toBeTruthy();
+  });
+
+  it("keeps instruction visible while typing", () => {
+    render(<ChipInput values={[]} onChange={vi.fn()} placeholder="Type ticker and press enter" />);
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "aa" } });
+    expect(screen.getByText("Type ticker and press enter")).toBeTruthy();
   });
 
   it("applies error border when error prop set", () => {

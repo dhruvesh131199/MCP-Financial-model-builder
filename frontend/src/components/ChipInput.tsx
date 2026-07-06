@@ -103,6 +103,7 @@ export default function ChipInput({
           type="text"
           value={draft}
           disabled={disabled}
+          aria-label={placeholder}
           onChange={(e) => {
             setDraft(e.target.value);
             setHint(null);
@@ -113,10 +114,10 @@ export default function ChipInput({
               draft.split(",").forEach((part) => commitRaw(part));
             }
           }}
-          placeholder={placeholder}
           className={`min-w-[120px] flex-1 border-0 bg-transparent px-1 py-1 text-sm outline-none ${inputClassName}`}
         />
       </div>
+      <p className="text-xs text-gray-400">{placeholder}</p>
       {hint && <p className="text-xs text-amber-700">{hint}</p>}
     </div>
   );

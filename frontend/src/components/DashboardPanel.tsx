@@ -398,13 +398,6 @@ const sidebarHubButtonClass = (active: boolean) =>
     active ? sidebarActiveClass : "hover:shadow-md hover:shadow-indigo-300/30",
   ].join(" ");
 
-const sidebarItemShellClass = (active: boolean, pulse: boolean) =>
-  [
-    "group flex items-center gap-0.5 rounded-lg border border-gray-200/80 bg-gray-50/90 shadow-sm transition-shadow duration-150",
-    active ? sidebarActiveClass : "hover:shadow-md hover:shadow-indigo-300/30",
-    pulse ? "ring-2 ring-indigo-400/70" : "",
-  ].join(" ");
-
 function ModelsSidebarSection({
   hubActive,
   onSelectHub,
@@ -573,7 +566,11 @@ function SidebarItem({
   onDelete?: () => void;
 }) {
   return (
-    <div className={sidebarItemShellClass(active, pulse)}>
+    <div
+      className={`group flex items-center gap-0.5 rounded-lg transition ${
+        active ? "bg-indigo-100" : "hover:bg-white/80"
+      } ${pulse ? "ring-2 ring-indigo-300" : ""}`}
+    >
       <button
         type="button"
         onClick={onClick}
