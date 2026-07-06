@@ -68,6 +68,8 @@ def _cors_origins() -> list[str]:
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
+    # Render static site URL may differ from VIEW_BASE_URL (service name vs custom label)
+    allow_origin_regex=r"https://[\w-]+\.onrender\.com",
     allow_methods=["GET", "PATCH", "POST", "DELETE"],
     allow_headers=["*"],
 )
