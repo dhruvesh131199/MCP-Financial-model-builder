@@ -5,6 +5,7 @@ import PercentInput from "./PercentInput";
 type EditableKey =
   | "revenue_growth"
   | "ebitda_margin"
+  | "da_pct"
   | "tax_rate"
   | "capex_pct"
   | "nwc_pct";
@@ -19,9 +20,10 @@ interface DcfForecastGridProps {
 const EDITABLE_ROWS: { key: EditableKey; label: string }[] = [
   { key: "revenue_growth", label: "Revenue growth %" },
   { key: "ebitda_margin", label: "EBITDA margin %" },
+  { key: "da_pct", label: "D&A % rev" },
   { key: "tax_rate", label: "Tax %" },
   { key: "capex_pct", label: "CapEx % rev" },
-  { key: "nwc_pct", label: "ΔNWC % Δrev" },
+  { key: "nwc_pct", label: "NWC % rev" },
 ];
 
 const cellClass =
@@ -86,20 +88,31 @@ export default function DcfForecastGrid({
             <>
               <ComputedRow label="Revenue" values={preview.years.map((y) => fmtM(y.revenue))} />
               <ComputedRow label="EBITDA" values={preview.years.map((y) => fmtM(y.ebitda))} />
-              <ComputedRow label="Taxes" values={preview.years.map((y) => fmtM(y.taxes))} />
-              <ComputedRow label="NOPAT" values={preview.years.map((y) => fmtM(y.nopat))} />
+              <ComputedRow label="D&A" values={preview.years.map((y) => fmtM(y.da))} />
+              <ComputedRow label="EBIT" values={preview.years.map((y) => fmtM(y.ebit))} />
+              <ComputedRow label="Taxes (on EBIT)" values={preview.years.map((y) => fmtM(y.taxes))} />
               <ComputedRow label="CapEx" values={preview.years.map((y) => fmtM(y.capex))} />
+              <ComputedRow label="NWC" values={preview.years.map((y) => fmtM(y.nwc))} />
               <ComputedRow
-                label="Δ NWC"
+                label="ΔNWC"
                 values={preview.years.map((y) => fmtM(y.deltaNwc))}
               />
               <ComputedRow label="UFCF" values={preview.years.map((y) => fmtM(y.ufcf))} bold />
+              <ComputedRow
+                label="Terminal Value"
+                values={preview.years.map((y) => fmtM(y.terminalValue))}
+              />
+              <ComputedRow
+                label="Total UFCF"
+                values={preview.years.map((y) => fmtM(y.totalUfcf))}
+                bold
+              />
               <ComputedRow
                 label="Discount factor"
                 values={preview.years.map((y) => y.discountFactor.toFixed(3))}
               />
               <ComputedRow
-                label="PV of UFCF"
+                label="PV of Total UFCF"
                 values={preview.years.map((y) => fmtM(y.pvUfcf))}
                 bold
               />

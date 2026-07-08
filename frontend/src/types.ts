@@ -122,7 +122,17 @@ export interface DcfYearRow {
   year: number;
   revenue: number;
   ebitda: number;
+  da: number;
+  ebit: number;
+  taxes: number;
+  capex: number;
+  nwc: number;
+  delta_nwc: number;
+  ufcf: number;
   fcf: number;
+  terminal_value: number;
+  total_ufcf: number;
+  discount_factor: number;
   pv_fcf: number;
 }
 
@@ -130,6 +140,7 @@ export interface DcfInputs {
   base_revenue: number;
   revenue_growth: number | number[];
   ebitda_margin: number | number[];
+  da_pct: number | number[];
   tax_rate: number | number[];
   capex_pct: number | number[];
   nwc_pct: number | number[];
@@ -169,6 +180,7 @@ export interface DcfDraftInputs {
   terminal_growth: number | null;
   revenue_growth: (number | null)[];
   ebitda_margin: (number | null)[];
+  da_pct: (number | null)[];
   tax_rate: (number | null)[];
   capex_pct: (number | null)[];
   nwc_pct: (number | null)[];
@@ -180,6 +192,7 @@ export interface DcfDraftDefaults {
   revenue_growth?: number | null;
   tax_rate?: number | null;
   ebitda_margin?: number | null;
+  da_pct?: number | null;
   capex_pct?: number | null;
   nwc_pct?: number | null;
 }

@@ -30,6 +30,7 @@ def test_dcf_draft_patch_and_compute(mock_resolve, mock_fetch):
             "terminal_growth": 0.02,
             "revenue_growth": [0.08, 0.06],
             "ebitda_margin": [0.28, 0.28],
+            "da_pct": [0.04, 0.04],
             "tax_rate": [0.21, 0.21],
             "capex_pct": [0.04, 0.04],
             "nwc_pct": [0.02, 0.02],

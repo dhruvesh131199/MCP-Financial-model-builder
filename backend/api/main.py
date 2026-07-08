@@ -81,6 +81,7 @@ class DcfDraftPatchBody(BaseModel):
     shares_outstanding: float | None = None
     revenue_growth: list[float | None] | None = None
     ebitda_margin: list[float | None] | None = None
+    da_pct: list[float | None] | None = None
     tax_rate: list[float | None] | None = None
     capex_pct: list[float | None] | None = None
     nwc_pct: list[float | None] | None = None

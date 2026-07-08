@@ -31,6 +31,7 @@ This is a **fresh MCP-first rewrite** of ideas proven in `AI assisted Financial 
 | Codebase | **Fresh start** | Port entire REST project | Clean MCP architecture; reference sibling for algorithms only |
 | Hero / HF eval | **Homework only; no product case study** | Bake HF into SEC ingest | 50-ticker HF test: `smart_revenue` wins; HF rejected for normalization; `homework/huggingface_test/` kept for future experiments |
 | Detailed analysis | **`detailed_extract.py` + homework first** | Raw edgartools dump in UI; LLM line picking | Fixed row template (11+8+5 lines × 5 FY); tag-first rules; v1.1 adds **two-phase pick + derive** with provenance metadata (Files panel stays XBRL-only) |
+| DCF cash-flow bridge | **EBIT-tax with explicit D&A and NWC level** | EBITDA-tax proxy with NOPAT row and ΔRev-based NWC | Better finance semantics: show D&A + EBIT explicitly, tax on EBIT, compute ΔNWC from NWC levels, and keep UFCF/terminal/discount rows aligned between engine and UI |
 
 ---
 
@@ -236,6 +237,8 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-07-08 | UX + Fix | Negative inputs across all DCF template fields: `PercentInput`/`NumberInput` use local text state (parse on blur) so `-` is typable, and switched `inputMode` to `text` so the minus key shows on mobile keyboards. Rate fields (WACC, terminal growth, per-year growth/margin/D&A/tax/capex/NWC) and net debt now flow negatives to the backend unchanged; only hard guards kept are `base_revenue > 0`, `shares > 0`, and `WACC > terminal_growth` (Gordon denominator). Added negative-value tests on both engine and preview. |
+| 2026-07-08 | Decision + Refactor | DCF EBIT/NWC rework: added mandatory `da_pct` input; tax now applies to EBIT (`EBITDA - D&A`), removed NOPAT row, changed NWC flow to level-based (`NWC = Revenue x nwc_pct`, `ΔNWC = NWC_t - NWC_{t-1}`), added AR/inventory/AP ingest for historical NWC facts, and restructured valuation rows to include terminal value in final-year total UFCF discounted to EV. |
 | 2026-07-05 | Fix + Feature | RAG ticker filter + citations: `query_rag` loop 1 requires `ticker` (persisted in `rag_query_state.json`); pgvector search scoped to ticker (no cross-ticker bleed); finalize returns `citations`; INSTRUCTIONS mandate Sources line in host answer. |
 | 2026-07-05 | Decision + HITL | Session ask-before-create: `require_session` on all tools except `start_session`; errors for missing/expired/invalid UUID (no silent auto-create); INSTRUCTIONS + docstrings require host to ask user for existing id or call `start_session`. |
 | 2026-07-05 | Feature | Loop RAG retrieval MCP: `query_rag` (retrieve/finalize/reset), host-driven loops (max 15), global pgvector top-10 + HF rerank, full parent metadata in `rag_query_state.json`, INSTRUCTIONS loop-engineering block. |

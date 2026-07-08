@@ -20,6 +20,9 @@ def _financials_fixture() -> dict:
                     {"key": "revenue", "value": rev},
                     {"key": "operating_income", "value": rev * 0.08},
                     {"key": "depreciation_and_amortization", "value": rev * 0.02},
+                    {"key": "accounts_receivable", "value": rev * 0.11},
+                    {"key": "inventory", "value": rev * 0.08},
+                    {"key": "accounts_payable", "value": rev * 0.07},
                     {"key": "total_assets", "value": rev * 2},
                     {"key": "short_term_debt", "value": rev * 0.05},
                     {"key": "long_term_debt", "value": rev * 0.15},
@@ -68,6 +71,9 @@ def test_reference_rows_include_net_debt_and_ebitda():
     assert "net_debt" in keys
     assert "ebitda_margin" in keys
     assert "operating_margin" in keys
+    assert "da_pct" in keys
+    assert "ebit_m" in keys
+    assert "nwc_pct" in keys
     ebitda_row = next(r for r in ref.rows if r.key == "ebitda_margin")
     assert all(v is not None for v in ebitda_row.values)
 

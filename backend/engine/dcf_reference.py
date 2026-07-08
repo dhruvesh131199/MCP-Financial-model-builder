@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from engine.comps import extract_fiscal_snapshot
+from engine.comps import compute_operating_nwc_from_items, extract_fiscal_snapshot
 from ingest.normalize import FinancialStatements
 
 MAX_REFERENCE_YEARS = 5
@@ -144,6 +144,11 @@ def build_dcf_reference_history(
     revenues_m: list[float | None] = []
     growths: list[float | None] = []
     ebitda_margins: list[float | None] = []
+    da_m: list[float | None] = []
+    da_pcts: list[float | None] = []
+    ebit_m: list[float | None] = []
+    nwc_m: list[float | None] = []
+    nwc_pcts: list[float | None] = []
     operating_margins: list[float | None] = []
     tax_rates: list[float | None] = []
     capex_pcts: list[float | None] = []
@@ -159,8 +164,16 @@ def build_dcf_reference_history(
         growths.append(snap.get("revenue_growth_yoy"))
 
         ebitda = _ebitda_from_items(items)
+        da = _da_addback(items)
+        ebit = (float(ebitda) - float(da)) if ebitda is not None and da is not None else None
+        nwc = compute_operating_nwc_from_items(items)
         if revenue and revenue > 0:
             ebitda_margins.append(float(ebitda) / float(revenue) if ebitda is not None else None)
+            da_m.append(float(da) / 1_000_000 if da is not None else None)
+            da_pcts.append(_safe_div(da, revenue))
+            ebit_m.append(float(ebit) / 1_000_000 if ebit is not None else None)
+            nwc_m.append(float(nwc) / 1_000_000 if nwc is not None else None)
+            nwc_pcts.append(_safe_div(nwc, revenue))
             operating_margins.append(_safe_div(items.get("operating_income"), revenue))
             capex = snap.get("capex")
             capex_pcts.append(
@@ -170,6 +183,11 @@ def build_dcf_reference_history(
             fcf_margins.append(float(fcf) / float(revenue) if fcf is not None else None)
         else:
             ebitda_margins.append(None)
+            da_m.append(None)
+            da_pcts.append(None)
+            ebit_m.append(None)
+            nwc_m.append(None)
+            nwc_pcts.append(None)
             operating_margins.append(None)
             capex_pcts.append(None)
             fcf_margins.append(None)
@@ -197,6 +215,14 @@ def build_dcf_reference_history(
             values=ebitda_margins,
             format="percent",
         ),
+        DcfReferenceRow(key="da_m", label="Total D&A ($M)", values=da_m, format="currency_m"),
+        DcfReferenceRow(
+            key="da_pct",
+            label="D&A % rev",
+            values=da_pcts,
+            format="percent",
+        ),
+        DcfReferenceRow(key="ebit_m", label="EBIT ($M)", values=ebit_m, format="currency_m"),
         DcfReferenceRow(
             key="operating_margin",
             label="Operating margin (if EBITDA N/A)",
@@ -208,6 +234,13 @@ def build_dcf_reference_history(
             key="capex_pct",
             label="CapEx % rev",
             values=capex_pcts,
+            format="percent",
+        ),
+        DcfReferenceRow(key="nwc_m", label="NWC ($M)", values=nwc_m, format="currency_m"),
+        DcfReferenceRow(
+            key="nwc_pct",
+            label="NWC % rev",
+            values=nwc_pcts,
             format="percent",
         ),
         DcfReferenceRow(

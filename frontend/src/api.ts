@@ -18,6 +18,7 @@ export interface DcfDraftPatchBody {
   shares_outstanding?: number | null;
   revenue_growth?: (number | null)[];
   ebitda_margin?: (number | null)[];
+  da_pct?: (number | null)[];
   tax_rate?: (number | null)[];
   capex_pct?: (number | null)[];
   nwc_pct?: (number | null)[];

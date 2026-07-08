@@ -42,6 +42,7 @@ def _full_inputs() -> dict:
         "base_revenue": 100.0,
         "revenue_growth": 0.10,
         "ebitda_margin": 0.25,
+        "da_pct": 0.04,
         "tax_rate": 0.21,
         "capex_pct": 0.03,
         "nwc_pct": 0.02,

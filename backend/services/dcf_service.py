@@ -32,6 +32,7 @@ MANDATORY_DCF_DRAFT_FIELDS = [
 MANDATORY_DCF_DRAFT_ARRAYS = [
     "revenue_growth",
     "ebitda_margin",
+    "da_pct",
     "tax_rate",
     "capex_pct",
     "nwc_pct",
@@ -49,6 +50,7 @@ def _empty_draft_inputs(projection_years: int) -> dict[str, Any]:
         "terminal_growth": None,
         "revenue_growth": _empty_array(projection_years),
         "ebitda_margin": _empty_array(projection_years),
+        "da_pct": _empty_array(projection_years),
         "tax_rate": _empty_array(projection_years),
         "capex_pct": _empty_array(projection_years),
         "nwc_pct": _empty_array(projection_years),
@@ -62,6 +64,7 @@ def _empty_defaults() -> dict[str, Any]:
         "revenue_growth": None,
         "tax_rate": None,
         "ebitda_margin": None,
+        "da_pct": None,
         "capex_pct": None,
         "nwc_pct": None,
     }
@@ -243,7 +246,7 @@ def update_dcf_draft(
         if key in partial:
             inputs[key] = _merge_array(inputs.get(key), partial[key], n)
 
-    default_keys = ["revenue_growth", "tax_rate", "ebitda_margin", "capex_pct", "nwc_pct"]
+    default_keys = ["revenue_growth", "tax_rate", "ebitda_margin", "da_pct", "capex_pct", "nwc_pct"]
     for key in default_keys:
         if key in partial.get("defaults", {}) and partial["defaults"][key] is not None:
             defaults[key] = partial["defaults"][key]
@@ -298,6 +301,7 @@ def _build_dcf_inputs_from_draft(data: dict) -> DcfInputs:
         base_revenue=float(inputs["base_revenue"]),
         revenue_growth=[float(x) for x in inputs["revenue_growth"]],
         ebitda_margin=[float(x) for x in inputs["ebitda_margin"]],
+        da_pct=[float(x) for x in inputs["da_pct"]],
         tax_rate=[float(x) for x in inputs["tax_rate"]],
         capex_pct=[float(x) for x in inputs["capex_pct"]],
         nwc_pct=[float(x) for x in inputs["nwc_pct"]],

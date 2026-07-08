@@ -25,9 +25,28 @@ interface DcfReferencePanelProps {
 
 export default function DcfReferencePanel({ reference }: DcfReferencePanelProps) {
   const { fiscal_years, rows, latest_revenue_usd, ticker, hints, units_note } = reference;
+  const exampleTicker = ticker?.trim() || "AAPL";
 
   return (
     <section className="rounded-xl border border-indigo-200/80 bg-gradient-to-br from-slate-50 to-indigo-50/40 p-4">
+      <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+        <p className="font-medium">SEC data — mapping may be inaccurate</p>
+        <p className="mt-1 text-xs leading-relaxed text-amber-900/90">
+          These figures were pulled from SEC filings via edgar tools and automatic
+          line-item mapping. Tags and labels vary by filer, so amounts here can be
+          wrong or incomplete. For higher confidence, connect this workspace to MCP
+          and let your host LLM read the official 10-K narrative.
+        </p>
+        <p className="mt-3 text-xs font-medium text-amber-950">Ask your host LLM</p>
+        <blockquote className="mt-1 rounded-md border border-amber-200/80 bg-white/70 px-3 py-2 text-xs leading-relaxed text-gray-700">
+          Fetch the latest full 10-K report for {exampleTicker}. Then use{" "}
+          <code className="rounded bg-amber-100/80 px-1 text-[11px]">query_rag</code> to
+          pull Revenue, EBITDA, total depreciation and amortization, EBIT, tax rate,
+          CapEx, and change in net working capital (accounts receivable + inventory −
+          accounts payable). Create a reference table of these figures for me.
+        </blockquote>
+      </div>
+
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h3 className="text-sm font-semibold text-indigo-900">

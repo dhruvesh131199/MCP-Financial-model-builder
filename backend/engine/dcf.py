@@ -26,6 +26,7 @@ class DcfInputs(BaseModel):
         description="Annual revenue growth as decimal(s), e.g. 0.10 for 10%"
     )
     ebitda_margin: RateField
+    da_pct: RateField
     tax_rate: RateField
     capex_pct: RateField
     nwc_pct: RateField
@@ -46,6 +47,7 @@ class DcfInputs(BaseModel):
 
     @field_validator(
         "ebitda_margin",
+        "da_pct",
         "tax_rate",
         "capex_pct",
         "nwc_pct",
@@ -65,7 +67,14 @@ class DcfInputs(BaseModel):
         if self.wacc <= self.terminal_growth:
             raise ValueError("WACC must be greater than terminal growth rate")
         n = self.projection_years
-        for field in ("revenue_growth", "ebitda_margin", "tax_rate", "capex_pct", "nwc_pct"):
+        for field in (
+            "revenue_growth",
+            "ebitda_margin",
+            "da_pct",
+            "tax_rate",
+            "capex_pct",
+            "nwc_pct",
+        ):
             series = self._rate_series(getattr(self, field), n)
             if len(series) != n:
                 raise ValueError(
@@ -88,6 +97,9 @@ class DcfInputs(BaseModel):
     def tax_rates(self) -> list[float]:
         return self._rate_series(self.tax_rate)
 
+    def da_rates(self) -> list[float]:
+        return self._rate_series(self.da_pct)
+
     def capex_rates(self) -> list[float]:
         return self._rate_series(self.capex_pct)
 
@@ -99,7 +111,17 @@ class DcfYearRow(BaseModel):
     year: int
     revenue: float
     ebitda: float
+    da: float
+    ebit: float
+    taxes: float
+    capex: float
+    nwc: float
+    delta_nwc: float
+    ufcf: float
     fcf: float
+    terminal_value: float
+    total_ufcf: float
+    discount_factor: float
     pv_fcf: float
 
 
@@ -117,6 +139,7 @@ class DcfResult(BaseModel):
 def compute_dcf(inputs: DcfInputs, company_name: str | None = None) -> DcfResult:
     growths = inputs._growth_rates()
     margins = inputs.margin_rates()
+    da_pcts = inputs.da_rates()
     taxes = inputs.tax_rates()
     capex_pcts = inputs.capex_rates()
     nwc_pcts = inputs.nwc_rates()
@@ -124,36 +147,73 @@ def compute_dcf(inputs: DcfInputs, company_name: str | None = None) -> DcfResult
     g = inputs.terminal_growth
 
     revenue = inputs.base_revenue
-    years: list[DcfYearRow] = []
+    years_raw: list[dict[str, float | int]] = []
     pv_fcf_sum = 0.0
-    final_fcf = 0.0
 
     for t in range(1, inputs.projection_years + 1):
         idx = t - 1
+        prev_revenue = revenue
         revenue = revenue * (1 + growths[idx])
-        prev_revenue = revenue / (1 + growths[idx])
         ebitda = revenue * margins[idx]
-        nopat = ebitda * (1 - taxes[idx])
+        da = revenue * da_pcts[idx]
+        ebit = ebitda - da
+        tax = ebit * taxes[idx]
         capex = revenue * capex_pcts[idx]
-        delta_nwc = (revenue - prev_revenue) * nwc_pcts[idx]
-        fcf = nopat - capex - delta_nwc
-        pv_fcf = fcf / (1 + wacc) ** t
+        nwc = revenue * nwc_pcts[idx]
+        prev_nwc = prev_revenue * (nwc_pcts[idx - 1] if idx > 0 else nwc_pcts[0])
+        delta_nwc = nwc - prev_nwc
+        ufcf = ebitda - tax - capex - delta_nwc
+
+        years_raw.append(
+            {
+                "year": t,
+                "revenue": revenue,
+                "ebitda": ebitda,
+                "da": da,
+                "ebit": ebit,
+                "taxes": tax,
+                "capex": capex,
+                "nwc": nwc,
+                "delta_nwc": delta_nwc,
+                "ufcf": ufcf,
+            }
+        )
+
+    final_ufcf = float(years_raw[-1]["ufcf"]) if years_raw else 0.0
+    terminal_value = final_ufcf * (1 + g) / (wacc - g)
+    pv_terminal = terminal_value / (1 + wacc) ** inputs.projection_years
+
+    years: list[DcfYearRow] = []
+    for row in years_raw:
+        t = int(row["year"])
+        is_last = t == inputs.projection_years
+        terminal_in_year = terminal_value if is_last else 0.0
+        total_ufcf = float(row["ufcf"]) + terminal_in_year
+        discount_factor = (1 + wacc) ** t
+        pv_fcf = total_ufcf / discount_factor
         pv_fcf_sum += pv_fcf
-        final_fcf = fcf
 
         years.append(
             DcfYearRow(
                 year=t,
-                revenue=round(revenue, 4),
-                ebitda=round(ebitda, 4),
-                fcf=round(fcf, 4),
+                revenue=round(float(row["revenue"]), 4),
+                ebitda=round(float(row["ebitda"]), 4),
+                da=round(float(row["da"]), 4),
+                ebit=round(float(row["ebit"]), 4),
+                taxes=round(float(row["taxes"]), 4),
+                capex=round(float(row["capex"]), 4),
+                nwc=round(float(row["nwc"]), 4),
+                delta_nwc=round(float(row["delta_nwc"]), 4),
+                ufcf=round(float(row["ufcf"]), 4),
+                fcf=round(float(row["ufcf"]), 4),
+                terminal_value=round(terminal_in_year, 4),
+                total_ufcf=round(total_ufcf, 4),
+                discount_factor=round(discount_factor, 6),
                 pv_fcf=round(pv_fcf, 4),
             )
         )
 
-    terminal_value = final_fcf * (1 + g) / (wacc - g)
-    pv_terminal = terminal_value / (1 + wacc) ** inputs.projection_years
-    enterprise_value = pv_fcf_sum + pv_terminal
+    enterprise_value = pv_fcf_sum
 
     equity_value: float | None = None
     price_per_share: float | None = None

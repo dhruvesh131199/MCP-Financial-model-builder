@@ -50,6 +50,16 @@ def compute_net_debt(items: dict[str, float]) -> float | None:
     return total_debt - cash
 
 
+def compute_operating_nwc_from_items(items: dict[str, float]) -> float | None:
+    """Operating NWC proxy: (AR + Inventory) - Accounts Payable."""
+    receivables = items.get("accounts_receivable")
+    inventory = items.get("inventory")
+    payables = items.get("accounts_payable")
+    if receivables is None or inventory is None or payables is None:
+        return None
+    return float(receivables) + float(inventory) - float(payables)
+
+
 def extract_fiscal_snapshot(financials: dict, fiscal_year: int) -> dict[str, Any]:
     items = _period_line_items(financials, fiscal_year)
     prior_year = _prior_fiscal_year(financials, fiscal_year)

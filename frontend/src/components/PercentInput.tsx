@@ -32,7 +32,7 @@ export default function PercentInput({ value, onChange, className = "" }: Percen
   return (
     <input
       type="text"
-      inputMode="decimal"
+      inputMode="text"
       value={text}
       onChange={(e) => setText(e.target.value)}
       onBlur={() => {

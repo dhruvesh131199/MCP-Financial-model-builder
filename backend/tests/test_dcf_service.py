@@ -97,6 +97,7 @@ def test_compute_draft_after_fill(mock_resolve, mock_fetch, session_id):
             "terminal_growth": 0.02,
             "revenue_growth": [0.05, 0.05],
             "ebitda_margin": [0.30, 0.30],
+            "da_pct": [0.04, 0.04],
             "tax_rate": [0.21, 0.21],
             "capex_pct": [0.05, 0.05],
             "nwc_pct": [0.02, 0.02],

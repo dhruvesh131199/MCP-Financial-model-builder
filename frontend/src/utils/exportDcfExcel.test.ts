@@ -24,6 +24,7 @@ describe("exportDcfTemplateExcel", () => {
         terminal_growth: null,
         revenue_growth: [null, null, null],
         ebitda_margin: [null, null, null],
+        da_pct: [null, null, null],
         tax_rate: [null, null, null],
         capex_pct: [null, null, null],
         nwc_pct: [null, null, null],

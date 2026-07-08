@@ -223,6 +223,33 @@ METRICS: tuple[MetricDef, ...] = (
         ),
     ),
     MetricDef(
+        "accounts_receivable",
+        "Accounts Receivable",
+        "balance",
+        (
+            _a("us-gaap", "AccountsReceivableNetCurrent"),
+            _a("us-gaap", "ReceivablesNetCurrent"),
+        ),
+        applicability="when_reported",
+    ),
+    MetricDef(
+        "inventory",
+        "Inventory",
+        "balance",
+        (_a("us-gaap", "InventoryNet"),),
+        applicability="when_reported",
+    ),
+    MetricDef(
+        "accounts_payable",
+        "Accounts Payable",
+        "balance",
+        (
+            _a("us-gaap", "AccountsPayableCurrent"),
+            _a("us-gaap", "AccountsPayableAndAccruedLiabilitiesCurrent"),
+        ),
+        applicability="when_reported",
+    ),
+    MetricDef(
         "total_assets",
         "Total Assets",
         "balance",
@@ -399,6 +426,9 @@ INCOME_METRIC_ORDER: tuple[str, ...] = (
 BALANCE_METRIC_ORDER: tuple[str, ...] = (
     "cash",
     "short_term_investments",
+    "accounts_receivable",
+    "inventory",
+    "accounts_payable",
     "total_assets",
     "total_liabilities",
     "stockholders_equity",
@@ -434,9 +464,12 @@ DETAILED_INCOME_METRIC_ORDER: tuple[str, ...] = (
 
 DETAILED_BALANCE_METRIC_ORDER: tuple[str, ...] = (
     "current_assets",
+    "accounts_receivable",
+    "inventory",
     "non_current_assets",
     "total_assets",
     "current_liabilities",
+    "accounts_payable",
     "non_current_liabilities",
     "total_liabilities",
     "stockholders_equity",

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { DcfDraftDefaults, DcfDraftInputs } from "../types";
+import NumberInput from "./NumberInput";
 import PercentInput from "./PercentInput";
 
 interface DcfAssumptionsFormProps {
@@ -8,13 +9,6 @@ interface DcfAssumptionsFormProps {
   onChange: (patch: Partial<DcfDraftInputs>) => void;
   onDefaultsChange: (patch: DcfDraftDefaults) => void;
   onFillForecastRows: () => void;
-}
-
-function parseNum(raw: string): number | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const n = Number(trimmed);
-  return Number.isNaN(n) ? null : n;
 }
 
 const pctInputClass =
@@ -52,6 +46,7 @@ export default function DcfAssumptionsForm({
   const hasForecastDefaults = [
     defaults.revenue_growth,
     defaults.ebitda_margin,
+    defaults.da_pct,
     defaults.tax_rate,
     defaults.capex_pct,
     defaults.nwc_pct,
@@ -87,11 +82,9 @@ export default function DcfAssumptionsForm({
         </Field>
         <Field label="Base revenue">
           <div className="relative">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={inputs.base_revenue != null ? String(inputs.base_revenue) : ""}
-              onChange={(e) => onChange({ base_revenue: parseNum(e.target.value) })}
+            <NumberInput
+              value={inputs.base_revenue}
+              onChange={(v) => onChange({ base_revenue: v })}
               className={pctInputClass}
             />
             <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">
@@ -101,11 +94,9 @@ export default function DcfAssumptionsForm({
         </Field>
         <Field label="Net debt" optional>
           <div className="relative">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={inputs.net_debt != null ? String(inputs.net_debt) : ""}
-              onChange={(e) => onChange({ net_debt: parseNum(e.target.value) })}
+            <NumberInput
+              value={inputs.net_debt}
+              onChange={(v) => onChange({ net_debt: v })}
               className={pctInputClass}
             />
             <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">
@@ -115,15 +106,9 @@ export default function DcfAssumptionsForm({
         </Field>
         <Field label="Shares outstanding" optional>
           <div className="relative">
-            <input
-              type="text"
-              inputMode="decimal"
-              value={
-                inputs.shares_outstanding != null ? String(inputs.shares_outstanding) : ""
-              }
-              onChange={(e) =>
-                onChange({ shares_outstanding: parseNum(e.target.value) })
-              }
+            <NumberInput
+              value={inputs.shares_outstanding}
+              onChange={(v) => onChange({ shares_outstanding: v })}
               className={pctInputClass}
             />
             <span className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">
@@ -148,14 +133,15 @@ export default function DcfAssumptionsForm({
             Fill all years
           </button>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
           {(
             [
               ["Revenue growth", "revenue_growth"],
               ["EBITDA margin", "ebitda_margin"],
+              ["D&A % rev", "da_pct"],
               ["Tax rate", "tax_rate"],
               ["CapEx % rev", "capex_pct"],
-              ["ΔNWC % Δrev", "nwc_pct"],
+              ["NWC % rev", "nwc_pct"],
             ] as const
           ).map(([label, key]) => (
             <Field key={key} label={label}>

@@ -20,6 +20,7 @@ export async function exportDcfToExcel(
 
   const growths = asSeries(inputs.revenue_growth, n);
   const margins = asSeries(inputs.ebitda_margin, n);
+  const daPcts = asSeries(inputs.da_pct, n);
   const taxes = asSeries(inputs.tax_rate, n);
   const capexPcts = asSeries(inputs.capex_pct, n);
   const nwcPcts = asSeries(inputs.nwc_pct, n);
@@ -87,7 +88,15 @@ export async function exportDcfToExcel(
     ws.getCell(marginRow, firstYearCol + i).font = { color: { argb: "FF0000FF" } };
   }
 
-  const taxInputRow = 11;
+  const daInputRow = 11;
+  ws.getCell(daInputRow, 1).value = "D&A % Rev";
+  for (let i = 0; i < n; i++) {
+    ws.getCell(daInputRow, firstYearCol + i).value = daPcts[i];
+    ws.getCell(daInputRow, firstYearCol + i).numFmt = "0.0%";
+    ws.getCell(daInputRow, firstYearCol + i).font = { color: { argb: "FF0000FF" } };
+  }
+
+  const taxInputRow = 12;
   ws.getCell(taxInputRow, 1).value = "Tax Rate";
   for (let i = 0; i < n; i++) {
     ws.getCell(taxInputRow, firstYearCol + i).value = taxes[i];
@@ -95,7 +104,7 @@ export async function exportDcfToExcel(
     ws.getCell(taxInputRow, firstYearCol + i).font = { color: { argb: "FF0000FF" } };
   }
 
-  const capexInputRow = 12;
+  const capexInputRow = 13;
   ws.getCell(capexInputRow, 1).value = "CapEx % Rev";
   for (let i = 0; i < n; i++) {
     ws.getCell(capexInputRow, firstYearCol + i).value = capexPcts[i];
@@ -103,15 +112,15 @@ export async function exportDcfToExcel(
     ws.getCell(capexInputRow, firstYearCol + i).font = { color: { argb: "FF0000FF" } };
   }
 
-  const nwcInputRow = 13;
-  ws.getCell(nwcInputRow, 1).value = "ΔNWC % ΔRev";
+  const nwcInputRow = 14;
+  ws.getCell(nwcInputRow, 1).value = "NWC % Rev";
   for (let i = 0; i < n; i++) {
     ws.getCell(nwcInputRow, firstYearCol + i).value = nwcPcts[i];
     ws.getCell(nwcInputRow, firstYearCol + i).numFmt = "0.0%";
     ws.getCell(nwcInputRow, firstYearCol + i).font = { color: { argb: "FF0000FF" } };
   }
 
-  const revRow = 14;
+  const revRow = 15;
   ws.getCell(revRow, 1).value = "Revenue";
   ws.getCell(revRow, 1).font = { bold: true };
   for (let i = 0; i < n; i++) {
@@ -131,7 +140,7 @@ export async function exportDcfToExcel(
     cell.numFmt = '#,##0.0';
   }
 
-  const ebitdaRow = 15;
+  const ebitdaRow = 16;
   ws.getCell(ebitdaRow, 1).value = "EBITDA";
   ws.getCell(ebitdaRow, 1).font = { bold: true };
   for (let i = 0; i < n; i++) {
@@ -142,27 +151,37 @@ export async function exportDcfToExcel(
     cell.numFmt = '#,##0.0';
   }
 
-  const taxRow = 16;
-  ws.getCell(taxRow, 1).value = "Less: Taxes";
+  const daRow = 17;
+  ws.getCell(daRow, 1).value = "D&A";
+  for (let i = 0; i < n; i++) {
+    const colL = COL(firstYearCol + i);
+    ws.getCell(daRow, firstYearCol + i).value = {
+      formula: `${colL}${revRow}*${colL}$${daInputRow}`,
+    };
+    ws.getCell(daRow, firstYearCol + i).numFmt = '#,##0.0';
+  }
+
+  const ebitRow = 18;
+  ws.getCell(ebitRow, 1).value = "EBIT";
+  for (let i = 0; i < n; i++) {
+    const colL = COL(firstYearCol + i);
+    ws.getCell(ebitRow, firstYearCol + i).value = {
+      formula: `${colL}${ebitdaRow}-${colL}${daRow}`,
+    };
+    ws.getCell(ebitRow, firstYearCol + i).numFmt = '#,##0.0';
+  }
+
+  const taxRow = 19;
+  ws.getCell(taxRow, 1).value = "Less: Taxes (on EBIT)";
   for (let i = 0; i < n; i++) {
     const colL = COL(firstYearCol + i);
     ws.getCell(taxRow, firstYearCol + i).value = {
-      formula: `${colL}${ebitdaRow}*${colL}$${taxInputRow}`,
+      formula: `${colL}${ebitRow}*${colL}$${taxInputRow}`,
     };
     ws.getCell(taxRow, firstYearCol + i).numFmt = '#,##0.0';
   }
 
-  const nopatRow = 17;
-  ws.getCell(nopatRow, 1).value = "NOPAT";
-  for (let i = 0; i < n; i++) {
-    const colL = COL(firstYearCol + i);
-    ws.getCell(nopatRow, firstYearCol + i).value = {
-      formula: `${colL}${ebitdaRow}-${colL}${taxRow}`,
-    };
-    ws.getCell(nopatRow, firstYearCol + i).numFmt = '#,##0.0';
-  }
-
-  const capexRow = 18;
+  const capexRow = 20;
   ws.getCell(capexRow, 1).value = "Less: CapEx";
   for (let i = 0; i < n; i++) {
     const colL = COL(firstYearCol + i);
@@ -172,7 +191,17 @@ export async function exportDcfToExcel(
     ws.getCell(capexRow, firstYearCol + i).numFmt = '#,##0.0';
   }
 
-  const nwcRow = 19;
+  const nwcLevelRow = 21;
+  ws.getCell(nwcLevelRow, 1).value = "Net Working Capital";
+  for (let i = 0; i < n; i++) {
+    const colL = COL(firstYearCol + i);
+    ws.getCell(nwcLevelRow, firstYearCol + i).value = {
+      formula: `${colL}${revRow}*${colL}$${nwcInputRow}`,
+    };
+    ws.getCell(nwcLevelRow, firstYearCol + i).numFmt = '#,##0.0';
+  }
+
+  const nwcRow = 22;
   ws.getCell(nwcRow, 1).value = "Less: Δ NWC";
   for (let i = 0; i < n; i++) {
     const col = firstYearCol + i;
@@ -180,45 +209,69 @@ export async function exportDcfToExcel(
     const cell = ws.getCell(nwcRow, col);
     if (i === 0) {
       cell.value = {
-        formula: `(${colL}${revRow}-${baseRevRef})*${colL}$${nwcInputRow}`,
+        formula: `${colL}${nwcLevelRow}-(${baseRevRef}*${colL}$${nwcInputRow})`,
       };
     } else {
       const prevCol = COL(col - 1);
       cell.value = {
-        formula: `(${colL}${revRow}-${prevCol}${revRow})*${colL}$${nwcInputRow}`,
+        formula: `${colL}${nwcLevelRow}-${prevCol}${nwcLevelRow}`,
       };
     }
     cell.numFmt = '#,##0.0';
   }
 
-  const fcfRow = 20;
+  const fcfRow = 23;
   ws.getCell(fcfRow, 1).value = "Unlevered FCF";
   ws.getCell(fcfRow, 1).font = { bold: true };
   for (let i = 0; i < n; i++) {
     const colL = COL(firstYearCol + i);
     ws.getCell(fcfRow, firstYearCol + i).value = {
-      formula: `${colL}${nopatRow}-${colL}${capexRow}-${colL}${nwcRow}`,
+      formula: `${colL}${ebitdaRow}-${colL}${taxRow}-${colL}${capexRow}-${colL}${nwcRow}`,
     };
     ws.getCell(fcfRow, firstYearCol + i).numFmt = '#,##0.0';
     ws.getCell(fcfRow, firstYearCol + i).font = { bold: true };
   }
 
-  const dfRow = 21;
+  const terminalRow = 24;
+  ws.getCell(terminalRow, 1).value = "Terminal Value";
+  for (let i = 0; i < n; i++) {
+    const col = firstYearCol + i;
+    const colL = COL(col);
+    ws.getCell(terminalRow, col).value =
+      i === n - 1
+        ? { formula: `${colL}${fcfRow}*(1+${termGRef})/(${waccRef}-${termGRef})` }
+        : 0;
+    ws.getCell(terminalRow, col).numFmt = '#,##0.0';
+  }
+
+  const totalUfcfRow = 25;
+  ws.getCell(totalUfcfRow, 1).value = "Total UFCF";
+  ws.getCell(totalUfcfRow, 1).font = { bold: true };
+  for (let i = 0; i < n; i++) {
+    const colL = COL(firstYearCol + i);
+    ws.getCell(totalUfcfRow, firstYearCol + i).value = {
+      formula: `${colL}${fcfRow}+${colL}${terminalRow}`,
+    };
+    ws.getCell(totalUfcfRow, firstYearCol + i).numFmt = '#,##0.0';
+    ws.getCell(totalUfcfRow, firstYearCol + i).font = { bold: true };
+  }
+
+  const dfRow = 26;
   ws.getCell(dfRow, 1).value = "Discount Factor";
   for (let i = 0; i < n; i++) {
     ws.getCell(dfRow, firstYearCol + i).value = {
-      formula: `1/(1+${waccRef})^${i + 1}`,
+      formula: `(1+${waccRef})^${i + 1}`,
     };
     ws.getCell(dfRow, firstYearCol + i).numFmt = "0.000";
   }
 
-  const pvRow = 22;
-  ws.getCell(pvRow, 1).value = "PV of UFCF";
+  const pvRow = 27;
+  ws.getCell(pvRow, 1).value = "PV of Total UFCF";
   ws.getCell(pvRow, 1).font = { bold: true };
   for (let i = 0; i < n; i++) {
     const colL = COL(firstYearCol + i);
     ws.getCell(pvRow, firstYearCol + i).value = {
-      formula: `${colL}${fcfRow}*${colL}${dfRow}`,
+      formula: `${colL}${totalUfcfRow}/${colL}${dfRow}`,
     };
     ws.getCell(pvRow, firstYearCol + i).numFmt = '#,##0.0';
   }
@@ -249,7 +302,7 @@ export async function exportDcfToExcel(
   ws.getCell(summaryStart + 4, 1).value = "Enterprise Value";
   ws.getCell(summaryStart + 4, 1).font = { bold: true };
   ws.getCell(summaryStart + 4, 2).value = {
-    formula: `B${summaryStart + 1}+B${summaryStart + 3}`,
+    formula: `B${summaryStart + 1}`,
   };
   ws.getCell(summaryStart + 4, 2).numFmt = '#,##0.0';
   ws.getCell(summaryStart + 4, 2).font = { bold: true };
@@ -323,10 +376,11 @@ export async function exportDcfTemplateExcel(
   const assumptionLabels = [
     "WACC",
     "Terminal Growth",
+    "D&A % Revenue (default)",
     "Tax Rate (default)",
     "EBITDA Margin (default)",
     "CapEx % Revenue (default)",
-    "ΔNWC % Revenue Growth (default)",
+    "NWC % Revenue (default)",
     "Base Revenue ($M)",
   ];
   ws.getCell(3, 1).value = "Assumptions";
@@ -339,7 +393,7 @@ export async function exportDcfTemplateExcel(
 
   const waccRef = "$B$4";
   const termGRef = "$B$5";
-  const baseRevRef = "$B$10";
+  const baseRevRef = "$B$11";
 
   const headerRow = 13;
   ws.getCell(headerRow, 1).value = "($M)";
@@ -361,28 +415,35 @@ export async function exportDcfTemplateExcel(
     ws.getCell(marginRow, firstYearCol + i).numFmt = "0.0%";
   }
 
-  const taxRowPerYear = 16;
+  const daRowPerYear = 16;
+  ws.getCell(daRowPerYear, 1).value = "D&A % Rev";
+  for (let i = 0; i < n; i++) {
+    ws.getCell(daRowPerYear, firstYearCol + i).font = { color: { argb: "FF0000FF" } };
+    ws.getCell(daRowPerYear, firstYearCol + i).numFmt = "0.0%";
+  }
+
+  const taxRowPerYear = 17;
   ws.getCell(taxRowPerYear, 1).value = "Tax Rate";
   for (let i = 0; i < n; i++) {
     ws.getCell(taxRowPerYear, firstYearCol + i).font = { color: { argb: "FF0000FF" } };
     ws.getCell(taxRowPerYear, firstYearCol + i).numFmt = "0.0%";
   }
 
-  const capexRowInput = 17;
+  const capexRowInput = 18;
   ws.getCell(capexRowInput, 1).value = "CapEx % Rev";
   for (let i = 0; i < n; i++) {
     ws.getCell(capexRowInput, firstYearCol + i).font = { color: { argb: "FF0000FF" } };
     ws.getCell(capexRowInput, firstYearCol + i).numFmt = "0.0%";
   }
 
-  const nwcRowInput = 18;
-  ws.getCell(nwcRowInput, 1).value = "ΔNWC % ΔRev";
+  const nwcRowInput = 19;
+  ws.getCell(nwcRowInput, 1).value = "NWC % Rev";
   for (let i = 0; i < n; i++) {
     ws.getCell(nwcRowInput, firstYearCol + i).font = { color: { argb: "FF0000FF" } };
     ws.getCell(nwcRowInput, firstYearCol + i).numFmt = "0.0%";
   }
 
-  const revRow = 19;
+  const revRow = 20;
   ws.getCell(revRow, 1).value = "Revenue";
   for (let i = 0; i < n; i++) {
     const col = firstYearCol + i;
@@ -399,7 +460,7 @@ export async function exportDcfTemplateExcel(
     ws.getCell(revRow, col).numFmt = "#,##0.0";
   }
 
-  const ebitdaRow = 20;
+  const ebitdaRow = 21;
   ws.getCell(ebitdaRow, 1).value = "EBITDA";
   for (let i = 0; i < n; i++) {
     const colL = COL(firstYearCol + i);
@@ -409,27 +470,37 @@ export async function exportDcfTemplateExcel(
     ws.getCell(ebitdaRow, firstYearCol + i).numFmt = "#,##0.0";
   }
 
-  const taxRow = 21;
-  ws.getCell(taxRow, 1).value = "Less: Taxes";
+  const daRow = 22;
+  ws.getCell(daRow, 1).value = "D&A";
+  for (let i = 0; i < n; i++) {
+    const colL = COL(firstYearCol + i);
+    ws.getCell(daRow, firstYearCol + i).value = {
+      formula: `${colL}${revRow}*${colL}$${daRowPerYear}`,
+    };
+    ws.getCell(daRow, firstYearCol + i).numFmt = "#,##0.0";
+  }
+
+  const ebitRow = 23;
+  ws.getCell(ebitRow, 1).value = "EBIT";
+  for (let i = 0; i < n; i++) {
+    const colL = COL(firstYearCol + i);
+    ws.getCell(ebitRow, firstYearCol + i).value = {
+      formula: `${colL}${ebitdaRow}-${colL}${daRow}`,
+    };
+    ws.getCell(ebitRow, firstYearCol + i).numFmt = "#,##0.0";
+  }
+
+  const taxRow = 24;
+  ws.getCell(taxRow, 1).value = "Less: Taxes (on EBIT)";
   for (let i = 0; i < n; i++) {
     const colL = COL(firstYearCol + i);
     ws.getCell(taxRow, firstYearCol + i).value = {
-      formula: `${colL}${ebitdaRow}*${colL}$${taxRowPerYear}`,
+      formula: `${colL}${ebitRow}*${colL}$${taxRowPerYear}`,
     };
     ws.getCell(taxRow, firstYearCol + i).numFmt = "#,##0.0";
   }
 
-  const nopatRow = 22;
-  ws.getCell(nopatRow, 1).value = "NOPAT";
-  for (let i = 0; i < n; i++) {
-    const colL = COL(firstYearCol + i);
-    ws.getCell(nopatRow, firstYearCol + i).value = {
-      formula: `${colL}${ebitdaRow}-${colL}${taxRow}`,
-    };
-    ws.getCell(nopatRow, firstYearCol + i).numFmt = "#,##0.0";
-  }
-
-  const capexRow = 23;
+  const capexRow = 25;
   ws.getCell(capexRow, 1).value = "Less: CapEx";
   for (let i = 0; i < n; i++) {
     const colL = COL(firstYearCol + i);
@@ -439,54 +510,86 @@ export async function exportDcfTemplateExcel(
     ws.getCell(capexRow, firstYearCol + i).numFmt = "#,##0.0";
   }
 
-  const nwcRow = 24;
+  const nwcLevelRow = 26;
+  ws.getCell(nwcLevelRow, 1).value = "Net Working Capital";
+  for (let i = 0; i < n; i++) {
+    const colL = COL(firstYearCol + i);
+    ws.getCell(nwcLevelRow, firstYearCol + i).value = {
+      formula: `${colL}${revRow}*${colL}$${nwcRowInput}`,
+    };
+    ws.getCell(nwcLevelRow, firstYearCol + i).numFmt = "#,##0.0";
+  }
+
+  const nwcRow = 27;
   ws.getCell(nwcRow, 1).value = "Less: Δ NWC";
   for (let i = 0; i < n; i++) {
     const col = firstYearCol + i;
     const colL = COL(col);
     if (i === 0) {
       ws.getCell(nwcRow, col).value = {
-        formula: `(${colL}${revRow}-${baseRevRef})*${colL}$${nwcRowInput}`,
+        formula: `${colL}${nwcLevelRow}-(${baseRevRef}*${colL}$${nwcRowInput})`,
       };
     } else {
       ws.getCell(nwcRow, col).value = {
-        formula: `(${colL}${revRow}-${COL(col - 1)}${revRow})*${colL}$${nwcRowInput}`,
+        formula: `${colL}${nwcLevelRow}-${COL(col - 1)}${nwcLevelRow}`,
       };
     }
     ws.getCell(nwcRow, col).numFmt = "#,##0.0";
   }
 
-  const fcfRow = 25;
+  const fcfRow = 28;
   ws.getCell(fcfRow, 1).value = "Unlevered FCF";
   for (let i = 0; i < n; i++) {
     const colL = COL(firstYearCol + i);
     ws.getCell(fcfRow, firstYearCol + i).value = {
-      formula: `${colL}${nopatRow}-${colL}${capexRow}-${colL}${nwcRow}`,
+      formula: `${colL}${ebitdaRow}-${colL}${taxRow}-${colL}${capexRow}-${colL}${nwcRow}`,
     };
     ws.getCell(fcfRow, firstYearCol + i).numFmt = "#,##0.0";
   }
 
-  const dfRow = 26;
+  const terminalRow = 29;
+  ws.getCell(terminalRow, 1).value = "Terminal Value";
+  for (let i = 0; i < n; i++) {
+    const col = firstYearCol + i;
+    const colL = COL(col);
+    ws.getCell(terminalRow, col).value =
+      i === n - 1
+        ? { formula: `${colL}${fcfRow}*(1+${termGRef})/(${waccRef}-${termGRef})` }
+        : 0;
+    ws.getCell(terminalRow, col).numFmt = "#,##0.0";
+  }
+
+  const totalUfcfRow = 30;
+  ws.getCell(totalUfcfRow, 1).value = "Total UFCF";
+  for (let i = 0; i < n; i++) {
+    const colL = COL(firstYearCol + i);
+    ws.getCell(totalUfcfRow, firstYearCol + i).value = {
+      formula: `${colL}${fcfRow}+${colL}${terminalRow}`,
+    };
+    ws.getCell(totalUfcfRow, firstYearCol + i).numFmt = "#,##0.0";
+  }
+
+  const dfRow = 31;
   ws.getCell(dfRow, 1).value = "Discount Factor";
   for (let i = 0; i < n; i++) {
     ws.getCell(dfRow, firstYearCol + i).value = {
-      formula: `1/(1+${waccRef})^${i + 1}`,
+      formula: `(1+${waccRef})^${i + 1}`,
     };
   }
 
-  const pvRow = 27;
-  ws.getCell(pvRow, 1).value = "PV of UFCF";
+  const pvRow = 32;
+  ws.getCell(pvRow, 1).value = "PV of Total UFCF";
   for (let i = 0; i < n; i++) {
     const colL = COL(firstYearCol + i);
     ws.getCell(pvRow, firstYearCol + i).value = {
-      formula: `${colL}${fcfRow}*${colL}${dfRow}`,
+      formula: `${colL}${totalUfcfRow}/${colL}${dfRow}`,
     };
     ws.getCell(pvRow, firstYearCol + i).numFmt = "#,##0.0";
   }
 
   const sumPvRef = `${COL(firstYearCol)}${pvRow}:${lastColLetter}${pvRow}`;
   const lastFcfRef = `${lastColLetter}${fcfRow}`;
-  const summaryStart = 29;
+  const summaryStart = 34;
   ws.getCell(summaryStart + 1, 1).value = "PV of Explicit Period";
   ws.getCell(summaryStart + 1, 2).value = { formula: `SUM(${sumPvRef})` };
   ws.getCell(summaryStart + 2, 1).value = "Terminal Value";
@@ -499,7 +602,7 @@ export async function exportDcfTemplateExcel(
   };
   ws.getCell(summaryStart + 4, 1).value = "Enterprise Value";
   ws.getCell(summaryStart + 4, 2).value = {
-    formula: `B${summaryStart + 1}+B${summaryStart + 3}`,
+    formula: `B${summaryStart + 1}`,
   };
 
   const ref = draft.reference_history;

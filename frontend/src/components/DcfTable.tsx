@@ -29,26 +29,25 @@ interface DcfTableProps {
   model: DcfResult;
 }
 
-function rateAt(value: number | number[], index: number): number {
-  return Array.isArray(value) ? value[index] : value;
-}
-
 interface YearMetrics {
   revenue: number;
   growth: number;
   ebitda: number;
+  da: number;
+  ebit: number;
   taxes: number;
-  nopat: number;
   capex: number;
+  nwc: number;
   deltaNwc: number;
   ufcf: number;
+  terminalValue: number;
+  totalUfcf: number;
   discountFactor: number;
   pvUfcf: number;
 }
 
 export default function DcfTable({ model }: DcfTableProps) {
   const { inputs, years } = model;
-  const wacc = inputs.wacc;
   const pvExplicit = years.reduce((sum, y) => sum + y.pv_fcf, 0);
   const tvPct =
     model.enterprise_value > 0
@@ -58,23 +57,20 @@ export default function DcfTable({ model }: DcfTableProps) {
 
   const metrics: YearMetrics[] = years.map((row, i) => {
     const prevRevenue = i === 0 ? inputs.base_revenue : years[i - 1].revenue;
-    const taxRate = rateAt(inputs.tax_rate, i);
-    const capexPct = rateAt(inputs.capex_pct, i);
-    const nwcPct = rateAt(inputs.nwc_pct, i);
-    const taxes = row.ebitda * taxRate;
-    const nopat = row.ebitda - taxes;
-    const capex = row.revenue * capexPct;
-    const deltaNwc = (row.revenue - prevRevenue) * nwcPct;
     return {
       revenue: row.revenue,
       growth: row.revenue / prevRevenue - 1,
       ebitda: row.ebitda,
-      taxes,
-      nopat,
-      capex,
-      deltaNwc,
-      ufcf: row.fcf,
-      discountFactor: 1 / (1 + wacc) ** row.year,
+      da: row.da,
+      ebit: row.ebit,
+      taxes: row.taxes,
+      capex: row.capex,
+      nwc: row.nwc,
+      deltaNwc: row.delta_nwc,
+      ufcf: row.ufcf,
+      terminalValue: row.terminal_value,
+      totalUfcf: row.total_ufcf,
+      discountFactor: row.discount_factor,
       pvUfcf: row.pv_fcf,
     };
   });
@@ -105,7 +101,7 @@ export default function DcfTable({ model }: DcfTableProps) {
             bold
           />
           {inputs.net_debt != null && (
-            <BridgeLine label="Less: Net Debt" value={fmtM(-inputs.net_debt)} />
+            <BridgeLine label="Less: Net Debt" value={fmtM(inputs.net_debt)} />
           )}
           {model.equity_value != null && (
             <BridgeLine
@@ -133,8 +129,9 @@ export default function DcfTable({ model }: DcfTableProps) {
           <span>Terminal g {fmtPct(inputs.terminal_growth)}</span>
           <span>Tax {fmtRateDisplay(inputs.tax_rate)}</span>
           <span>EBITDA margin {fmtRateDisplay(inputs.ebitda_margin)}</span>
+          <span>D&A {fmtRateDisplay(inputs.da_pct)} of rev</span>
           <span>CapEx {fmtRateDisplay(inputs.capex_pct)} of rev</span>
-          <span>ΔNWC {fmtRateDisplay(inputs.nwc_pct)} of Δrev</span>
+          <span>NWC {fmtRateDisplay(inputs.nwc_pct)} of rev</span>
           <span>{inputs.projection_years}-year explicit forecast</span>
           <span>Units: $M USD</span>
         </div>
@@ -174,11 +171,13 @@ export default function DcfTable({ model }: DcfTableProps) {
               values={metrics.map((m) => fmtPct(m.ebitda / m.revenue))}
               muted
             />
+            <DataRow label="Less: D&A" values={metrics.map((m) => fmtM(-m.da))} />
+            <DataRow label="EBIT" values={metrics.map((m) => fmtM(m.ebit))} bold />
 
             <SectionHeader label="UFCF Build" colSpan={yearLabels.length} />
-            <DataRow label="Less: Taxes" values={metrics.map((m) => fmtM(-m.taxes))} />
-            <DataRow label="NOPAT" values={metrics.map((m) => fmtM(m.nopat))} />
+            <DataRow label="Less: Taxes (on EBIT)" values={metrics.map((m) => fmtM(-m.taxes))} />
             <DataRow label="Less: CapEx" values={metrics.map((m) => fmtM(-m.capex))} />
+            <DataRow label="Net Working Capital" values={metrics.map((m) => fmtM(m.nwc))} muted />
             <DataRow
               label="Less: Δ Net Working Capital"
               values={metrics.map((m) => fmtM(-m.deltaNwc))}
@@ -186,6 +185,16 @@ export default function DcfTable({ model }: DcfTableProps) {
             <DataRow
               label="Unlevered Free Cash Flow"
               values={metrics.map((m) => fmtM(m.ufcf))}
+              bold
+              total
+            />
+            <DataRow
+              label="Terminal Value"
+              values={metrics.map((m) => fmtM(m.terminalValue))}
+            />
+            <DataRow
+              label="Total UFCF"
+              values={metrics.map((m) => fmtM(m.totalUfcf))}
               bold
               total
             />
@@ -197,7 +206,7 @@ export default function DcfTable({ model }: DcfTableProps) {
               muted
             />
             <DataRow
-              label="PV of UFCF"
+              label="PV of Total UFCF"
               values={metrics.map((m) => fmtM(m.pvUfcf))}
               bold
               total

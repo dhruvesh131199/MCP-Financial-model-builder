@@ -14,6 +14,11 @@ def _sample_financials() -> FinancialStatements:
             LineItem(key="revenue", label="Revenue", value=10_000_000_000.0),
             LineItem(key="net_income", label="Net Income", value=1_000_000_000.0),
             LineItem(key="ebitda", label="EBITDA", value=2_000_000_000.0),
+            LineItem(
+                key="depreciation_and_amortization",
+                label="D&A",
+                value=400_000_000.0,
+            ),
             LineItem(key="income_before_tax", label="IBT", value=1_200_000_000.0),
             LineItem(key="income_tax_expense", label="Tax", value=200_000_000.0),
             LineItem(key="capex", label="Capex", value=500_000_000.0),
@@ -48,6 +53,7 @@ def test_suggest_dcf_inputs_millions_and_rates():
     suggested = suggest_dcf_inputs(fin)
     assert suggested["base_revenue"] == 10_000.0
     assert suggested["ebitda_margin"] == 0.2
+    assert suggested["da_pct"] == 0.04
     assert suggested["tax_rate"] == pytest.approx(200 / 1200)
     assert suggested["capex_pct"] == 0.05
     assert suggested["shares_outstanding"] == 1_000.0

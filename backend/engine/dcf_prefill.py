@@ -12,6 +12,17 @@ def _normalize_rate(value: float) -> float:
     return value
 
 
+def _da_addback(financials: dict, fiscal_year: int) -> float | None:
+    combined = _line_value(financials, fiscal_year, "depreciation_and_amortization")
+    if combined is not None:
+        return abs(float(combined))
+    depreciation = _line_value(financials, fiscal_year, "depreciation")
+    amortization = _line_value(financials, fiscal_year, "amortization")
+    if depreciation is not None and amortization is not None:
+        return abs(float(depreciation)) + abs(float(amortization))
+    return None
+
+
 def suggest_dcf_inputs(financials: FinancialStatements) -> dict[str, float | str | list[float]]:
     """Return only DCF fields computable from filed/derived SEC data."""
     dump = financials.model_dump()
@@ -38,6 +49,9 @@ def suggest_dcf_inputs(financials: FinancialStatements) -> dict[str, float | str
         ebitda = snap.get("ebitda")
         if ebitda is not None:
             suggested["ebitda_margin"] = float(ebitda) / float(revenue)
+        da = _da_addback(dump, latest_fy)
+        if da is not None:
+            suggested["da_pct"] = abs(float(da)) / float(revenue)
 
         ibt = _line_value(dump, latest_fy, "income_before_tax")
         tax = _line_value(dump, latest_fy, "income_tax_expense")
