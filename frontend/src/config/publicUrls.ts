@@ -1,6 +1,6 @@
 /** URLs from Vite env — local: `.env.development`; Render: dashboard env vars at build time. */
 
-type ViteUrlKey = "VITE_APP_URL" | "VITE_API_URL" | "VITE_PUBLIC_MCP_URL";
+type ViteUrlKey = "VITE_API_URL" | "VITE_PUBLIC_MCP_URL";
 
 function requireViteEnv(key: ViteUrlKey): string {
   const value = import.meta.env[key]?.trim();
@@ -14,6 +14,10 @@ function requireViteEnv(key: ViteUrlKey): string {
   return value.replace(/\/$/, "");
 }
 
-export const PUBLIC_APP_URL = requireViteEnv("VITE_APP_URL");
+/** Dashboard URL for MCP setup copy — same origin as the running app (no Render env needed). */
+export function appUrl(): string {
+  return window.location.origin;
+}
+
 export const PUBLIC_API_URL = requireViteEnv("VITE_API_URL");
 export const PUBLIC_MCP_URL = requireViteEnv("VITE_PUBLIC_MCP_URL");

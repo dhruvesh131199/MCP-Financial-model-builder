@@ -15,8 +15,6 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
-      - key: VITE_APP_URL
-        sync: false
       - key: VITE_API_URL
         sync: false
       - key: VITE_PUBLIC_MCP_URL

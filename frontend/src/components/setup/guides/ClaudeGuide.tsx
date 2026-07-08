@@ -1,8 +1,9 @@
 import { MCP_SUGGESTED_NAME } from "../../../config/branding";
-import { PUBLIC_APP_URL, PUBLIC_MCP_URL } from "../../../config/publicUrls";
+import { appUrl, PUBLIC_MCP_URL } from "../../../config/publicUrls";
 import SetupImage from "../SetupImage";
 
 export default function ClaudeGuide() {
+  const dashboardUrl = appUrl();
   return (
     <div className="space-y-8">
       <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
@@ -96,12 +97,12 @@ export default function ClaudeGuide() {
               <p className="text-xs text-gray-500">
                 Dashboard:{" "}
                 <a
-                  href={PUBLIC_APP_URL}
+                  href={dashboardUrl}
                   className="font-medium text-gray-700 underline"
                   target="_blank"
                   rel="noreferrer"
                 >
-                  {PUBLIC_APP_URL}
+                  {dashboardUrl}
                 </a>
               </p>
             </div>
