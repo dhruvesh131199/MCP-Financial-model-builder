@@ -1,9 +1,19 @@
-/** Production URLs — set VITE_* on Render; VIEW_BASE_URL on EC2 must match VITE_APP_URL exactly. */
-export const PUBLIC_APP_URL =
-  import.meta.env.VITE_APP_URL ?? "https://finsight-mcp-app.onrender.com";
+/** URLs from Vite env — local: `.env.development`; Render: dashboard env vars at build time. */
 
-export const PUBLIC_API_URL =
-  import.meta.env.VITE_API_URL ?? "https://myfmdc-api.duckdns.org";
+type ViteUrlKey = "VITE_APP_URL" | "VITE_API_URL" | "VITE_PUBLIC_MCP_URL";
 
-export const PUBLIC_MCP_URL =
-  import.meta.env.VITE_PUBLIC_MCP_URL ?? "https://myfmdc-mcp.duckdns.org/mcp";
+function requireViteEnv(key: ViteUrlKey): string {
+  const value = import.meta.env[key]?.trim();
+  if (!value) {
+    throw new Error(
+      `Missing ${key}. ` +
+        "Local: use frontend/.env.development (or .env.local). " +
+        "Render: set in dashboard and redeploy.",
+    );
+  }
+  return value.replace(/\/$/, "");
+}
+
+export const PUBLIC_APP_URL = requireViteEnv("VITE_APP_URL");
+export const PUBLIC_API_URL = requireViteEnv("VITE_API_URL");
+export const PUBLIC_MCP_URL = requireViteEnv("VITE_PUBLIC_MCP_URL");
