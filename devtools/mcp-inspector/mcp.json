@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "financial-models": {
-      "type": "streamable-http",
-      "url": "http://localhost:8080/mcp"
-    }
-  }
-}

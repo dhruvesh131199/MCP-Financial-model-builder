@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,15 +31,6 @@ from rag_session_store import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _emit_step(on_step: Callable[[str], None] | None, message: str) -> None:
-    if on_step:
-        on_step(message)
-
-
-def _filing_label(sym: str, year: int | None) -> str:
-    return f"{sym} FY{year}" if year is not None else sym
 
 
 @dataclass
@@ -143,29 +133,19 @@ def resolve_or_ingest_sec(
     ticker: str,
     fiscal_year: int | None = None,
     vector_store: VectorStore | None = None,
-    on_step: Callable[[str], None] | None = None,
 ) -> RagResolveResult:
     sym = ticker.strip().upper()
     store = vector_store or get_vector_store()
     try:
         filing_meta = peek_latest_annual_filing_meta(ticker=sym, fiscal_year=fiscal_year)
         filing_key = filing_key_from_meta(filing_meta)
-        year = filing_key.year
-        label = _filing_label(sym, year)
-        _emit_step(on_step, f"Starting {label} 10-K ingest")
-        _emit_step(on_step, f"Checking Postgres cache for {label}")
         if get_database_url():
             hit = lookup_filing(
                 filing_key.ticker, filing_key.year, filing_key.doctype
             )
             if hit:
-                _emit_step(on_step, f"Found {label} in database — linking to session")
                 if count_unembedded(hit.document_id) > 0:
-                    embed_document(
-                        hit.document_id,
-                        on_step=on_step,
-                        filing_label=label,
-                    )
+                    embed_document(hit.document_id)
                 entry = _link_to_session(
                     session_id,
                     document_id=hit.document_id,
@@ -178,7 +158,6 @@ def resolve_or_ingest_sec(
                 logger.info(
                     "rag cache hit %s session=%s", entry["filing_key"], session_id
                 )
-                _emit_step(on_step, f"{label} ready for RAG")
                 return RagResolveResult(
                     success=True,
                     from_cache=True,
@@ -201,11 +180,9 @@ def resolve_or_ingest_sec(
             homework_output=False,
             fiscal_year=fiscal_year,
             vector_store=store,
-            on_step=on_step,
         )
         entry = _after_full_ingest(session_id, result)
         plan = result.chunk_plan
-        _emit_step(on_step, f"{label} ready for RAG")
         return RagResolveResult(
             success=True,
             from_cache=False,

@@ -60,8 +60,6 @@ bash ~/financial-models/deploy/aws/setup-sparse-checkout.sh
 
 After that, `update-ec2.sh` only pulls backend + deploy files.
 
-**Local-only paths (not on EC2):** `devtools/` (MCP Inspector config), `frontend/` (Render builds it), `scripts/inspect-mcp.sh`. EC2 sparse checkout is `backend` + `deploy` only.
-
 ## EC2 `.env` (copy on server)
 
 ```env

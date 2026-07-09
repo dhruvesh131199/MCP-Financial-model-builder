@@ -68,7 +68,6 @@ def test_just_financials_routing(mock_sec):
         include_annual=True,
         include_quarterly=False,
         statements=["income", "balance", "cashflow"],
-        on_step=None,
     )
 
 
@@ -96,7 +95,7 @@ def test_full_report_routing_with_years(mock_resolve, mock_list):
     assert res["results"][0]["year"] == 2024
     mock_list.assert_not_called()
     mock_resolve.assert_called_once_with(
-        session_id="sess-1", ticker="AAPL", fiscal_year=2024, on_step=None
+        session_id="sess-1", ticker="AAPL", fiscal_year=2024
     )
 
 
@@ -123,7 +122,7 @@ def test_full_report_routing_latest(mock_resolve, mock_list):
     assert res["results"][0]["year"] == 2025
     mock_list.assert_called_once_with("WMT", 1)
     mock_resolve.assert_called_once_with(
-        session_id="sess-1", ticker="WMT", fiscal_year=2025, on_step=None
+        session_id="sess-1", ticker="WMT", fiscal_year=2025
     )
 
 

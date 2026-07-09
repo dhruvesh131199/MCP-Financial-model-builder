@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -51,13 +50,7 @@ def count_unembedded(document_id: str, *, database_url: str | None = None) -> in
             return int(row[0] or 0) if row else 0
 
 
-def embed_document(
-    document_id: str,
-    *,
-    database_url: str | None = None,
-    on_step: Callable[[str], None] | None = None,
-    filing_label: str | None = None,
-) -> EmbedStats:
+def embed_document(document_id: str, *, database_url: str | None = None) -> EmbedStats:
     url = database_url or get_database_url()
     if not url:
         raise ValueError("DATABASE_URL is required for embed_document")
@@ -90,9 +83,6 @@ def embed_document(
 
         embedded_total = 0
         now = datetime.now(timezone.utc)
-        scope = filing_label or document_id
-        if on_step:
-            on_step(f"Embedding {scope} sub-chunks ({len(rows)} total)")
 
         for batch_start in range(0, len(rows), EMBED_BATCH_SIZE):
             batch = rows[batch_start : batch_start + EMBED_BATCH_SIZE]
@@ -119,9 +109,6 @@ def embed_document(
                             ),
                         )
             embedded_total += len(batch)
-
-        if on_step:
-            on_step(f"Finished embedding {scope} ({embedded_total} sub-chunks)")
 
         logger.info(
             "postgres_embed: document_id=%s embedded=%s model=%s",

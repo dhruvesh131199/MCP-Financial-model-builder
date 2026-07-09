@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Callable
 
 from services.sec_client import resolve_ticker as sec_resolve_ticker
 from services.sec_financials import (
@@ -29,7 +28,6 @@ def handle_cached_sec_fetch(
     include_annual: bool,
     include_quarterly: bool,
     statements: list[str],
-    on_step: Callable[[str], None] | None = None,
 ) -> dict:
     resolved = sec_resolve_ticker(company_name=company_name, ticker=ticker)
     if "error" in resolved:
@@ -47,7 +45,6 @@ def handle_cached_sec_fetch(
             include_annual=include_annual,
             include_quarterly=include_quarterly,
             statements=statements,
-            on_step=on_step,
         )
     except ValueError as exc:
         return {"error": str(exc)}
