@@ -90,16 +90,12 @@ def embed_document(
 
         embedded_total = 0
         now = datetime.now(timezone.utc)
-        total_batches = (len(rows) + EMBED_BATCH_SIZE - 1) // EMBED_BATCH_SIZE
         scope = filing_label or document_id
+        if on_step:
+            on_step(f"Embedding {scope} sub-chunks ({len(rows)} total)")
 
-        for batch_index, batch_start in enumerate(range(0, len(rows), EMBED_BATCH_SIZE), start=1):
+        for batch_start in range(0, len(rows), EMBED_BATCH_SIZE):
             batch = rows[batch_start : batch_start + EMBED_BATCH_SIZE]
-            if on_step:
-                on_step(
-                    f"Embedding {scope} sub-chunks "
-                    f"(batch {batch_index}/{total_batches})"
-                )
             ids = [r[0] for r in batch]
             texts = [r[1] for r in batch]
             vectors = embed_texts(texts, model_id=model_id)
@@ -123,6 +119,9 @@ def embed_document(
                             ),
                         )
             embedded_total += len(batch)
+
+        if on_step:
+            on_step(f"Finished embedding {scope} ({embedded_total} sub-chunks)")
 
         logger.info(
             "postgres_embed: document_id=%s embedded=%s model=%s",

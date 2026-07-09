@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock, MagicMock
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__) + "/.."))
 
 from mcp.progress import (
-    EMBED_BATCH_RESERVE,
     FULL_REPORT_LIST_YEARS_STEPS,
     FULL_REPORT_STEPS_PER_FILING,
     JUST_FINANCIALS_STEPS_PER_TICKER,
@@ -46,7 +45,7 @@ def test_plan_full_report_steps_with_years():
         filings_per_ticker=[2],
         needs_year_listing=False,
     )
-    assert total == 2 * (FULL_REPORT_STEPS_PER_FILING + EMBED_BATCH_RESERVE)
+    assert total == 2 * FULL_REPORT_STEPS_PER_FILING
 
     assert plan_fetch_report_steps(
         "full_report",
@@ -61,9 +60,7 @@ def test_plan_full_report_steps_with_year_listing():
         filings_per_ticker=[1, 1],
         needs_year_listing=True,
     )
-    assert total == 2 * FULL_REPORT_LIST_YEARS_STEPS + 2 * (
-        FULL_REPORT_STEPS_PER_FILING + EMBED_BATCH_RESERVE
-    )
+    assert total == 2 * FULL_REPORT_LIST_YEARS_STEPS + 2 * FULL_REPORT_STEPS_PER_FILING
 
     assert plan_fetch_report_steps(
         "full_report",

@@ -11,7 +11,7 @@ if [ ! -f "$CONFIG" ]; then
   exit 1
 fi
 
-if ! curl -sf -o /dev/null -w "%{http_code}" http://localhost:8080/mcp 2>/dev/null | grep -qE '^(200|406)$'; then
+if ! curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/mcp 2>/dev/null | grep -qE '^(200|406)$'; then
   echo "MCP is not running at http://localhost:8080/mcp"
   echo "Start it first:  ./scripts/dev.sh"
   echo "  or:  cd backend && source .venv/bin/activate && python mcp/server.py"

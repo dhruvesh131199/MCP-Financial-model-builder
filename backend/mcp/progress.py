@@ -9,8 +9,7 @@ from typing import Any, Protocol, runtime_checkable
 
 JUST_FINANCIALS_STEPS_PER_TICKER = 6
 FULL_REPORT_LIST_YEARS_STEPS = 1
-FULL_REPORT_STEPS_PER_FILING = 9
-EMBED_BATCH_RESERVE = 3
+FULL_REPORT_STEPS_PER_FILING = 11
 
 
 @runtime_checkable
@@ -32,10 +31,7 @@ def plan_full_report_steps(
 ) -> int:
     """Estimate total progress steps for full_report."""
     listing = FULL_REPORT_LIST_YEARS_STEPS * ticker_count if needs_year_listing else 0
-    filings = sum(
-        max(1, count) * (FULL_REPORT_STEPS_PER_FILING + EMBED_BATCH_RESERVE)
-        for count in filings_per_ticker
-    )
+    filings = sum(max(1, count) * FULL_REPORT_STEPS_PER_FILING for count in filings_per_ticker)
     return max(1, listing + filings)
 
 

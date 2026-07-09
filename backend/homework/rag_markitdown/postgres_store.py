@@ -52,8 +52,8 @@ class PostgresVectorStore:
             on_step=on_step,
             filing_label=label,
         )
-        if on_step:
-            on_step(f"Added {label} to database")
+        if on_step and stats.embedded_count == 0:
+            on_step(f"No new embeddings needed for {label}")
         logger.info(
             "postgres_store: document_id=%s %s_%s_%s parents=%s subchunks=%s embedded=%s",
             result.document_id,
