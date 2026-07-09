@@ -18,7 +18,7 @@ class VectorStore(Protocol):
 class NoOpVectorStore:
     """Logs ingest metadata when Postgres is not configured."""
 
-    def ingest(self, result: IngestResult) -> None:
+    def ingest(self, result: IngestResult, **kwargs: object) -> None:
         subchunks = result.chunk_plan.subchunk_count if result.chunk_plan else 0
         parents = result.chunk_plan.parent_count if result.chunk_plan else 0
         first_parent = (

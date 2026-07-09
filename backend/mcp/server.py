@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -337,11 +338,12 @@ def resolve_ticker(
 
 
 sys.modules["mcp.server"] = sys.modules[__name__]
-from mcp.fetch_report import run_fetch_report
+from mcp.fetch_report import plan_fetch_report_steps, run_fetch_report
+from mcp.progress import McpProgressReporter, NoOpProgressReporter
 
 
 @mcp.tool()
-def fetch_report(
+async def fetch_report(
     report_type: str,
     tickers: list[str],
     years: list[int] | None = None,
@@ -383,16 +385,37 @@ def fetch_report(
 
     from mcp.fetch_report import ReportType
 
-    return _tool_response(
-        sid,
-        run_fetch_report(
-            session_id=sid,
-            report_type=cast(ReportType, report_type),
-            tickers=tickers,
-            years=years,
-            max_years=max_years,
-        ),
+    normalized_type = cast(ReportType, report_type)
+    clean_tickers = [t.strip().upper() for t in tickers if t.strip()]
+    total_steps = plan_fetch_report_steps(
+        normalized_type,
+        ticker_count=max(1, len(clean_tickers)),
+        years=years,
+        max_years=max_years,
     )
+    reporter: McpProgressReporter | NoOpProgressReporter
+    try:
+        ctx = mcp.get_context()
+        ctx.request_context
+        reporter = McpProgressReporter(ctx, total_steps=total_steps)
+        on_step = reporter.sync_hook()
+    except ValueError:
+        reporter = NoOpProgressReporter()
+        on_step = None
+
+    result = await asyncio.to_thread(
+        run_fetch_report,
+        session_id=sid,
+        report_type=normalized_type,
+        tickers=tickers,
+        years=years,
+        max_years=max_years,
+        on_step=on_step,
+    )
+    if isinstance(reporter, McpProgressReporter):
+        await reporter.flush()
+
+    return _tool_response(sid, result)
 
 
 @mcp.tool()

@@ -269,7 +269,9 @@ sudo systemctl restart financial-models-api financial-models-mcp
 
 ### Backend only on EC2 (no frontend)
 
-EC2 never needs `frontend/` — Render builds it. One-time:
+EC2 never needs `frontend/` — Render builds it. Sparse checkout also skips `devtools/` (MCP Inspector) and most `scripts/` — those are for local Mac dev only.
+
+One-time:
 
 ```bash
 bash ~/financial-models/deploy/aws/setup-sparse-checkout.sh

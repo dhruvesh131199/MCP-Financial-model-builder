@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from ingest.edgar_fetch import EdgarFetchError, fetch_edgar_statements
@@ -257,6 +258,18 @@ def fetch_sec_financials(
         raise ValueError(f"SEC fetch failed for {sym}: {exc}") from exc
 
 
+_STMT_LABELS = {
+    "income": "income statement",
+    "balance": "balance sheet",
+    "cashflow": "cash flow statement",
+}
+
+
+def _emit_step(on_step: Callable[[str], None] | None, message: str) -> None:
+    if on_step:
+        on_step(message)
+
+
 def fetch_and_cache_statements(
     session_id: str,
     *,
@@ -267,6 +280,7 @@ def fetch_and_cache_statements(
     include_annual: bool = True,
     include_quarterly: bool = False,
     statements: list[str] | None = None,
+    on_step: Callable[[str], None] | None = None,
 ) -> tuple[FinancialStatements, list[dict[str, Any]], bool, str, str]:
     """
     Fetch missing (period, statement) leaves into hierarchical cache; return materialized view.
@@ -280,6 +294,7 @@ def fetch_and_cache_statements(
 
     sym = resolved["ticker"]
     stmt_list = _normalize_statement_list(statements)
+    _emit_step(on_step, f"Resolving {sym} / checking cache gaps")
     gaps = compute_fetch_gaps(
         session_id,
         sym,
@@ -297,6 +312,8 @@ def fetch_and_cache_statements(
         dedup_key = build_ticker_dedup_key(sym)
         for stmt_type, stmt_gaps in grouped.items():
             had_fetch = True
+            label = _STMT_LABELS.get(stmt_type, stmt_type)
+            _emit_step(on_step, f"Fetching {sym} {label} from SEC")
             try:
                 partial = fetch_edgar_statements(
                     ticker=sym,
@@ -341,6 +358,8 @@ def fetch_and_cache_statements(
                 gaps_filled.append(
                     {"period_key": gap.period_key, "statement": gap.statement}
                 )
+    else:
+        _emit_step(on_step, f"Using cached statement data for {sym}")
 
     cached = materialize_financial_statements(
         session_id,
@@ -360,6 +379,7 @@ def fetch_and_cache_statements(
         cached = cached.model_copy(update={"ingest_source": cached.ingest_source or "cache"})
 
     file_entry = upsert_ticker_file_from_cache(session_id, sym)
+    _emit_step(on_step, f"Saved {sym} financials to Files")
     return cached, gaps_filled, had_fetch, file_entry["id"], file_entry["name"]
 
 

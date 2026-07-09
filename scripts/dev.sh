@@ -55,6 +55,7 @@ for i in {1..15}; do
     echo "All services running:"
     echo "  Dashboard  → http://localhost:5173"
     echo "  MCP        → http://localhost:8080/mcp"
+    echo "  MCP test   → ./scripts/inspect-mcp.sh  (Inspector UI; see devtools/mcp-inspector/)"
     echo "  API health → http://localhost:8000/health"
     echo ""
     echo "Logs: $LOG_DIR/{api,mcp,frontend}.log"

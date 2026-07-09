@@ -2,13 +2,54 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Literal
 
 from homework.rag_markitdown.fetch_annual import list_10k_fiscal_years
 from homework.rag_markitdown.resolve import resolve_or_ingest_sec
+from mcp.progress import (
+    plan_full_report_steps,
+    plan_just_financials_steps,
+)
 from services.sec_fetch_handler import handle_cached_sec_fetch
 
 ReportType = Literal["full_report", "just_financials"]
+
+
+def _emit_step(on_step: Callable[[str], None] | None, message: str) -> None:
+    if on_step:
+        on_step(message)
+
+
+def _estimate_filings_per_ticker(
+    *,
+    years: list[int] | None,
+    max_years: int,
+) -> int:
+    if years:
+        return len(years)
+    return max_years
+
+
+def plan_fetch_report_steps(
+    report_type: ReportType,
+    *,
+    ticker_count: int,
+    years: list[int] | None = None,
+    max_years: int = 1,
+) -> int:
+    if report_type == "just_financials":
+        return plan_just_financials_steps(ticker_count)
+
+    filings_per_ticker = [
+        _estimate_filings_per_ticker(years=years, max_years=max_years)
+        for _ in range(max(1, ticker_count))
+    ]
+    return plan_full_report_steps(
+        ticker_count,
+        filings_per_ticker=filings_per_ticker,
+        needs_year_listing=years is None,
+    )
 
 
 def run_fetch_report(
@@ -18,6 +59,7 @@ def run_fetch_report(
     tickers: list[str],
     years: list[int] | None = None,
     max_years: int = 1,
+    on_step: Callable[[str], None] | None = None,
 ) -> dict:
     if report_type not in ("full_report", "just_financials"):
         return {
@@ -38,6 +80,7 @@ def run_fetch_report(
 
     for ticker in clean_tickers:
         if report_type == "just_financials":
+            _emit_step(on_step, f"Starting structured SEC fetch for {ticker}")
             result = handle_cached_sec_fetch(
                 session_id,
                 company_name=None,
@@ -47,6 +90,7 @@ def run_fetch_report(
                 include_annual=True,
                 include_quarterly=False,
                 statements=["income", "balance", "cashflow"],
+                on_step=on_step,
             )
             if "error" in result:
                 errors.append(f"{ticker}: {result['error']}")
@@ -61,9 +105,9 @@ def run_fetch_report(
                     }
                 )
         else:
-            # full_report (RAG)
             target_years = years
             if not target_years:
+                _emit_step(on_step, f"Listing 10-K fiscal years for {ticker}")
                 try:
                     target_years = list_10k_fiscal_years(ticker, clamped_max_years)
                 except Exception as exc:
@@ -82,6 +126,7 @@ def run_fetch_report(
                         session_id=session_id,
                         ticker=ticker,
                         fiscal_year=year,
+                        on_step=on_step,
                     )
                     if not resolved.success:
                         errors.append(f"{ticker} FY{year}: {resolved.error}")
@@ -117,7 +162,7 @@ def run_fetch_report(
 
     success_count = sum(1 for r in results if r["success"])
     total_count = len(results)
-    
+
     return {
         "success": len(errors) == 0 and success_count > 0,
         "report_type": report_type,

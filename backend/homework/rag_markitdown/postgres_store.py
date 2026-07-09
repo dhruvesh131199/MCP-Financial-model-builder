@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 
 from homework.rag_markitdown.db import get_database_url, schema_is_ready
 from homework.rag_markitdown.postgres_embed import embed_document
@@ -20,11 +21,20 @@ class PostgresVectorStore:
         if not self._url:
             raise ValueError("DATABASE_URL is required for PostgresVectorStore")
 
-    def ingest(self, result: IngestResult) -> None:
+    def ingest(
+        self,
+        result: IngestResult,
+        *,
+        on_step: Callable[[str], None] | None = None,
+    ) -> None:
         plan = result.chunk_plan
         if plan is None or not plan.parent_chunks:
             logger.info("postgres_store: skip empty chunk_plan document_id=%s", result.document_id)
             return
+
+        label = f"{plan.ticker} FY{plan.year}"
+        if on_step:
+            on_step(f"Writing {label} chunks to database")
 
         import psycopg
 
@@ -36,7 +46,14 @@ class PostgresVectorStore:
             with conn.transaction():
                 self._upsert_filing(conn, result)
 
-        stats = embed_document(result.document_id, database_url=self._url)
+        stats = embed_document(
+            result.document_id,
+            database_url=self._url,
+            on_step=on_step,
+            filing_label=label,
+        )
+        if on_step:
+            on_step(f"Added {label} to database")
         logger.info(
             "postgres_store: document_id=%s %s_%s_%s parents=%s subchunks=%s embedded=%s",
             result.document_id,

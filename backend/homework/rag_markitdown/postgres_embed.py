@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -50,7 +51,13 @@ def count_unembedded(document_id: str, *, database_url: str | None = None) -> in
             return int(row[0] or 0) if row else 0
 
 
-def embed_document(document_id: str, *, database_url: str | None = None) -> EmbedStats:
+def embed_document(
+    document_id: str,
+    *,
+    database_url: str | None = None,
+    on_step: Callable[[str], None] | None = None,
+    filing_label: str | None = None,
+) -> EmbedStats:
     url = database_url or get_database_url()
     if not url:
         raise ValueError("DATABASE_URL is required for embed_document")
@@ -83,9 +90,16 @@ def embed_document(document_id: str, *, database_url: str | None = None) -> Embe
 
         embedded_total = 0
         now = datetime.now(timezone.utc)
+        total_batches = (len(rows) + EMBED_BATCH_SIZE - 1) // EMBED_BATCH_SIZE
+        scope = filing_label or document_id
 
-        for batch_start in range(0, len(rows), EMBED_BATCH_SIZE):
+        for batch_index, batch_start in enumerate(range(0, len(rows), EMBED_BATCH_SIZE), start=1):
             batch = rows[batch_start : batch_start + EMBED_BATCH_SIZE]
+            if on_step:
+                on_step(
+                    f"Embedding {scope} sub-chunks "
+                    f"(batch {batch_index}/{total_batches})"
+                )
             ids = [r[0] for r in batch]
             texts = [r[1] for r in batch]
             vectors = embed_texts(texts, model_id=model_id)
