@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { fetchSessionWorkspace, markSessionGuideSeen, deleteSessionFile, deleteSessionModel, API_BASE } from "../api";
+import { fetchSessionWorkspace, deleteSessionFile, deleteSessionModel, API_BASE } from "../api";
 import DashboardPanel from "../components/DashboardPanel";
-import SessionGuideModal, { SessionGuideButton, SetupMcpLink } from "../components/SessionGuideModal";
+import { SetupMcpLink } from "../components/SessionGuideModal";
+import ToolGuideModal, { ToolGuideButton } from "../components/ToolGuideModal";
 import SessionIdCopy from "../components/SessionIdCopy";
 import type { DashboardSelection, FileEntry, ModelEntry, FinancialsFetchLogEntry, RagDocumentEntry } from "../types";
 import {
@@ -21,20 +22,20 @@ export default function SessionPage() {
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const [guideOpen, setGuideOpen] = useState(false);
+  const [toolGuideOpen, setToolGuideOpen] = useState(false);
   const modelCountRef = useRef(0);
   const fileCountRef = useRef(0);
   const analysisSnapshotRef = useRef<Map<string, string>>(new Map());
+  const ragDisplayIdsRef = useRef<Set<string>>(new Set());
   const selectionRef = useRef(selection);
   const initialSyncDoneRef = useRef(false);
-  const guideCheckedRef = useRef(false);
 
   useEffect(() => {
     selectionRef.current = selection;
   }, [selection]);
 
   const selectAndPulse = useCallback(
-    (kind: "file" | "model" | "analysis", id: string) => {
+    (kind: "file" | "model" | "analysis" | "rag_result", id: string) => {
       setSelection({ kind, id });
       setPulseId(id);
       window.setTimeout(() => setPulseId(null), 3200);
@@ -56,13 +57,6 @@ export default function SessionPage() {
         setError(null);
         setNotFound(!workspace.exists);
 
-        if (workspace.exists && !guideCheckedRef.current) {
-          guideCheckedRef.current = true;
-          if (workspace.guide_seen === false) {
-            setGuideOpen(true);
-          }
-        }
-
         if (workspace.updated_at !== lastUpdated) {
           lastUpdated = workspace.updated_at;
           const prevModelCount = modelCountRef.current;
@@ -77,12 +71,16 @@ export default function SessionPage() {
             setRagDocuments(workspace.rag_documents ?? []);
             setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
             for (const model of workspace.models) {
-              if (model.type !== "detailed_analysis") continue;
-              const ts =
-                ("updated_at" in model && model.updated_at) ||
-                model.created_at ||
-                "";
-              analysisSnapshotRef.current.set(model.id, ts);
+              if (model.type === "detailed_analysis") {
+                const ts =
+                  ("updated_at" in model && model.updated_at) ||
+                  model.created_at ||
+                  "";
+                analysisSnapshotRef.current.set(model.id, ts);
+              }
+              if (model.type === "rag_display") {
+                ragDisplayIdsRef.current.add(model.id);
+              }
             }
             return;
           }
@@ -95,24 +93,32 @@ export default function SessionPage() {
           setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
 
           let analysisToSelect: ModelEntry | undefined;
+          let ragResultToSelect: ModelEntry | undefined;
           for (const model of workspace.models) {
-            if (model.type !== "detailed_analysis") continue;
-            const ts =
-              ("updated_at" in model && model.updated_at) ||
-              model.created_at ||
-              "";
-            const prev = analysisSnapshotRef.current.get(model.id);
-            const isNew =
-              prev === undefined && workspace.models.length > prevModelCount;
-            const isUpdated = prev !== undefined && prev !== ts;
-            if (isNew || isUpdated) {
-              analysisToSelect = model;
+            if (model.type === "detailed_analysis") {
+              const ts =
+                ("updated_at" in model && model.updated_at) ||
+                model.created_at ||
+                "";
+              const prev = analysisSnapshotRef.current.get(model.id);
+              const isNew =
+                prev === undefined && workspace.models.length > prevModelCount;
+              const isUpdated = prev !== undefined && prev !== ts;
+              if (isNew || isUpdated) {
+                analysisToSelect = model;
+              }
+              analysisSnapshotRef.current.set(model.id, ts);
             }
-            analysisSnapshotRef.current.set(model.id, ts);
+            if (model.type === "rag_display" && !ragDisplayIdsRef.current.has(model.id)) {
+              ragResultToSelect = model;
+              ragDisplayIdsRef.current.add(model.id);
+            }
           }
 
           if (analysisToSelect) {
             selectAndPulse("analysis", analysisToSelect.id);
+          } else if (ragResultToSelect) {
+            selectAndPulse("rag_result", ragResultToSelect.id);
           } else if (
             workspace.models.length > prevModelCount &&
             workspace.models.length > 0
@@ -177,25 +183,20 @@ export default function SessionPage() {
       if (!sessionId) return;
       await deleteSessionModel(sessionId, modelId);
       setSelection((current) =>
-        current.kind === "model" && current.id === modelId ? { kind: "none" } : current,
+        current.kind === "model" && current.id === modelId
+          ? { kind: "none" }
+          : current.kind === "rag_result" && current.id === modelId
+            ? { kind: "none" }
+            : current,
       );
       await refreshWorkspace();
     },
     [sessionId, refreshWorkspace],
   );
 
-  const dismissGuide = useCallback(() => {
-    setGuideOpen(false);
-    if (sessionId) {
-      void markSessionGuideSeen(sessionId).catch(() => {
-        /* best-effort; user can reopen via button */
-      });
-    }
-  }, [sessionId]);
-
   return (
     <div className="flex h-screen flex-col">
-      <SessionGuideModal open={guideOpen} onClose={dismissGuide} />
+      <ToolGuideModal open={toolGuideOpen} onClose={() => setToolGuideOpen(false)} />
 
       <header className="shrink-0 border-b border-[var(--border-soft)] bg-white px-4 py-3">
         <div className="flex items-center justify-between gap-4">
@@ -210,7 +211,7 @@ export default function SessionPage() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <SetupMcpLink />
-            <SessionGuideButton onClick={() => setGuideOpen(true)} />
+            <ToolGuideButton onClick={() => setToolGuideOpen(true)} />
           </div>
         </div>
       </header>

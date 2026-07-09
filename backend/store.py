@@ -361,6 +361,54 @@ def save_detailed_analysis_model(session_id: str, payload: dict) -> dict:
     return entry
 
 
+RAG_DISPLAY_NAME_MAX_LEN = 80
+RAG_DISPLAY_CONTENT_MAX_BYTES = 256 * 1024
+
+
+def save_rag_display_model(
+    session_id: str,
+    *,
+    name: str,
+    content_md: str,
+) -> dict:
+    """Persist a host-authored markdown RAG answer for dashboard display."""
+    session_dir = _session_dir(session_id)
+    if not session_dir.is_dir():
+        raise KeyError("Session not found")
+
+    display_name = name.strip()
+    if not display_name:
+        raise ValueError("name is required")
+    if len(display_name) > RAG_DISPLAY_NAME_MAX_LEN:
+        display_name = display_name[:RAG_DISPLAY_NAME_MAX_LEN].rstrip()
+
+    body = content_md.strip()
+    if not body:
+        raise ValueError("content is required")
+    if len(body.encode("utf-8")) > RAG_DISPLAY_CONTENT_MAX_BYTES:
+        raise ValueError(
+            f"content exceeds maximum size ({RAG_DISPLAY_CONTENT_MAX_BYTES // 1024} KB)"
+        )
+
+    models_dir = session_dir / "models"
+    models_dir.mkdir(exist_ok=True)
+    _migrate_legacy_model(session_dir)
+
+    existing_names = [m["name"] for m in _load_model_entries(session_dir)]
+    display_name = _dedupe_display_name(display_name, existing_names)
+
+    model_id = str(uuid.uuid4())
+    entry = {
+        "id": model_id,
+        "name": display_name,
+        "type": "rag_display",
+        "created_at": _utc_now(),
+        "data": {"content_md": body},
+    }
+    (models_dir / f"{model_id}.json").write_text(json.dumps(entry, indent=2), encoding="utf-8")
+    return entry
+
+
 def _load_model_entries(session_dir: Path) -> list[dict]:
     models_dir = session_dir / "models"
     if not models_dir.exists():

@@ -50,6 +50,23 @@ describe("sessionAutoSelect", () => {
     });
   });
 
+  it("does not auto-select rag_display as a model", () => {
+    const latest = {
+      id: "rag-1",
+      name: "AAPL metrics",
+      type: "rag_display",
+      created_at: "2026-01-01",
+      data: { content_md: "# Hi" },
+    } as unknown as ModelEntry;
+    expect(resolveNewModelAutoSelect(latest, { kind: "none" })).toBeNull();
+  });
+
+  it("clears orphan rag_result selection when entry deleted", () => {
+    expect(
+      resolveOrphanModelSelection({ kind: "rag_result", id: "missing" }, [], []),
+    ).toEqual({ kind: "none" });
+  });
+
   it("redirects hidden twin selection to draft", () => {
     const models = [
       {

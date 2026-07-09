@@ -70,6 +70,7 @@ from pydantic import Field
 from services.comparative import run_comparative_analysis_from_mcp
 from services.dcf_service import create_dcf_draft
 from services.detailed_analysis_service import run_detailed_analysis_for_session
+from services.rag_display_service import pin_rag_display
 from services.sec_client import resolve_ticker as sec_resolve_ticker
 from session_resolve import (
     SESSION_ID_PARAM_DESC,
@@ -106,7 +107,7 @@ Then:
 
 Rules:
 - Every tool returns `session_id` at the top level. Extract it from JSON — do not rely on chat memory alone.
-- NEVER omit `session_id` on fetch_report, create_dcf_model, run_detailed_analysis, run_comparative_analysis, query_rag, or resolve_ticker.
+- NEVER omit `session_id` on fetch_report, create_dcf_model, run_detailed_analysis, run_comparative_analysis, query_rag, rag_res_on_display, or resolve_ticker.
 - Other tools return session_required / session_not_found errors if session_id is missing or invalid — ask the user, do not retry blindly.
 </session_management>
 
@@ -142,6 +143,7 @@ If the user asks a question that needs **10-K narrative evidence** (risks, MD&A,
 - After each retrieve, **read `new_parent.content`**. If you need more information OR the parent refers to another part of the filing ("see Item 7", "Note 12"), call retrieve again with a **new query**.
 - When satisfied, `query_rag(mode="finalize")` → answer from `combined_context` and append **Sources:** line from `citations`.
 - `query_rag(mode="reset")` clears state for a new question.
+- After finalize, ask: "Pin this answer to your dashboard for reference?" If yes → `rag_res_on_display(name="<short sidebar label>", content="<markdown with headings, tables, Sources>")`.
 </tool_routing>
 
 <rag_loop_engineering>
@@ -573,6 +575,55 @@ def query_rag(
         top_k=top_k,
     )
     return _tool_response(sid, result)
+
+
+@mcp.tool()
+def rag_res_on_display(
+    name: str,
+    content: str,
+    session_id: SessionId = None,
+) -> dict:
+    """
+    Pin a host-authored RAG answer on the dashboard for reference.
+
+    Use after `query_rag(mode="finalize")` when the user wants a durable sidebar reference
+    (metric tables, DCF inputs from 10-K, risk summaries, etc.).
+
+    WORKFLOW:
+    1. Answer the user in chat from query_rag finalize + citations.
+    2. Ask: "Pin this answer to your dashboard for reference?"
+    3. If yes, call with a short `name` (sidebar chip) and full `content` as markdown.
+
+    CONTENT (markdown):
+    - Use headings, bullet lists, and GFM tables where helpful.
+    - End with a **Sources:** line from query_rag citations.
+    - Do not pass raw chunk dumps — write a clean reference document.
+
+    PARAMETERS:
+    - name: short sidebar label (≤80 chars; truncated in UI, full text on hover)
+    - content: full markdown body
+    - session_id: REQUIRED — from prior tool response or user-pasted dashboard id
+    """
+    session_result = _require_session_or_error(session_id)
+    if isinstance(session_result, dict):
+        return session_result
+    sid = session_result
+    _touch_session_writes()
+
+    result = pin_rag_display(sid, name=name, content=content)
+    if "error" in result:
+        return _tool_response(sid, result)
+
+    url = _view_url(sid)
+    return _tool_response(
+        sid,
+        {
+            **result,
+            "message": (
+                f"{result['message']} Open {url} → RAG Results sidebar."
+            ),
+        },
+    )
 
 
 if __name__ == "__main__":

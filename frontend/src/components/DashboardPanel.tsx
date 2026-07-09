@@ -6,6 +6,7 @@ import type {
   FileEntry,
   FinancialsFetchLogEntry,
   ModelEntry,
+  RagDisplayModelEntry,
   RagDocumentEntry,
 } from "../types";
 import { exportComparativeToExcel } from "../utils/exportComparativeExcel";
@@ -18,6 +19,7 @@ import DetailedAnalysisViewer from "./DetailedAnalysisViewer";
 import FileViewer from "./FileViewer";
 import FetchFinancialsHubPanel from "./FetchFinancialsHubPanel";
 import ModelsHubPanel from "./ModelsHubPanel";
+import RagDisplayViewer from "./RagDisplayViewer";
 import RagHubPanel from "./RagHubPanel";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { resolveOrphanModelSelection } from "../lib/sessionAutoSelect";
@@ -89,7 +91,8 @@ export default function DashboardPanel({
         effectiveSelection.kind === "models_hub" ||
         ((effectiveSelection.kind === "file" ||
           effectiveSelection.kind === "model" ||
-          effectiveSelection.kind === "analysis") &&
+          effectiveSelection.kind === "analysis" ||
+          effectiveSelection.kind === "rag_result") &&
           selection.kind === effectiveSelection.kind &&
           effectiveSelection.id === selection.id));
     if (unchanged) return;
@@ -101,6 +104,11 @@ export default function DashboardPanel({
       models.filter(
         (m): m is DetailedAnalysisModelEntry => m.type === "detailed_analysis",
       ),
+    [models],
+  );
+
+  const ragResults = useMemo(
+    () => models.filter((m): m is RagDisplayModelEntry => m.type === "rag_display"),
     [models],
   );
 
@@ -122,6 +130,11 @@ export default function DashboardPanel({
   const activeAnalysis =
     effectiveSelection.kind === "analysis"
       ? displayAnalyses.find((m) => m.id === effectiveSelection.id)
+      : undefined;
+
+  const activeRagResult =
+    effectiveSelection.kind === "rag_result"
+      ? ragResults.find((m) => m.id === effectiveSelection.id)
       : undefined;
 
   const showRagHub = effectiveSelection.kind === "rag_hub";
@@ -214,6 +227,7 @@ export default function DashboardPanel({
               <SidebarItem
                 key={entry.id}
                 label={entry.data.ticker}
+                title={entry.data.ticker}
                 active={
                   effectiveSelection.kind === "analysis" && effectiveSelection.id === entry.id
                 }
@@ -223,6 +237,14 @@ export default function DashboardPanel({
             ))
           )}
         </SidebarSection>
+
+        <RagResultsSidebarSection
+          results={ragResults}
+          activeId={effectiveSelection.kind === "rag_result" ? effectiveSelection.id : null}
+          pulseId={pulseId}
+          onSelect={(id) => onSelect({ kind: "rag_result", id })}
+          onDelete={onDeleteModel}
+        />
 
         <RagSidebarSection
           hubActive={effectiveSelection.kind === "rag_hub"}
@@ -282,6 +304,10 @@ export default function DashboardPanel({
               <ComparativeTable report={activeModel.data} />
             </div>
           </>
+        ) : activeRagResult ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <RagDisplayViewer entry={activeRagResult} />
+          </div>
         ) : activeAnalysis ? (
           <div className="min-h-0 flex-1 overflow-hidden">
             <DetailedAnalysisViewer analysis={activeAnalysis.data} />
@@ -307,10 +333,10 @@ export default function DashboardPanel({
           </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-gray-500">
-            <p>Select a file, model, or analysis from the sidebar.</p>
+            <p>Select a file, model, analysis, or RAG result from the sidebar.</p>
             <p className="text-xs text-gray-400">
               Use <span className="font-medium">Fetch Financials</span> for structured SEC tables,
-              or the RAG section for full 10-K documents.
+              RAG Results for pinned chat answers, or the RAG section for full 10-K documents.
             </p>
           </div>
         )}
@@ -535,6 +561,40 @@ function RagSidebarSection({
   );
 }
 
+function RagResultsSidebarSection({
+  results,
+  activeId,
+  pulseId,
+  onSelect,
+  onDelete,
+}: {
+  results: RagDisplayModelEntry[];
+  activeId: string | null;
+  pulseId: string | null;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void | Promise<void>;
+}) {
+  return (
+    <SidebarSection title="RAG Results">
+      {results.length === 0 ? (
+        <EmptyHint text="Pinned chat answers appear here" />
+      ) : (
+        results.map((entry) => (
+          <SidebarItem
+            key={entry.id}
+            label={entry.name}
+            title={entry.name}
+            active={activeId === entry.id}
+            pulse={pulseId === entry.id}
+            onClick={() => onSelect(entry.id)}
+            onDelete={() => void onDelete(entry.id)}
+          />
+        ))
+      )}
+    </SidebarSection>
+  );
+}
+
 function SidebarSection({
   title,
   children,
@@ -554,12 +614,14 @@ function SidebarSection({
 
 function SidebarItem({
   label,
+  title,
   active,
   pulse,
   onClick,
   onDelete,
 }: {
   label: string;
+  title?: string;
   active: boolean;
   pulse: boolean;
   onClick: () => void;
@@ -574,6 +636,7 @@ function SidebarItem({
       <button
         type="button"
         onClick={onClick}
+        title={title ?? label}
         className={`min-w-0 flex-1 truncate px-2 py-1.5 text-left text-xs ${
           active ? "font-medium text-indigo-900" : "text-gray-700"
         }`}

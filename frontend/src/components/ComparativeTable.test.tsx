@@ -42,7 +42,15 @@ describe("ComparativeTable", () => {
     expect(screen.getByText("Target")).toBeTruthy();
     expect(screen.getByText("Peer median P/E")).toBeTruthy();
     expect(screen.getByText("Market data unavailable")).toBeTruthy();
-    expect(screen.getByText(/PEP/)).toBeTruthy();
+    expect(screen.getAllByText(/PEP/).length).toBeGreaterThan(0);
+  });
+
+  it("shows SEC warning and host LLM prompt with tickers", () => {
+    render(<ComparativeTable report={sampleReport} />);
+    expect(screen.getByText(/SEC data — mapping may be inaccurate/)).toBeTruthy();
+    expect(screen.getByText(/Ask your host LLM/)).toBeTruthy();
+    expect(screen.getByText(/KO and PEP/)).toBeTruthy();
+    expect(screen.getByText(/rag_res_on_display/)).toBeTruthy();
   });
 
   it("shows dash for null Tier B multiples", () => {

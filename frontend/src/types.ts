@@ -306,11 +306,24 @@ export interface ComparativeModelEntry {
   data: ComparativeReport;
 }
 
+export interface RagDisplayData {
+  content_md: string;
+}
+
+export interface RagDisplayModelEntry {
+  id: string;
+  name: string;
+  type: "rag_display";
+  created_at: string;
+  data: RagDisplayData;
+}
+
 export type ModelEntry =
   | DcfModelEntry
   | DcfDraftModelEntry
   | ComparativeModelEntry
-  | DetailedAnalysisModelEntry;
+  | DetailedAnalysisModelEntry
+  | RagDisplayModelEntry;
 
 export interface DcfDraftSummary {
   model_id: string;
@@ -386,6 +399,7 @@ export type DashboardSelection =
   | { kind: "file"; id: string }
   | { kind: "model"; id: string }
   | { kind: "analysis"; id: string }
+  | { kind: "rag_result"; id: string }
   | { kind: "financials_hub" }
   | { kind: "rag_hub" }
   | { kind: "models_hub" };

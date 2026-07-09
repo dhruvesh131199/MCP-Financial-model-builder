@@ -75,8 +75,16 @@ interface ComparativeTableProps {
   report: ComparativeReport;
 }
 
+function formatTickerList(tickers: string[]): string {
+  if (tickers.length === 0) return "these companies";
+  if (tickers.length === 1) return tickers[0];
+  if (tickers.length === 2) return `${tickers[0]} and ${tickers[1]}`;
+  return `${tickers.slice(0, -1).join(", ")}, and ${tickers[tickers.length - 1]}`;
+}
+
 export default function ComparativeTable({ report }: ComparativeTableProps) {
   const companies = report.companies;
+  const tickers = companies.map((c) => c.ticker);
   const priceAsOf = companies.find((c) => c.market_data.as_of)?.market_data.as_of;
 
   let lastSection: string | null = null;
@@ -123,6 +131,24 @@ export default function ComparativeTable({ report }: ComparativeTableProps) {
 
   return (
     <div className="flex h-full flex-col overflow-auto p-4">
+      <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50/90 px-4 py-3 text-sm text-amber-950">
+        <p className="font-medium">SEC data — mapping may be inaccurate</p>
+        <p className="mt-1 text-xs leading-relaxed text-amber-900/90">
+          These figures were pulled from SEC filings via edgar tools and automatic
+          line-item mapping. Tags and labels vary by filer, so amounts here can be
+          wrong or incomplete. For higher confidence, connect this workspace to MCP
+          and let your host LLM read the official 10-K narrative.
+        </p>
+        <p className="mt-3 text-xs font-medium text-amber-950">Ask your host LLM</p>
+        <blockquote className="mt-1 rounded-md border border-amber-200/80 bg-white/70 px-3 py-2 text-xs leading-relaxed text-gray-700">
+          For {formatTickerList(tickers)}: fetch the latest full 10-K for each company. Use{" "}
+          <code className="rounded bg-amber-100/80 px-1 text-[11px]">query_rag</code> to pull the
+          metrics in this comparison — revenue, net income, margins, revenue growth, ROE, FCF, and
+          valuation multiples — then pin a side-by-side table on my dashboard with{" "}
+          <code className="rounded bg-amber-100/80 px-1 text-[11px]">rag_res_on_display</code>.
+        </blockquote>
+      </div>
+
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-gray-900">Peer comparison</h2>
         <p className="text-sm text-gray-500">

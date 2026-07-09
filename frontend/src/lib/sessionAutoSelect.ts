@@ -11,6 +11,9 @@ export function resolveNewModelAutoSelect(
   latest: ModelEntry,
   selection: DashboardSelection,
 ): { kind: "model"; id: string } | null {
+  if (latest.type === "detailed_analysis" || latest.type === "rag_display") {
+    return null;
+  }
   const twinDraftId = dcfTwinDraftId(latest);
   if (twinDraftId) {
     if (selection.kind === "model" && selection.id === twinDraftId) {
@@ -27,6 +30,11 @@ export function resolveOrphanModelSelection(
   sidebarModelIds: readonly string[],
   models: ModelEntry[],
 ): DashboardSelection {
+  if (selection.kind === "rag_result") {
+    const exists = models.some((m) => m.type === "rag_display" && m.id === selection.id);
+    return exists ? selection : { kind: "none" };
+  }
+
   if (selection.kind !== "model") return selection;
   if (sidebarModelIds.includes(selection.id)) return selection;
 

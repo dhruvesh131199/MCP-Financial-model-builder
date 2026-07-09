@@ -31,4 +31,5 @@ export const MCP_SAMPLE_TOOLS = [
   "fetch_report",
   "create_dcf_model",
   "run_comparative_analysis",
+  "rag_res_on_display",
 ] as const;

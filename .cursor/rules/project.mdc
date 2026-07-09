@@ -31,6 +31,12 @@ alwaysApply: true
 
 Hub panel form UX (validation, red borders, chip labels, tickers-only comparative) is documented in [dashboard-forms.mdc](dashboard-forms.mdc). Follow it when changing Models hub, Fetch Financials hub, or `ChipInput`.
 
+## MCP Tool Guide popup (dashboard)
+
+The workspace header **Tools guide** button opens a modal backed by [frontend/src/config/mcpToolGuide.ts](frontend/src/config/mcpToolGuide.ts).
+
+**When you add a new MCP tool or change an existing tool's behavior/routing**, update `mcpToolGuide.ts` in the same PR (tool name, plain-language summary, 1–2 example prompts that mention the tool name). Keep [backend/mcp/server.py](backend/mcp/server.py) INSTRUCTIONS in sync for host routing.
+
 ## MCP tool routing (host)
 
 - **Session:** before first tool, ask user for existing session id or create new via `start_session`. Pass `session_id` on every subsequent call. Other tools error if omitted.

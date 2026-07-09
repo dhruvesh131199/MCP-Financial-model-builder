@@ -43,7 +43,9 @@ export default function DcfReferencePanel({ reference }: DcfReferencePanelProps)
           <code className="rounded bg-amber-100/80 px-1 text-[11px]">query_rag</code> to
           pull Revenue, EBITDA, total depreciation and amortization, EBIT, tax rate,
           CapEx, and change in net working capital (accounts receivable + inventory −
-          accounts payable). Create a reference table of these figures for me.
+          accounts payable). Create a reference table of these figures for me, then pin
+          the result on my dashboard using{" "}
+          <code className="rounded bg-amber-100/80 px-1 text-[11px]">rag_res_on_display</code>.
         </blockquote>
       </div>
 
