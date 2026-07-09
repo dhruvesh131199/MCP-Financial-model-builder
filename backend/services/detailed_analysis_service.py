@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homework.detailed_analysis.schema import snapshot_to_dict
+from helper.analysis.schema import snapshot_to_dict
 from ingest.detailed_extract import build_detailed_snapshot_from_financials
 from services.sec_financials import fetch_and_cache_statements, materialize_ticker_file_view
 from services.statements_store import compute_fetch_gaps, get_cached_periods_summary

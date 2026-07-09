@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from homework.rag_markitdown.schema import FilingMeta
+from helper.rag.schema import FilingMeta
 
 ALLOWED_DOCTYPES = frozenset({"10K"})
 

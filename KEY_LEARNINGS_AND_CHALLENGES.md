@@ -37,7 +37,7 @@ This is a **fresh MCP-first rewrite** of ideas proven in `AI assisted Financial 
 
 ## Detailed Analysis v1.1 — extraction logic (interview reference)
 
-Homework + dashboard panel: `backend/ingest/detailed_extract.py`, `DetailedAnalysisPanel`, `homework/detailed_analysis/`.  
+Homework + dashboard panel: `backend/ingest/detailed_extract.py`, `DetailedAnalysisPanel`, `helper/analysis/schema.py`.  
 Rules also in `backend/ingest/SEC_NORMALIZE_RULES.md`.
 
 ### Architecture: two phases
@@ -237,6 +237,7 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-07-09 | Refactor | Homework → `backend/helper/` migration: RAG (`helper/rag/`), Postgres (`helper/postgres/`), analysis schema (`helper/analysis/`); main project + tests import `helper.*` only; homework emptied of production code; new `helper-layout.mdc` rule. |
 | 2026-07-08 | Feature + UX | Dashboard MCP Tool guide popup (`mcpToolGuide.ts` + header button between Set up MCP and Try these in chat); disabled auto-open of Try these in chat on new sessions. Rule: update tool guide when MCP tools change. |
 | 2026-07-08 | Feature | RAG Results on dashboard: MCP tool `rag_res_on_display(name, content)` pins host-authored markdown to session as `rag_display` model; new RAG Results sidebar section with chip hover title, markdown viewer (GFM tables), delete, and auto-select on pin after `query_rag` finalize. |
 | 2026-07-08 | UX + Fix | Negative inputs across all DCF template fields: `PercentInput`/`NumberInput` use local text state (parse on blur) so `-` is typable, and switched `inputMode` to `text` so the minus key shows on mobile keyboards. Rate fields (WACC, terminal growth, per-year growth/margin/D&A/tax/capex/NWC) and net debt now flow negatives to the backend unchanged; only hard guards kept are `base_revenue > 0`, `shares > 0`, and `WACC > terminal_growth` (Gordon denominator). Added negative-value tests on both engine and preview. |

@@ -1,5 +1,5 @@
--- Homework RAG: local Postgres / Aurora pgvector schema
--- Run once: psql "$DATABASE_URL" -f homework/rag_markitdown/migrations/001_init.sql
+-- RAG: local Postgres / Aurora pgvector schema
+-- Run once: psql "$DATABASE_URL" -f helper/postgres/migrations/001_init.sql
 
 CREATE EXTENSION IF NOT EXISTS vector;
 

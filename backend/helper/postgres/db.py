@@ -65,7 +65,7 @@ def run_migrations(database_url: str | None = None) -> None:
 def main(argv: list[str] | None = None) -> int:
     args = argv if argv is not None else sys.argv[1:]
     if args and args[0] not in {"migrate", "check"}:
-        print("Usage: python -m homework.rag_markitdown.db migrate", file=sys.stderr)
+        print("Usage: python -m helper.postgres.db migrate", file=sys.stderr)
         return 1
     cmd = args[0] if args else "migrate"
     if cmd == "migrate":

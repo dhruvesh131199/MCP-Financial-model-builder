@@ -1,2 +1,0 @@
-# Homework-only extras (production deps are in requirements.txt)
-# pip install -r requirements-homework-rag.txt  # optional; same as main RAG lines

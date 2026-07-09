@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 import uuid
 
-from homework.rag_markitdown.db import get_database_url, schema_is_ready
-from homework.rag_markitdown.postgres_embed import embed_document
-from homework.rag_markitdown.schema import IngestResult
+from helper.postgres.db import get_database_url, schema_is_ready
+from helper.postgres.postgres_embed import embed_document
+from helper.rag.schema import IngestResult
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class PostgresVectorStore:
         with psycopg.connect(self._url) as conn:
             if not schema_is_ready(conn):
                 raise RuntimeError(
-                    "RAG tables missing. Run: python -m homework.rag_markitdown.db migrate"
+                    "RAG tables missing. Run: python -m helper.postgres.db migrate"
                 )
             with conn.transaction():
                 self._upsert_filing(conn, result)

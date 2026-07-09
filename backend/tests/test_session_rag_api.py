@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 import store as store_module
 from api.main import app
-from homework.rag_markitdown.resolve import RagResolveResult
+from helper.rag.resolve import RagResolveResult
 from rag_session_store import upsert_rag_document
 
 client = TestClient(app)
@@ -19,7 +19,7 @@ client = TestClient(app)
 def isolated_store(tmp_path, monkeypatch):
     monkeypatch.setattr(store_module, "SESSIONS_DIR", tmp_path / "sessions")
     monkeypatch.setattr(store_module, "DATA_DIR", tmp_path)
-    import homework.rag_markitdown.storage as rag_storage
+    import helper.rag.storage as rag_storage
 
     monkeypatch.setattr(rag_storage, "DATA_DIR", tmp_path)
 

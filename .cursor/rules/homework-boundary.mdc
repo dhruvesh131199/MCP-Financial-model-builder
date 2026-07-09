@@ -1,0 +1,25 @@
+---
+description: Homework is sandbox only — main app must not import from backend/homework
+alwaysApply: true
+---
+
+# Homework boundary
+
+`backend/homework/` is **rough work only** — benchmarks, spikes, experiments, CLI probes. It is not part of the production app.
+
+## Rule
+
+- **Main project must not import from `homework/`** — no `from homework...` or `import homework...` in `mcp/`, `api/`, `services/`, `ingest/`, `engine/`, or `frontend/`.
+- **Production RAG/Postgres/analysis code lives in `helper/`** — see [helper-layout.mdc](helper-layout.mdc). When homework proves something worth shipping, move it into `helper/` (or `ingest/`/`services/` as appropriate), rewire imports, delete the homework copy.
+- **Homework must stay empty of production code** — no modules that MCP, REST, or dashboard depend on.
+- **Homework may import main or helper** — one-way dependency only.
+- **Dependencies:** all pip packages go in `backend/requirements.txt`; env vars in `backend/.env.example` ([requirements.mdc](requirements.mdc)). No split homework requirement or env files.
+- Homework-only entry points: `python -m homework.*`, scripts under `homework/`, and tests that target homework in isolation.
+
+## Examples
+
+| OK | Not OK |
+|----|--------|
+| `homework/benchmark_ingest.py` imports `helper.rag.pipeline` | `mcp/fetch_report.py` imports `homework.*` |
+| Promote embed async pattern into `helper/postgres/` after benchmark | `@mcp.tool` calling `homework.*` for production ingest |
+| Homework CLI compares sync vs async | Dashboard API route under `api/homework/` for strangers |

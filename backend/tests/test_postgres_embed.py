@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
-from homework.rag_markitdown.hf_embed import EXPECTED_DIMENSION
-from homework.rag_markitdown.postgres_embed import count_unembedded, embed_document
+from helper.postgres.hf_embed import EXPECTED_DIMENSION
+from helper.postgres.postgres_embed import count_unembedded, embed_document
 
 
 def _fake_vector(seed: float = 0.1) -> list[float]:
@@ -19,13 +19,13 @@ def _fake_vector(seed: float = 0.1) -> list[float]:
     not __import__("os").getenv("DATABASE_URL"),
     reason="DATABASE_URL not set",
 )
-@patch("homework.rag_markitdown.postgres_embed.embed_texts")
+@patch("helper.postgres.postgres_embed.embed_texts")
 def test_embed_document_batches_and_updates(mock_embed):
     import psycopg
 
-    from homework.rag_markitdown.db import get_database_url
-    from homework.rag_markitdown.postgres_store import PostgresVectorStore
-    from homework.rag_markitdown.schema import (
+    from helper.postgres.db import get_database_url
+    from helper.postgres.postgres_store import PostgresVectorStore
+    from helper.rag.schema import (
         ChunkPlan,
         DocumentSource,
         IngestResult,

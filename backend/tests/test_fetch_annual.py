@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from homework.rag_markitdown.fetch_annual import (
+from helper.rag.fetch_annual import (
     _filing_fiscal_year,
     _resolve_10k_filing,
     peek_latest_annual_filing_meta,
@@ -50,7 +50,7 @@ def test_resolve_10k_filing_missing_year_raises():
         _resolve_10k_filing(company, 2020)
 
 
-@patch("homework.rag_markitdown.fetch_annual.Company")
+@patch("helper.rag.fetch_annual.Company")
 def test_peek_with_fiscal_year(mock_company_cls):
     company = MagicMock()
     mock_company_cls.return_value = company

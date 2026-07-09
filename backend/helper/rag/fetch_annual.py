@@ -8,8 +8,8 @@ from typing import Any
 
 from edgar import Company
 
-from homework.rag_markitdown.chunk_ids import filing_year
-from homework.rag_markitdown.schema import FilingMeta, SourceFormat
+from helper.rag.chunk_ids import filing_year
+from helper.rag.schema import FilingMeta, SourceFormat
 from ingest.edgar_identity import ensure_edgar_identity
 
 

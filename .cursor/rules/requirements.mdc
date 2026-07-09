@@ -1,0 +1,23 @@
+---
+description: Single requirements.txt and .env.example — no split homework env files
+alwaysApply: true
+---
+
+# Dependencies and environment
+
+## Python packages
+
+- **One file:** `backend/requirements.txt` holds every Python dependency for production, tests, homework spikes, and helper code.
+- **No split requirement files** — do not add `requirements-homework*.txt`, `requirements-dev.txt`, or similar. Merge new packages into `requirements.txt` with a short comment if the group is non-obvious (e.g. `# RAG`).
+- **Homework / benchmarks:** when a spike needs a new pip package, add it to `requirements.txt` immediately — not a separate homework file.
+- **Install:** `pip install -r backend/requirements.txt` (see `scripts/dev.sh`, deploy scripts).
+
+## Environment variables
+
+- **One template:** `backend/.env.example` documents all env vars (production + optional RAG/HF/Postgres).
+- **No homework `.env` files** — if homework needs a new variable, add it to `.env.example` with a comment; developers copy to `backend/.env` locally.
+- Never commit secrets; `.env` stays gitignored.
+
+## Error messages
+
+When code raises `ImportError` for a missing package, point to `pip install -r requirements.txt` — not a homework-specific file.

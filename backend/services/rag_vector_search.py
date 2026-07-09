@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from homework.rag_markitdown.db import get_database_url, schema_is_ready
-from homework.rag_markitdown.hf_embed import vector_to_pg_literal
+from helper.postgres.db import get_database_url, schema_is_ready
+from helper.postgres.hf_embed import vector_to_pg_literal
 
 try:
     import psycopg
@@ -32,7 +32,7 @@ def _require_psycopg():
     if psycopg is None:
         raise ImportError(
             "psycopg is required for vector search. "
-            "pip install -r requirements-homework-rag.txt"
+            "pip install -r requirements.txt"
         )
     return psycopg
 
@@ -71,7 +71,7 @@ def search_sub_chunks_global(
     with pg.connect(url) as conn:
         if not schema_is_ready(conn):
             raise RuntimeError(
-                "RAG tables missing. Run: python -m homework.rag_markitdown.db migrate"
+                "RAG tables missing. Run: python -m helper.postgres.db migrate"
             )
         with conn.cursor() as cur:
             cur.execute(

@@ -5,9 +5,9 @@ from __future__ import annotations
 import math
 import uuid
 
-from homework.rag_markitdown.chunk_ids import DocumentFilingKey, parent_chunk_id
-from homework.rag_markitdown.schema import ChunkPlan, ParentChunk, SectionOutline, SubChunk
-from homework.rag_markitdown.section_analyze import approx_tokens
+from helper.rag.chunk_ids import DocumentFilingKey, parent_chunk_id
+from helper.rag.schema import ChunkPlan, ParentChunk, SectionOutline, SubChunk
+from helper.rag.section_analyze import approx_tokens
 
 PARENT_MAX_CHARS = 12_000
 PARENT_SPLIT_DIVISOR = 10_000

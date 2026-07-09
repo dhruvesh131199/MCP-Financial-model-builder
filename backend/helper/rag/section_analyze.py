@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from homework.rag_markitdown.schema import ItemSection, SectionOutline
+from helper.rag.schema import ItemSection, SectionOutline
 
 ITEM_LINE_RE = re.compile(
     r"^\s*(?:#+\s*)?(?:PART\s+[IVXLC]+\s*[-–—]?\s*)?"

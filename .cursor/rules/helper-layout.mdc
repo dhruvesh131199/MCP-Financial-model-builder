@@ -1,0 +1,28 @@
+---
+description: Promoted shared code lives under backend/helper — not homework
+alwaysApply: true
+---
+
+# Helper layout
+
+Promoted / shared non-engine code lives under `backend/helper/{rag,postgres,analysis,...}`.
+
+## Packages
+
+| Path | Purpose |
+|------|---------|
+| `helper/rag/` | 10-K ingest, chunking, section analysis, resolve/pipeline, session document storage |
+| `helper/postgres/` | DB connection, migrations, pgvector store/embed, HF rerank embeddings |
+| `helper/analysis/` | Detailed analysis presentation schemas (`snapshot_to_dict`, output models) |
+
+## Rules
+
+- **Main project imports `helper/`** — `mcp/`, `api/`, `services/`, `rag_query_state.py` use `from helper.rag...`, `helper.postgres...`, `helper.analysis...`.
+- **New helpers start here** (not in `homework/`) when used by MCP, REST, or services.
+- **Homework → helper migration:** `git mv` files into the right `helper/` package, rewire imports, delete the homework copy. No shims in homework.
+- **`engine/`** = pure financial math; **`ingest/`** = SEC normalization; **`helper/`** = RAG, Postgres, presentation schemas.
+- **Helper may import main** one-way (`store`, `rag_session_store`, `session_process_log`) — same as homework boundary.
+
+## Migrate CLI
+
+Postgres schema: `python -m helper.postgres.db migrate`

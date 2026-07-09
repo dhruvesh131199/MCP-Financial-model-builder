@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from engine.trend_analysis import build_trend_table, trend_to_dict
-from homework.detailed_analysis.schema import snapshot_to_dict
+from helper.analysis.schema import snapshot_to_dict
 from ingest.detailed_extract import build_detailed_snapshot_from_financials
 from services.sec_financials import materialize_ticker_file_view
 from store import find_detailed_analysis_by_ticker, save_detailed_analysis_model

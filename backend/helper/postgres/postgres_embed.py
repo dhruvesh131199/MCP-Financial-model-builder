@@ -7,8 +7,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from homework.rag_markitdown.db import get_database_url, schema_is_ready
-from homework.rag_markitdown.hf_embed import (
+from helper.postgres.db import get_database_url, schema_is_ready
+from helper.postgres.hf_embed import (
     EMBED_BATCH_SIZE,
     embed_texts,
     get_embed_model,
@@ -63,7 +63,7 @@ def embed_document(document_id: str, *, database_url: str | None = None) -> Embe
     with psycopg.connect(url) as conn:
         if not schema_is_ready(conn):
             raise RuntimeError(
-                "RAG tables missing. Run: python -m homework.rag_markitdown.db migrate"
+                "RAG tables missing. Run: python -m helper.postgres.db migrate"
             )
         with conn.cursor() as cur:
             cur.execute(

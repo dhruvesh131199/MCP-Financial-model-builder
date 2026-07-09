@@ -6,7 +6,7 @@ import logging
 import os
 from typing import Protocol
 
-from homework.rag_markitdown.schema import IngestResult
+from helper.rag.schema import IngestResult
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +38,7 @@ class NoOpVectorStore:
 def get_vector_store() -> VectorStore:
     """PostgresVectorStore if DATABASE_URL is set, else NoOp."""
     if os.environ.get("DATABASE_URL", "").strip():
-        from homework.rag_markitdown.postgres_store import PostgresVectorStore
+        from helper.postgres.postgres_store import PostgresVectorStore
 
         return PostgresVectorStore()
     return NoOpVectorStore()

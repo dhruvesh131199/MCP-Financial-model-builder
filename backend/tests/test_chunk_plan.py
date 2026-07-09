@@ -7,14 +7,14 @@ import uuid
 
 import pytest
 
-from homework.rag_markitdown.chunk_ids import (
+from helper.rag.chunk_ids import (
     DocumentFilingKey,
     filing_key_from_meta,
     filing_year,
     normalize_doctype,
     parent_chunk_id,
 )
-from homework.rag_markitdown.chunk_plan import (
+from helper.rag.chunk_plan import (
     PARENT_MAX_CHARS,
     PARENT_OVERLAP,
     PARENT_SPLIT_DIVISOR,
@@ -25,13 +25,13 @@ from homework.rag_markitdown.chunk_plan import (
     split_into_n_with_overlap,
     split_with_overlap,
 )
-from homework.rag_markitdown.schema import FilingMeta, ItemSection, SectionOutline
-from homework.rag_markitdown.section_analyze import analyze_sections
+from helper.rag.schema import FilingMeta, ItemSection, SectionOutline
+from helper.rag.section_analyze import analyze_sections
 
 ITEMS_FIXTURE = (
     __import__("pathlib").Path(__file__).resolve().parent.parent
-    / "homework"
-    / "rag_markitdown"
+    / "helper"
+    / "rag"
     / "tests"
     / "fixtures"
     / "sample_10k_items.md"

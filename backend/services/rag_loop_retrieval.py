@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from homework.rag_markitdown.hf_embed import embed_texts
+from helper.postgres.hf_embed import embed_texts
 from rag_query_state import (
     MAX_LOOPS,
     ParentChunkRecord,

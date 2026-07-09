@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-from homework.rag_markitdown.fetch_annual import list_10k_fiscal_years
-from homework.rag_markitdown.resolve import resolve_or_ingest_sec
+from helper.rag.fetch_annual import list_10k_fiscal_years
+from helper.rag.resolve import resolve_or_ingest_sec
 from services.sec_fetch_handler import handle_cached_sec_fetch
 
 ReportType = Literal["full_report", "just_financials"]

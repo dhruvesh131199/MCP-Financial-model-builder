@@ -10,10 +10,10 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel
 
-from homework.rag_markitdown.chunk_ids import ALLOWED_DOCTYPES
-from homework.rag_markitdown.postgres_read import load_chunk_plan_from_db
-from homework.rag_markitdown.resolve import resolve_or_ingest_sec, resolve_or_ingest_upload
-from homework.rag_markitdown.storage import (
+from helper.rag.chunk_ids import ALLOWED_DOCTYPES
+from helper.postgres.postgres_read import load_chunk_plan_from_db
+from helper.rag.resolve import resolve_or_ingest_sec, resolve_or_ingest_upload
+from helper.rag.storage import (
     ensure_session_document_dir,
     find_document_dir,
     load_meta,
@@ -64,7 +64,7 @@ def _load_chunks_for_document(session_id: str, document_id: str) -> dict:
         if chunks_path.is_file():
             return json.loads(chunks_path.read_text(encoding="utf-8"))
         meta = load_meta(out_dir)
-        from homework.rag_markitdown.chunk_loader import load_chunk_plan
+        from helper.rag.chunk_loader import load_chunk_plan
 
         plan = load_chunk_plan(out_dir, meta)
         if plan:

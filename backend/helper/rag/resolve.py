@@ -7,20 +7,20 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from homework.rag_markitdown.chunk_ids import (
+from helper.rag.chunk_ids import (
     DocumentFilingKey,
     filing_key_from_meta,
     filing_key_string,
     filing_label,
 )
-from homework.rag_markitdown.db import get_database_url
-from homework.rag_markitdown.fetch_annual import peek_latest_annual_filing_meta
-from homework.rag_markitdown.pipeline import ingest_from_sec, ingest_from_upload
-from homework.rag_markitdown.postgres_embed import count_unembedded, embed_document
-from homework.rag_markitdown.postgres_read import lookup_filing
-from homework.rag_markitdown.schema import DocumentSource, IngestResult
-from homework.rag_markitdown.vector_store import VectorStore, get_vector_store
-from homework.rag_markitdown.storage import (
+from helper.postgres.db import get_database_url
+from helper.rag.fetch_annual import peek_latest_annual_filing_meta
+from helper.rag.pipeline import ingest_from_sec, ingest_from_upload
+from helper.postgres.postgres_embed import count_unembedded, embed_document
+from helper.postgres.postgres_read import lookup_filing
+from helper.rag.schema import DocumentSource, IngestResult
+from helper.rag.vector_store import VectorStore, get_vector_store
+from helper.rag.storage import (
     ensure_session_document_dir,
     session_document_has_report,
 )

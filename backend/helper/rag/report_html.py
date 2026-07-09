@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import html
 
-from homework.rag_markitdown.schema import IngestResult, ItemSection, SectionOutline
+from helper.rag.schema import IngestResult, ItemSection, SectionOutline
 
 
 def _esc(text: str) -> str:

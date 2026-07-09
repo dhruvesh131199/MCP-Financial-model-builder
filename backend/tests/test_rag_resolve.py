@@ -8,9 +8,9 @@ from unittest.mock import patch
 import pytest
 
 import store as store_module
-from homework.rag_markitdown.postgres_read import FilingLookup, lookup_filing
-from homework.rag_markitdown.resolve import resolve_or_ingest_sec, resolve_or_ingest_upload
-from homework.rag_markitdown.schema import (
+from helper.postgres.postgres_read import FilingLookup, lookup_filing
+from helper.rag.resolve import resolve_or_ingest_sec, resolve_or_ingest_upload
+from helper.rag.schema import (
     ChunkPlan,
     DocumentSource,
     FilingMeta,
@@ -90,8 +90,8 @@ def test_lookup_filing_miss_without_database(monkeypatch):
 def test_lookup_filing_hit_after_ingest():
     import uuid
 
-    from homework.rag_markitdown.postgres_store import PostgresVectorStore
-    from homework.rag_markitdown.schema import (
+    from helper.postgres.postgres_store import PostgresVectorStore
+    from helper.rag.schema import (
         ChunkPlan,
         DocumentSource,
         IngestResult,
@@ -153,7 +153,7 @@ def test_lookup_filing_hit_after_ingest():
         assert hit.subchunk_count == 1
     finally:
         import psycopg
-        from homework.rag_markitdown.db import get_database_url
+        from helper.postgres.db import get_database_url
 
         url = get_database_url()
         assert url
@@ -170,12 +170,12 @@ def test_lookup_filing_hit_after_ingest():
             conn.commit()
 
 
-@patch("homework.rag_markitdown.resolve.ingest_from_sec")
-@patch("homework.rag_markitdown.resolve.lookup_filing")
-@patch("homework.rag_markitdown.resolve.get_database_url", return_value="postgresql://x")
-@patch("homework.rag_markitdown.resolve.peek_latest_annual_filing_meta")
-@patch("homework.rag_markitdown.resolve.count_unembedded", return_value=0)
-@patch("homework.rag_markitdown.resolve.embed_document")
+@patch("helper.rag.resolve.ingest_from_sec")
+@patch("helper.rag.resolve.lookup_filing")
+@patch("helper.rag.resolve.get_database_url", return_value="postgresql://x")
+@patch("helper.rag.resolve.peek_latest_annual_filing_meta")
+@patch("helper.rag.resolve.count_unembedded", return_value=0)
+@patch("helper.rag.resolve.embed_document")
 def test_sec_resolve_skips_ingest_on_cache_hit(
     mock_embed, mock_count, mock_peek, _mock_db_url, mock_lookup, mock_ingest
 ):
@@ -209,12 +209,12 @@ def test_sec_resolve_skips_ingest_on_cache_hit(
     assert len(ws["rag_documents"]) == 1
 
 
-@patch("homework.rag_markitdown.resolve.ingest_from_sec")
-@patch("homework.rag_markitdown.resolve.lookup_filing")
-@patch("homework.rag_markitdown.resolve.get_database_url", return_value="postgresql://x")
-@patch("homework.rag_markitdown.resolve.peek_latest_annual_filing_meta")
-@patch("homework.rag_markitdown.resolve.count_unembedded", return_value=5)
-@patch("homework.rag_markitdown.resolve.embed_document")
+@patch("helper.rag.resolve.ingest_from_sec")
+@patch("helper.rag.resolve.lookup_filing")
+@patch("helper.rag.resolve.get_database_url", return_value="postgresql://x")
+@patch("helper.rag.resolve.peek_latest_annual_filing_meta")
+@patch("helper.rag.resolve.count_unembedded", return_value=5)
+@patch("helper.rag.resolve.embed_document")
 def test_sec_resolve_backfills_embed_on_cache_hit(
     mock_embed, mock_count, mock_peek, _mock_db_url, mock_lookup, mock_ingest
 ):
@@ -238,10 +238,10 @@ def test_sec_resolve_backfills_embed_on_cache_hit(
     mock_embed.assert_called_once_with("cached-doc")
 
 
-@patch("homework.rag_markitdown.resolve.ingest_from_sec")
-@patch("homework.rag_markitdown.resolve.lookup_filing", return_value=None)
-@patch("homework.rag_markitdown.resolve.get_database_url", return_value="postgresql://x")
-@patch("homework.rag_markitdown.resolve.peek_latest_annual_filing_meta")
+@patch("helper.rag.resolve.ingest_from_sec")
+@patch("helper.rag.resolve.lookup_filing", return_value=None)
+@patch("helper.rag.resolve.get_database_url", return_value="postgresql://x")
+@patch("helper.rag.resolve.peek_latest_annual_filing_meta")
 def test_sec_resolve_full_ingest_on_miss(
     mock_peek, _mock_db_url, _mock_lookup, mock_ingest
 ):
@@ -261,11 +261,11 @@ def test_sec_resolve_full_ingest_on_miss(
     assert docs[0]["from_cache"] is False
 
 
-@patch("homework.rag_markitdown.resolve.ingest_from_upload")
-@patch("homework.rag_markitdown.resolve.lookup_filing")
-@patch("homework.rag_markitdown.resolve.get_database_url", return_value="postgresql://x")
-@patch("homework.rag_markitdown.resolve.count_unembedded", return_value=0)
-@patch("homework.rag_markitdown.resolve.embed_document")
+@patch("helper.rag.resolve.ingest_from_upload")
+@patch("helper.rag.resolve.lookup_filing")
+@patch("helper.rag.resolve.get_database_url", return_value="postgresql://x")
+@patch("helper.rag.resolve.count_unembedded", return_value=0)
+@patch("helper.rag.resolve.embed_document")
 def test_upload_resolve_dedup(mock_embed, mock_count, mock_db_url, mock_lookup, mock_ingest, tmp_path):
     sid = create_session()
     upload = tmp_path / "filing.html"

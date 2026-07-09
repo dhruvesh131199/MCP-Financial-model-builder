@@ -5,9 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from homework.rag_markitdown.chunk_ids import DocumentFilingKey, filing_key_from_meta
-from homework.rag_markitdown.chunk_plan import build_chunk_plan
-from homework.rag_markitdown.schema import FilingMeta, SectionOutline
+from helper.rag.chunk_ids import DocumentFilingKey, filing_key_from_meta
+from helper.rag.chunk_plan import build_chunk_plan
+from helper.rag.schema import FilingMeta, SectionOutline
 
 
 def filing_key_from_meta_dict(meta: dict) -> DocumentFilingKey:

@@ -6,20 +6,20 @@ import json
 import shutil
 from pathlib import Path
 
-from homework.rag_markitdown.chunk_ids import DocumentFilingKey, filing_key_from_meta
-from homework.rag_markitdown.chunk_plan import build_chunk_plan, chunk_plan_summary
-from homework.rag_markitdown.convert import convert_file_to_markdown, markdown_stats
-from homework.rag_markitdown.fetch_annual import fetch_latest_annual_report
-from homework.rag_markitdown.report_html import build_report_html
-from homework.rag_markitdown.section_analyze import analyze_sections
-from homework.rag_markitdown.schema import (
+from helper.rag.chunk_ids import DocumentFilingKey, filing_key_from_meta
+from helper.rag.chunk_plan import build_chunk_plan, chunk_plan_summary
+from helper.rag.convert import convert_file_to_markdown, markdown_stats
+from helper.rag.fetch_annual import fetch_latest_annual_report
+from helper.rag.report_html import build_report_html
+from helper.rag.section_analyze import analyze_sections
+from helper.rag.schema import (
     DocumentSource,
     FilingMeta,
     IngestResult,
     SourceFormat,
 )
-from homework.rag_markitdown.storage import allocate_output_dir, write_meta
-from homework.rag_markitdown.vector_store import VectorStore, get_vector_store
+from helper.rag.storage import allocate_output_dir, write_meta
+from helper.rag.vector_store import VectorStore, get_vector_store
 
 NARRATIVE_MARKERS = (
     ("risk_factors", "risk factors"),

@@ -8,10 +8,10 @@ from unittest.mock import patch
 
 import pytest
 
-from homework.rag_markitdown.db import get_database_url, schema_is_ready
-from homework.rag_markitdown.hf_embed import EXPECTED_DIMENSION
-from homework.rag_markitdown.postgres_store import PostgresVectorStore
-from homework.rag_markitdown.schema import (
+from helper.postgres.db import get_database_url, schema_is_ready
+from helper.postgres.hf_embed import EXPECTED_DIMENSION
+from helper.postgres.postgres_store import PostgresVectorStore
+from helper.rag.schema import (
     ChunkPlan,
     DocumentSource,
     IngestResult,
@@ -19,7 +19,7 @@ from homework.rag_markitdown.schema import (
     SourceFormat,
     SubChunk,
 )
-from homework.rag_markitdown.vector_store import NoOpVectorStore, get_vector_store
+from helper.rag.vector_store import NoOpVectorStore, get_vector_store
 
 
 def _sample_result() -> IngestResult:
@@ -86,7 +86,7 @@ def test_get_vector_store_with_database_url(monkeypatch):
 
 
 @pytest.mark.skipif(not get_database_url(), reason="DATABASE_URL not set")
-@patch("homework.rag_markitdown.postgres_embed.embed_texts")
+@patch("helper.postgres.postgres_embed.embed_texts")
 def test_postgres_store_ingest_roundtrip(mock_embed):
     import psycopg
 
@@ -138,7 +138,7 @@ def test_postgres_store_ingest_roundtrip(mock_embed):
 
 
 @pytest.mark.skipif(not get_database_url(), reason="DATABASE_URL not set")
-@patch("homework.rag_markitdown.postgres_embed.embed_texts")
+@patch("helper.postgres.postgres_embed.embed_texts")
 def test_postgres_store_reingest_same_filing(mock_embed):
     """Re-fetch same ticker/year/doctype must not FK-fail on document_id update."""
     import psycopg
@@ -175,9 +175,9 @@ def test_postgres_store_reingest_same_filing(mock_embed):
 
 
 @pytest.mark.skipif(not get_database_url(), reason="DATABASE_URL not set")
-@patch("homework.rag_markitdown.postgres_embed.embed_texts")
+@patch("helper.postgres.postgres_embed.embed_texts")
 def test_load_chunk_plan_from_db_roundtrip(mock_embed):
-    from homework.rag_markitdown.postgres_read import load_chunk_plan_from_db
+    from helper.postgres.postgres_read import load_chunk_plan_from_db
 
     mock_embed.return_value = [[0.1] * EXPECTED_DIMENSION, [0.2] * EXPECTED_DIMENSION]
     store = PostgresVectorStore()

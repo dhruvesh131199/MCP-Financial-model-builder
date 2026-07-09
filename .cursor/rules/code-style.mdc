@@ -1,0 +1,67 @@
+---
+description: Flat orchestrators (no wrapper hell) and function doc comment format
+alwaysApply: true
+---
+
+# Code style — flat orchestrators & comments
+
+## 1. Avoid wrapper hell (flat code)
+
+- Do **not** split cohesive logic across many nested functions or files just to satisfy SRP to an extreme.
+- Keep orchestrators **flat**. Prefer one well-commented async function over `func_a → func_b → func_c → func_d` when those steps always run together.
+- Group linear pipelines (e.g. **Download → Convert → Chunk → Store**) as direct steps inside **one or two** functions — not extra intermediate `prepare_*`, `resolve_*`, or pass-through wrappers unless they are reused in **multiple** entry points or materially simplify tests.
+
+**When a small helper is OK:** shared math in `engine/`, dedup used by MCP + REST, or a function called from 3+ places.
+
+**Avoid:**
+
+```python
+async def ingest():
+    return await _prepare()  # only calls _finalize
+
+async def _prepare():
+    return await _fetch_and_chunk()
+
+async def _fetch_and_chunk():
+    ...
+```
+
+**Prefer:**
+
+```python
+async def ingest_from_sec(...):
+    # 1. Download from SEC
+    # 2. Convert to markdown
+    # 3. Chunk for RAG
+    # 4. Upsert + embed
+    ...
+```
+
+Refactoring existing deep chains is optional; **new** orchestration code should follow this.
+
+---
+
+## 2. Function comments (new non-trivial functions)
+
+For new functions that orchestrate I/O, MCP tools, or multi-step workflows, document in the **docstring** (or a short block comment if the team style is comment-only):
+
+| Section | What to write |
+|---------|----------------|
+| **Layman** | One sentence — what this does in plain English |
+| **Use when** | Which caller / user action triggers it |
+| **Logic** | Main steps in simple language (numbered if helpful) |
+| **Returns** | Shape with a **concrete example** |
+
+**Example:**
+
+```python
+async def run_fetch_report_async(session_id, *, report_type, tickers, ...) -> dict:
+    """Fetch SEC tables or full 10-K narratives for one or more tickers.
+
+    Use when: MCP `fetch_report` or dashboard asks for financials / RAG corpus.
+    Logic: validate tickers → for full_report, gather parallel 10-K ingests per (ticker, year).
+    Returns: e.g. {"success": True, "results": [{"ticker": "AAPL", "success": True, ...}], "message": "Fetched 2/2 ..."}
+    """
+```
+
+Skip this template for trivial one-liners, private helpers obvious from the name, and pure math in `engine/`.

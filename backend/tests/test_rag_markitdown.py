@@ -7,25 +7,25 @@ from unittest.mock import patch
 
 import pytest
 
-from homework.rag_markitdown.convert import convert_file_to_markdown, markdown_stats
-from homework.rag_markitdown.pipeline import ingest_from_upload
-from homework.rag_markitdown.resolve import resolve_or_ingest_upload
-from homework.rag_markitdown.report_html import build_report_html
-from homework.rag_markitdown.schema import DocumentSource, SourceFormat
-from homework.rag_markitdown.section_analyze import analyze_sections, approx_tokens
+from helper.rag.convert import convert_file_to_markdown, markdown_stats
+from helper.rag.pipeline import ingest_from_upload
+from helper.rag.resolve import resolve_or_ingest_upload
+from helper.rag.report_html import build_report_html
+from helper.rag.schema import DocumentSource, SourceFormat
+from helper.rag.section_analyze import analyze_sections, approx_tokens
 
 FIXTURE = (
     Path(__file__).resolve().parent.parent
-    / "homework"
-    / "rag_markitdown"
+    / "helper"
+    / "rag"
     / "tests"
     / "fixtures"
     / "sample_10k_excerpt.html"
 )
 ITEMS_FIXTURE = (
     Path(__file__).resolve().parent.parent
-    / "homework"
-    / "rag_markitdown"
+    / "helper"
+    / "rag"
     / "tests"
     / "fixtures"
     / "sample_10k_items.md"
@@ -47,7 +47,7 @@ def test_convert_html_fixture():
 def test_ingest_from_upload_fixture(tmp_path, monkeypatch):
     out_root = tmp_path / "hw_out"
     monkeypatch.setattr(
-        "homework.rag_markitdown.storage.OUTPUT_ROOT",
+        "helper.rag.storage.OUTPUT_ROOT",
         out_root,
     )
 
@@ -147,7 +147,7 @@ def test_analyze_sections_no_items_fallback():
 
 
 def test_report_html_outline_no_markdown_preview():
-    from homework.rag_markitdown.schema import IngestResult
+    from helper.rag.schema import IngestResult
 
     outline = analyze_sections(ITEMS_FIXTURE.read_text(encoding="utf-8"))
     result = IngestResult(
@@ -183,11 +183,11 @@ def test_resolve_upload_appends_session_index(tmp_path, monkeypatch):
     monkeypatch.setattr(store_module, "DATA_DIR", tmp_path)
     out_root = tmp_path / "hw_out"
     monkeypatch.setattr(
-        "homework.rag_markitdown.storage.OUTPUT_ROOT",
+        "helper.rag.storage.OUTPUT_ROOT",
         out_root,
     )
     monkeypatch.setattr(
-        "homework.rag_markitdown.resolve.get_database_url",
+        "helper.rag.resolve.get_database_url",
         lambda: None,
     )
 

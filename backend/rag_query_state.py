@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from homework.rag_markitdown.chunk_ids import filing_key_string
+from helper.rag.chunk_ids import filing_key_string
 from store import _session_dir, session_exists
 
 RAG_QUERY_STATE_FILE = "rag_query_state.json"

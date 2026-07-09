@@ -6,8 +6,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any
 
-from homework.rag_markitdown.db import get_database_url, schema_is_ready
-from homework.rag_markitdown.schema import ChunkPlan, ParentChunk, SubChunk
+from helper.postgres.db import get_database_url, schema_is_ready
+from helper.rag.schema import ChunkPlan, ParentChunk, SubChunk
 
 
 @dataclass
