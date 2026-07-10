@@ -46,6 +46,23 @@ def has_ticker(session_id: str, ticker: str) -> bool:
     return bool(bucket and bucket.periods)
 
 
+def remove_ticker_from_cache(session_id: str, ticker: str) -> bool:
+    """Drop a ticker's entire period/statement tree from the session cache.
+
+    Use when: Files panel delete removes a ticker chip — cache must go too so
+    the next fetch is not rebuilt from stale years.
+    Logic: load index → pop ticker → save (no-op if missing).
+    Returns: True if the ticker was present and removed, else False.
+    """
+    sym = ticker.upper()
+    index = load_index(session_id)
+    if sym not in index.tickers:
+        return False
+    del index.tickers[sym]
+    save_index(session_id, index)
+    return True
+
+
 def cache_has_quarterly(session_id: str, ticker: str) -> bool:
     bucket = _ticker_bucket(load_index(session_id), ticker)
     if not bucket:
@@ -97,6 +114,14 @@ def _annual_period_keys_from_cache(bucket: TickerCache) -> list[str]:
         keys.append((period.fiscal_year, key))
     keys.sort(reverse=True)
     return [k for _, k in keys]
+
+
+def cached_annual_year_count(session_id: str, ticker: str) -> int:
+    """How many distinct annual FY periods are stored for this ticker (0 if none)."""
+    bucket = _ticker_bucket(load_index(session_id), ticker)
+    if not bucket:
+        return 0
+    return len(_annual_period_keys_from_cache(bucket))
 
 
 def _required_annual_keys(

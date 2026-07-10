@@ -164,5 +164,40 @@ def test_materialize_ticker_file_view_newest_first():
     assert years == [2025, 2024, 2023]
 
 
+def test_materialize_ticker_file_view_shows_all_cached_years():
+    """Files panel must not truncate to 5 when cache has more (e.g. after max_years=9)."""
+    from ingest.normalize import FinancialStatements, StatementPeriod, StatementSlice, LineItem
+    from services.statements_store import sync_financials_to_cache
+    from store import create_session
+
+    sid = create_session()
+    years_in = list(range(2025, 2016, -1))  # 9 years
+    fin = FinancialStatements(
+        ticker="WMT",
+        cik="1",
+        entity_name="Walmart",
+        fetched_at="2026-01-01T00:00:00+00:00",
+        statements={
+            "income": StatementSlice(
+                annual=[
+                    StatementPeriod(
+                        fiscal_year=y,
+                        fiscal_period="FY",
+                        line_items=[LineItem(key="revenue", label="R", value=float(y), unit="USD")],
+                    )
+                    for y in years_in
+                ]
+            )
+        },
+        ingest_source="test",
+    )
+    sync_financials_to_cache(sid, fin, statements_written=["income"])
+    view = materialize_ticker_file_view(sid, "WMT")
+    assert view is not None
+    years = [p.fiscal_year for p in view.statements["income"].annual]
+    assert years == years_in
+    assert len(years) == 9
+
+
 def test_build_file_name():
     assert build_ticker_file_name("tsla") == "TSLA"

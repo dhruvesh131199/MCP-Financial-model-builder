@@ -363,6 +363,15 @@ export interface FinancialsFetchLogEntry {
   errors?: string[];
 }
 
+export interface SessionProcess {
+  id: string;
+  source: string;
+  process_name: string;
+  message: string;
+  progress: number;
+  updated_at?: string;
+}
+
 export interface Workspace {
   session_id: string;
   updated_at: string | null;
@@ -371,6 +380,7 @@ export interface Workspace {
   files: FileEntry[];
   rag_documents?: RagDocumentEntry[];
   financials_fetch_log?: FinancialsFetchLogEntry[];
+  processes?: SessionProcess[];
 }
 
 export interface RagDocumentEntry {

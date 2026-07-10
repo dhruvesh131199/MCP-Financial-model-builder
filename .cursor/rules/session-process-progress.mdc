@@ -1,0 +1,64 @@
+---
+description: Session process progress chips (MCP/REST) — create/update/delete lifecycle for dashboard Processing sidebar
+alwaysApply: true
+---
+
+# Session process progress
+
+In-flight work shows in the dashboard **Processing** sidebar via JSON files under `data/sessions/{id}/processes/`. Transport-agnostic: MCP, REST, or future jobs use the same store.
+
+## Store API
+
+Use [`backend/session_process_store.py`](backend/session_process_store.py):
+
+- `upsert_process(session_id, process_id=None, *, source, process_name, message, progress)` — create or update
+- `delete_process(session_id, process_id)` — remove when done
+- `list_processes` / `processes_mtime` — wired into `load_workspace` (poll picks them up)
+
+JSON shape: `{ id, source, process_name, message, progress }` with `progress` 0–100. `source` is `"mcp"` | `"rest"` (or future values).
+
+## Lifecycle (caller owns it)
+
+The **running function** must:
+
+1. **Create** at start: `progress=2`, message like `"Starting…"`, fixed `process_name` for that job type
+2. **Update** while working: change `message` for the current unit of work; bump `progress` only when advancing to the **next** unit (not on the first unit — otherwise the bar jumps ahead of the work)
+3. **Finish**: upsert `progress=100` (message e.g. `"Done…"`), then **`delete_process` in `finally`** so chips clear on success or error
+
+```python
+process_id = None
+progress = 2.0
+step = 98.0 / max(1, n_units)
+try:
+    created = upsert_process(session_id, source="mcp", process_name="…", message="Starting…", progress=2)
+    process_id = created["id"]
+    for i, unit in enumerate(units):
+        if i > 0:
+            progress = min(100.0, progress + step)
+        upsert_process(session_id, process_id, source="…", process_name="…",
+                       message=f"Working on {unit}…", progress=progress)
+        # … do work for unit …
+    upsert_process(session_id, process_id, source="…", process_name="…",
+                   message="Done…", progress=100)
+finally:
+    if process_id is not None:
+        delete_process(session_id, process_id)
+```
+
+## UI contract
+
+- Frontend polls workspace every ~3s; section appears only if `processes.length > 0`
+- Chip shows `process_name` + `message`; thin bar width = `progress%`
+- No MCP host progress notifications required for this pattern
+
+## When adding a new long-running tool
+
+1. Pick a stable `process_name` and `source`
+2. Choose a step unit (ticker, year pair, peer, etc.)
+3. Follow the lifecycle above — do **not** invent a parallel progress channel
+4. Do not leave process files behind (always `finally: delete_process`)
+
+## Reference implementations
+
+- MCP: `fetch_report` `just_financials` in [`backend/mcp/fetch_report.py`](backend/mcp/fetch_report.py)
+- REST: [`backend/services/financials_fetch_service.py`](backend/services/financials_fetch_service.py)

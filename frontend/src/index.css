@@ -133,3 +133,25 @@ textarea {
   border: none;
   border-top: 1px solid #e5e7eb;
 }
+
+@keyframes process-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+.process-chip-shimmer {
+  background: linear-gradient(
+    90deg,
+    #f5f3ff 0%,
+    #ede9fe 40%,
+    #e0e7ff 50%,
+    #ede9fe 60%,
+    #f5f3ff 100%
+  );
+  background-size: 200% 100%;
+  animation: process-shimmer 2.4s ease-in-out infinite;
+}

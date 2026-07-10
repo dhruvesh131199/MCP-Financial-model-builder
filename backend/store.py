@@ -52,6 +52,7 @@ def create_session() -> str:
     (session_dir / "models").mkdir(exist_ok=True)
     (session_dir / "files").mkdir(exist_ok=True)
     (session_dir / "inputs").mkdir(exist_ok=True)
+    (session_dir / "processes").mkdir(exist_ok=True)
     meta = {"session_id": session_id, "created_at": _utc_now(), "guide_seen": False}
     (session_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
     return session_id
@@ -477,14 +478,24 @@ def update_file_entry(session_id: str, file_id: str, updates: dict) -> dict:
 
 
 def delete_file_entry(session_id: str, file_id: str) -> bool:
-    """Remove a Files panel entry. Does not affect saved models."""
+    """Remove a Files panel entry and that ticker's statements cache. Does not affect saved models."""
     session_dir = _session_dir(session_id)
     if not session_dir.is_dir():
         raise KeyError("Session not found")
     path = session_dir / "files" / f"{file_id}.json"
     if not path.exists():
         return False
+
+    record = json.loads(path.read_text(encoding="utf-8"))
+    ticker = str((record.get("data") or {}).get("ticker") or record.get("name") or "").upper()
+
     path.unlink()
+
+    if ticker:
+        from services.statements_store import remove_ticker_from_cache
+
+        remove_ticker_from_cache(session_id, ticker)
+
     return True
 
 
@@ -653,6 +664,7 @@ def load_workspace(session_id: str) -> dict | None:
         return None
 
     from rag_session_store import list_rag_documents, rag_index_mtime
+    from session_process_store import list_processes, processes_mtime
 
     session_dir = _session_dir(session_id)
     _migrate_legacy_model(session_dir)
@@ -660,6 +672,7 @@ def load_workspace(session_id: str) -> dict | None:
     files = _load_file_entries(session_dir)
     rag_documents = list_rag_documents(session_id)
     financials_fetch_log = list_financials_fetch_log(session_id)
+    processes = list_processes(session_id)
     stmt_path = session_dir / "inputs" / "statements.json"
     stmt_mtime: str | None = None
     if stmt_path.exists():
@@ -673,10 +686,11 @@ def load_workspace(session_id: str) -> dict | None:
             fetch_log_path.stat().st_mtime, tz=timezone.utc
         ).isoformat()
     rag_mtime = rag_index_mtime(session_id)
+    proc_mtime = processes_mtime(session_id)
     updated_at = _workspace_updated_at(
         models,
         files,
-        extra_timestamps=[stmt_mtime, rag_mtime, fetch_log_mtime],
+        extra_timestamps=[stmt_mtime, rag_mtime, fetch_log_mtime, proc_mtime],
     )
     return {
         "session_id": session_id,
@@ -686,6 +700,7 @@ def load_workspace(session_id: str) -> dict | None:
         "files": files,
         "rag_documents": rag_documents,
         "financials_fetch_log": financials_fetch_log,
+        "processes": processes,
     }
 
 

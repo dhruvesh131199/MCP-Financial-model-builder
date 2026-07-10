@@ -44,9 +44,19 @@ def test_validation_errors():
     assert "valid ticker strings" in res["error"]
 
 
+@patch("mcp.fetch_report.delete_process")
+@patch("mcp.fetch_report.upsert_process")
 @patch("mcp.fetch_report.handle_cached_sec_fetch")
-def test_just_financials_routing(mock_sec):
+def test_just_financials_routing(mock_sec, mock_upsert, mock_delete):
     mock_sec.return_value = {"file_id": "file-1", "scope_applied": {}}
+    mock_upsert.side_effect = lambda *a, **k: {
+        "id": k.get("process_id") or (a[1] if len(a) > 1 and a[1] else "proc-1"),
+        "source": "mcp",
+        "process_name": k.get("process_name", "Fetching SEC files"),
+        "message": k.get("message", ""),
+        "progress": int(k.get("progress", 0)),
+    }
+
     res = run_fetch_report(
         "sess-1",
         report_type="just_financials",
@@ -69,6 +79,61 @@ def test_just_financials_routing(mock_sec):
         include_quarterly=False,
         statements=["income", "balance", "cashflow"],
     )
+    # start + one update per ticker + Done at 100
+    assert mock_upsert.call_count == 4
+    mock_delete.assert_called_once_with("sess-1", "proc-1")
+
+
+@patch("mcp.fetch_report.delete_process")
+@patch("mcp.fetch_report.upsert_process")
+@patch("mcp.fetch_report.handle_cached_sec_fetch")
+def test_just_financials_process_lifecycle(mock_sec, mock_upsert, mock_delete):
+    mock_sec.return_value = {"file_id": "file-1", "scope_applied": {}}
+    calls: list[dict] = []
+
+    def _upsert(session_id, process_id=None, **kwargs):
+        pid = process_id or "proc-lifecycle"
+        entry = {"id": pid, **kwargs}
+        calls.append(entry)
+        return entry
+
+    mock_upsert.side_effect = _upsert
+
+    res = run_fetch_report(
+        "sess-1",
+        report_type="just_financials",
+        tickers=["AAPL", "MSFT"],
+    )
+    assert res["success"] is True
+    assert calls[0]["message"] == "Starting…"
+    assert calls[0]["progress"] == 2
+    assert "AAPL" in calls[1]["message"]
+    assert calls[1]["progress"] == 2
+    assert "MSFT" in calls[2]["message"]
+    assert calls[2]["progress"] == 51
+    assert calls[3]["message"] == "Done…"
+    assert calls[3]["progress"] == 100
+    mock_delete.assert_called_once_with("sess-1", "proc-lifecycle")
+
+
+@patch("mcp.fetch_report.delete_process")
+@patch("mcp.fetch_report.upsert_process")
+@patch("mcp.fetch_report.handle_cached_sec_fetch")
+def test_just_financials_deletes_process_on_error(mock_sec, mock_upsert, mock_delete):
+    mock_upsert.return_value = {"id": "proc-err"}
+    mock_sec.side_effect = RuntimeError("SEC down")
+
+    try:
+        run_fetch_report(
+            "sess-1",
+            report_type="just_financials",
+            tickers=["AAPL"],
+        )
+        assert False, "expected RuntimeError"
+    except RuntimeError as exc:
+        assert "SEC down" in str(exc)
+    mock_delete.assert_called_once_with("sess-1", "proc-err")
+
 
 
 @patch("mcp.fetch_report.list_10k_fiscal_years")

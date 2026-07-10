@@ -33,6 +33,40 @@ def test_delete_file():
     assert client.get(f"/api/sessions/{sid}").json()["files"] == []
 
 
+def test_delete_file_clears_statements_cache():
+    from ingest.normalize import FinancialStatements, LineItem, StatementPeriod, StatementSlice
+    from services.statements_store import has_ticker, sync_financials_to_cache
+    from store import upsert_ticker_financials_file
+
+    sid = create_session()
+    fin = FinancialStatements(
+        ticker="AAPL",
+        cik="1",
+        entity_name="Apple",
+        fetched_at="2026-01-01T00:00:00+00:00",
+        statements={
+            "income": StatementSlice(
+                annual=[
+                    StatementPeriod(
+                        fiscal_year=2024,
+                        fiscal_period="FY",
+                        line_items=[LineItem(key="revenue", label="R", value=1.0, unit="USD")],
+                    )
+                ]
+            )
+        },
+        ingest_source="test",
+    )
+    sync_financials_to_cache(sid, fin, statements_written=["income"])
+    entry = upsert_ticker_financials_file(sid, "AAPL", fin)
+    assert has_ticker(sid, "AAPL")
+
+    res = client.delete(f"/api/sessions/{sid}/files/{entry['id']}")
+    assert res.status_code == 200
+    assert client.get(f"/api/sessions/{sid}").json()["files"] == []
+    assert has_ticker(sid, "AAPL") is False
+
+
 def test_delete_model_comparative():
     sid = create_session()
     models_dir = store_module._session_dir(sid) / "models"

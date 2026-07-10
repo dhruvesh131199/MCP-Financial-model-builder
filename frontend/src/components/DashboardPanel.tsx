@@ -8,6 +8,7 @@ import type {
   ModelEntry,
   RagDisplayModelEntry,
   RagDocumentEntry,
+  SessionProcess,
 } from "../types";
 import { exportComparativeToExcel } from "../utils/exportComparativeExcel";
 import { exportDcfTemplateExcel, exportDcfToExcel } from "../utils/exportDcfExcel";
@@ -31,6 +32,7 @@ interface DashboardPanelProps {
   models: ModelEntry[];
   ragDocuments: RagDocumentEntry[];
   financialsFetchLog: FinancialsFetchLogEntry[];
+  processes: SessionProcess[];
   selection: DashboardSelection;
   pulseId: string | null;
   onSelect: (selection: DashboardSelection) => void;
@@ -47,6 +49,7 @@ export default function DashboardPanel({
   models,
   ragDocuments,
   financialsFetchLog,
+  processes,
   selection,
   pulseId,
   onSelect,
@@ -199,6 +202,8 @@ export default function DashboardPanel({
   return (
     <div className="flex h-full min-h-0">
       <aside className="flex w-[20%] min-w-[180px] flex-col overflow-y-auto border-r border-[var(--border-soft)] bg-[var(--bg-sidebar)]">
+        <ProcessingSidebarSection processes={processes} />
+
         <FetchFinancialsSidebarSection
           hubActive={effectiveSelection.kind === "financials_hub"}
           onSelectHub={() => onSelect({ kind: "financials_hub" })}
@@ -467,6 +472,42 @@ function ModelsSidebarSection({
             />
           ))
         )}
+      </div>
+    </div>
+  );
+}
+
+function ProcessingSidebarSection({ processes }: { processes: SessionProcess[] }) {
+  if (processes.length === 0) return null;
+
+  return (
+    <div className="flex flex-col border-b border-[var(--border-soft)] p-2">
+      <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
+        Processing
+      </div>
+      <div className="mt-0.5 flex flex-col gap-1.5">
+        {processes.map((proc) => {
+          const pct = Math.max(0, Math.min(100, Number(proc.progress) || 0));
+          return (
+            <div
+              key={proc.id}
+              className="process-chip-shimmer overflow-hidden rounded-md border border-violet-200/80 px-2 py-1.5"
+            >
+              <p className="truncate text-xs font-medium text-gray-800">
+                {proc.process_name}
+              </p>
+              <p className="mt-0.5 truncate text-[10px] leading-snug text-gray-500">
+                {proc.message}
+              </p>
+              <div className="mt-1.5 h-0.5 w-full overflow-hidden rounded-full bg-violet-100">
+                <div
+                  className="h-full rounded-full bg-sky-400 transition-[width] duration-500 ease-out"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

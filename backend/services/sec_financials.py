@@ -10,6 +10,7 @@ from ingest.normalize import FinancialStatements, StatementSlice, normalize_comp
 from services.sec_client import fetch_company_facts, resolve_ticker
 from services.statements_store import (
     cache_has_quarterly,
+    cached_annual_year_count,
     compute_fetch_gaps,
     gaps_grouped_by_statement,
     materialize_financial_statements,
@@ -74,14 +75,17 @@ def materialize_ticker_file_view(
     session_id: str,
     ticker: str,
 ) -> FinancialStatements | None:
-    """Full cache snapshot for Files panel — up to 5 annual years; quarterly if cached."""
+    """Full cache snapshot for Files panel — all cached annual years (newest first); quarterly if cached."""
     sym = ticker.upper()
+    year_count = cached_annual_year_count(session_id, sym)
+    if year_count == 0:
+        return None
     include_quarterly = cache_has_quarterly(session_id, sym)
     financials = materialize_financial_statements(
         session_id,
         sym,
         fiscal_years=None,
-        max_years=5,
+        max_years=year_count,
         include_annual=True,
         include_quarterly=include_quarterly,
         statements=list(ALL_STATEMENTS),

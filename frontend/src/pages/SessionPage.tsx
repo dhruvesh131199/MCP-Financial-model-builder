@@ -5,7 +5,7 @@ import DashboardPanel from "../components/DashboardPanel";
 import { SetupMcpLink } from "../components/SessionGuideModal";
 import ToolGuideModal, { ToolGuideButton } from "../components/ToolGuideModal";
 import SessionIdCopy from "../components/SessionIdCopy";
-import type { DashboardSelection, FileEntry, ModelEntry, FinancialsFetchLogEntry, RagDocumentEntry } from "../types";
+import type { DashboardSelection, FileEntry, ModelEntry, FinancialsFetchLogEntry, RagDocumentEntry, SessionProcess } from "../types";
 import {
   resolveNewModelAutoSelect,
 } from "../lib/sessionAutoSelect";
@@ -18,6 +18,7 @@ export default function SessionPage() {
   const [models, setModels] = useState<ModelEntry[]>([]);
   const [ragDocuments, setRagDocuments] = useState<RagDocumentEntry[]>([]);
   const [financialsFetchLog, setFinancialsFetchLog] = useState<FinancialsFetchLogEntry[]>([]);
+  const [processes, setProcesses] = useState<SessionProcess[]>([]);
   const [selection, setSelection] = useState<DashboardSelection>({ kind: "none" });
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +71,7 @@ export default function SessionPage() {
             setFiles(workspace.files);
             setRagDocuments(workspace.rag_documents ?? []);
             setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
+            setProcesses(workspace.processes ?? []);
             for (const model of workspace.models) {
               if (model.type === "detailed_analysis") {
                 const ts =
@@ -91,6 +93,7 @@ export default function SessionPage() {
           setFiles(workspace.files);
           setRagDocuments(workspace.rag_documents ?? []);
           setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
+          setProcesses(workspace.processes ?? []);
 
           let analysisToSelect: ModelEntry | undefined;
           let ragResultToSelect: ModelEntry | undefined;
@@ -158,6 +161,7 @@ export default function SessionPage() {
       if (workspace.exists) {
         setRagDocuments(workspace.rag_documents ?? []);
         setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
+        setProcesses(workspace.processes ?? []);
         setModels(workspace.models);
         setFiles(workspace.files);
       }
@@ -236,6 +240,7 @@ export default function SessionPage() {
             models={models}
             ragDocuments={ragDocuments}
             financialsFetchLog={financialsFetchLog}
+            processes={processes}
             selection={selection}
             pulseId={pulseId}
             onSelect={setSelection}

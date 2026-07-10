@@ -10,6 +10,7 @@ from typing import Literal
 from helper.rag.fetch_annual import list_10k_fiscal_years
 from helper.rag.resolve import RagResolveResult, resolve_or_ingest_sec_async
 from services.sec_fetch_handler import handle_cached_sec_fetch
+from session_process_store import delete_process, upsert_process
 
 logger = logging.getLogger(__name__)
 
@@ -121,29 +122,64 @@ async def run_fetch_report_async(
     errors: list[str] = []
 
     if report_type == "just_financials":
-        for ticker in clean_tickers:
-            result = handle_cached_sec_fetch(
+        process_id = None
+        progress = 2.0
+        step = 98.0 / max(1, len(clean_tickers))
+        try:
+            created = upsert_process(
                 session_id,
-                company_name=None,
-                ticker=ticker,
-                fiscal_years=years,
-                max_years=clamped_max_years,
-                include_annual=True,
-                include_quarterly=False,
-                statements=["income", "balance", "cashflow"],
+                source="mcp",
+                process_name="Fetching SEC files",
+                message="Starting…",
+                progress=progress,
             )
-            if "error" in result:
-                errors.append(f"{ticker}: {result['error']}")
-                results.append({"ticker": ticker, "success": False, "error": result["error"]})
-            else:
-                results.append(
-                    {
-                        "ticker": ticker,
-                        "success": True,
-                        "file_id": result.get("file_id"),
-                        "scope_applied": result.get("scope_applied"),
-                    }
+            process_id = created["id"]
+            for i, ticker in enumerate(clean_tickers):
+                if i > 0:
+                    progress = min(100.0, progress + step)
+                upsert_process(
+                    session_id,
+                    process_id,
+                    source="mcp",
+                    process_name="Fetching SEC files",
+                    message=f"Fetching {ticker} data…",
+                    progress=progress,
                 )
+                result = handle_cached_sec_fetch(
+                    session_id,
+                    company_name=None,
+                    ticker=ticker,
+                    fiscal_years=years,
+                    max_years=clamped_max_years,
+                    include_annual=True,
+                    include_quarterly=False,
+                    statements=["income", "balance", "cashflow"],
+                )
+                if "error" in result:
+                    errors.append(f"{ticker}: {result['error']}")
+                    results.append(
+                        {"ticker": ticker, "success": False, "error": result["error"]}
+                    )
+                else:
+                    results.append(
+                        {
+                            "ticker": ticker,
+                            "success": True,
+                            "file_id": result.get("file_id"),
+                            "scope_applied": result.get("scope_applied"),
+                        }
+                    )
+            upsert_process(
+                session_id,
+                process_id,
+                source="mcp",
+                process_name="Fetching SEC files",
+                message="Done…",
+                progress=100,
+            )
+        finally:
+            if process_id is not None:
+                delete_process(session_id, process_id)
     else:
         work_items, pre_results, pre_errors = _map_full_report_work_items(
             clean_tickers, years, clamped_max_years
