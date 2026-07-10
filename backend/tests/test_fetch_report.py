@@ -93,6 +93,7 @@ def test_full_report_routing_with_years(mock_resolve, mock_list):
     assert res["success"] is True
     assert len(res["results"]) == 1
     assert res["results"][0]["year"] == 2024
+    assert "duration_seconds" in res
     mock_list.assert_not_called()
     mock_resolve.assert_called_once_with(
         session_id="sess-1", ticker="AAPL", fiscal_year=2024

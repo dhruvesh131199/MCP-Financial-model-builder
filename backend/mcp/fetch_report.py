@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Literal
 
 from helper.rag.fetch_annual import list_10k_fiscal_years
 from helper.rag.resolve import resolve_or_ingest_sec
 from services.sec_fetch_handler import handle_cached_sec_fetch
+
+logger = logging.getLogger(__name__)
 
 ReportType = Literal["full_report", "just_financials"]
 
@@ -19,6 +23,8 @@ def run_fetch_report(
     years: list[int] | None = None,
     max_years: int = 1,
 ) -> dict:
+    start = time.perf_counter()
+
     if report_type not in ("full_report", "just_financials"):
         return {
             "error": f"Invalid report_type: {report_type!r}. Must be 'full_report' or 'just_financials'."
@@ -117,11 +123,27 @@ def run_fetch_report(
 
     success_count = sum(1 for r in results if r["success"])
     total_count = len(results)
-    
+    elapsed_s = time.perf_counter() - start
+
+    timing_msg = (
+        f"fetch_report duration={elapsed_s:.2f}s report_type={report_type} "
+        f"tickers={clean_tickers} success={success_count}/{total_count}"
+    )
+    print(timing_msg, flush=True)
+    logger.info(
+        "fetch_report duration=%.2fs report_type=%s tickers=%s success=%s/%s",
+        elapsed_s,
+        report_type,
+        clean_tickers,
+        success_count,
+        total_count,
+    )
+
     return {
         "success": len(errors) == 0 and success_count > 0,
         "report_type": report_type,
         "results": results,
         "errors": errors,
+        "duration_seconds": round(elapsed_s, 2),
         "message": f"Fetched {success_count}/{total_count} requested reports.",
     }
