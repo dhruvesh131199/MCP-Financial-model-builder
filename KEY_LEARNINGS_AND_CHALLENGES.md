@@ -32,6 +32,7 @@ This is a **fresh MCP-first rewrite** of ideas proven in `AI assisted Financial 
 | Hero / HF eval | **Homework only; no product case study** | Bake HF into SEC ingest | 50-ticker HF test: `smart_revenue` wins; HF rejected for normalization; `homework/huggingface_test/` kept for future experiments |
 | Detailed analysis | **`detailed_extract.py` + homework first** | Raw edgartools dump in UI; LLM line picking | Fixed row template (11+8+5 lines × 5 FY); tag-first rules; v1.1 adds **two-phase pick + derive** with provenance metadata (Files panel stays XBRL-only) |
 | DCF cash-flow bridge | **EBIT-tax with explicit D&A and NWC level** | EBITDA-tax proxy with NOPAT row and ΔRev-based NWC | Better finance semantics: show D&A + EBIT explicitly, tax on EBIT, compute ΔNWC from NWC levels, and keep UFCF/terminal/discount rows aligned between engine and UI |
+| Full 10-K RAG ingest | **Multi-level asyncio on feature branch** (`making-full10kfetchfaster`) | Serial sync on `main`; unbounded parallel gather | Layer 1: `asyncio.gather` per (ticker, year); Layer 2: HF embed batches of 32 with 4 parallel calls; SEC fetch behind semaphore + `asyncio.to_thread`; MCP tool uses `async def` + `await` (not `asyncio.run` inside FastMCP loop) |
 
 ---
 
@@ -175,6 +176,50 @@ Every cell: `xbrl_tag`, filed `label`, `source_statement`, `source` (`xbrl` | `d
 
 ---
 
+## Multi-level async RAG ingest (interview reference)
+
+Branch: `making-full10kfetchfaster` (async). `main` keeps serial sync + `duration_seconds` for A/B benchmarks.
+
+### Three layers (mental model)
+
+| Layer | Role | Key functions |
+|-------|------|----------------|
+| **Managers** | Flatten request → parallel jobs | `run_fetch_report_async` — `asyncio.gather` per (ticker, year) |
+| **Bouncers** | Postgres cache short-circuit | `resolve_or_ingest_sec_async` — `lookup_filing`; cache hit skips SEC download/chunking |
+| **Cooks** | Download, convert, chunk, embed | `ingest_from_sec_async` — `asyncio.to_thread(fetch_latest_annual_report)` under SEC semaphore; `embed_document_async` — batches of 32, 4 HF calls in flight |
+
+### Two async levels (overlap waiting time)
+
+1. **Ticker-level** — multiple companies/years in flight via `gather` (not one blocking the rest).
+2. **Embed-level** — `EMBED_BATCH_SIZE=32`, `EMBED_PARALLEL_BATCHES=4` via `asyncio.gather` on HF API.
+
+### Benchmarks (local runs, full_report ingest)
+
+| Tickers | Sync | Async | Notes |
+|---------|------|-------|-------|
+| 1 (WMT) | 93s | 86s | ~same — little to overlap |
+| 3 (AAPL, MSFT, WMT) | 195s | 105s | **~46% faster** — sweet spot |
+| 4 (+MU) | 279s | 207s | ~25% faster — diminishing returns |
+| 5+ | 5+ min (aborted) | 372s | contention |
+
+**Sweet spot (~3 tickers):** network waits overlap cleanly. **Scaling wall (4+):** CPU-bound MarkItDown/chunking starves the event loop; SEC (~10 req/s) and Hugging Face (429 on free tier) rate-limit parallel blast.
+
+### MCP integration lesson
+
+FastMCP already runs an event loop — `asyncio.run()` inside a sync tool raises `RuntimeError`. Fix: `async def fetch_report` + `await run_fetch_report_async(...)`.
+
+### Resume bullets (pick one)
+
+- **Performance (recommended):** Optimized an enterprise RAG ingestion pipeline with multi-level Python `asyncio`, cutting multi-ticker SEC 10-K fetch + HF embedding time **46%** (195s → 105s for three tickers).
+- **Concurrency:** Engineered parallel document extraction, chunking, and vector embedding with bounded `asyncio.gather` concurrency to maximize throughput while mitigating SEC/HF rate limits and CPU bottlenecks.
+- **Full stack:** Built a financial 10-K ingestion path (FastMCP, Postgres/pgvector, Hugging Face) using `asyncio.to_thread` to decouple blocking SEC I/O from the server event loop.
+
+### 30-second interview pitch
+
+> “Full 10-K ingest was serial — ticker then year, then embed. I split it into managers, cache bouncers, and pipeline cooks: gather per ticker-year, semaphore on SEC downloads, parallel HF embed batches. Three tickers dropped from about three minutes to under two; past that, CPU conversion and API rate limits became the wall. The MCP tool had to be truly async — you can't nest asyncio.run inside FastMCP.”
+
+---
+
 ## Chronological journey
 
 ### 2026-06-25 — Detailed Analysis v1.1 (accuracy + disclaimers)
@@ -210,6 +255,7 @@ Every cell: `xbrl_tag`, filed `label`, `source_statement`, `source` (`xbrl` | `d
 4. **Phased product thinking** — Prior REST project proved value of phases (chat → DCF → SEC). This project applies same discipline to MCP migration.
 5. **LLM for SEC normalization** — Evaluated HF on 50 tickers; **rejected for production.** `smart_revenue` + edgartools wins; fixed GM total-revenue label. Homework scaffold remains; no shipped case study.
 6. **SEC XBRL is filer-specific** — Detailed Analysis v1.1: tag-first pickers + label guards + second-pass derivations with provenance; conglomerate COGS (GM), bank revenue guard (JPM), CF D&A sum for extension tags. See **Detailed Analysis v1.1** section above.
+7. **Multi-level async RAG ingest** — `gather` at ticker-year + parallel HF embed batches; ~46% win at 3 tickers; degrades at 4+ due to CPU-bound conversion and SEC/HF rate limits; MCP tool must `await` not `asyncio.run`. See **Multi-level async RAG ingest** section above.
 
 ---
 
@@ -237,6 +283,7 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-07-10 | Perf + Architecture | Multi-level async full 10-K RAG ingest on `making-full10kfetchfaster`: `gather` per (ticker, year), SEC semaphore + `to_thread`, HF embed 4×32 batches; ~46% faster at 3 tickers (195s→105s); `async def fetch_report` fixes `asyncio.run` under FastMCP; `main` keeps sync path + `duration_seconds` for benchmarks. |
 | 2026-07-09 | Refactor | Homework → `backend/helper/` migration: RAG (`helper/rag/`), Postgres (`helper/postgres/`), analysis schema (`helper/analysis/`); main project + tests import `helper.*` only; homework emptied of production code; new `helper-layout.mdc` rule. |
 | 2026-07-08 | Feature + UX | Dashboard MCP Tool guide popup (`mcpToolGuide.ts` + header button between Set up MCP and Try these in chat); disabled auto-open of Try these in chat on new sessions. Rule: update tool guide when MCP tools change. |
 | 2026-07-08 | Feature | RAG Results on dashboard: MCP tool `rag_res_on_display(name, content)` pins host-authored markdown to session as `rag_display` model; new RAG Results sidebar section with chip hover title, markdown viewer (GFM tables), delete, and auto-select on pin after `query_rag` finalize. |

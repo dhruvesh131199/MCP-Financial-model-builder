@@ -337,11 +337,11 @@ def resolve_ticker(
 
 
 sys.modules["mcp.server"] = sys.modules[__name__]
-from mcp.fetch_report import run_fetch_report
+from mcp.fetch_report import run_fetch_report_async
 
 
 @mcp.tool()
-def fetch_report(
+async def fetch_report(
     report_type: str,
     tickers: list[str],
     years: list[int] | None = None,
@@ -385,7 +385,7 @@ def fetch_report(
 
     return _tool_response(
         sid,
-        run_fetch_report(
+        await run_fetch_report_async(
             session_id=sid,
             report_type=cast(ReportType, report_type),
             tickers=tickers,
