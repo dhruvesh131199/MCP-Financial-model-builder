@@ -21,14 +21,35 @@ class PostgresVectorStore:
         if not self._url:
             raise ValueError("DATABASE_URL is required for PostgresVectorStore")
 
-    def ingest(self, result: IngestResult) -> None:
+    def ingest(
+        self,
+        result: IngestResult,
+        *,
+        progress=None,
+        progress_label: str = "",
+    ) -> None:
         plan = result.chunk_plan
         if plan is None or not plan.parent_chunks:
             logger.info("postgres_store: skip empty chunk_plan document_id=%s", result.document_id)
+            if progress:
+                progress.report(
+                    f"{progress_label}: chunks uploaded", advance_steps=1
+                )
+                progress.report(
+                    f"{progress_label}: embedding done", advance_steps=1
+                )
             return
 
+        label = progress_label or f"{plan.ticker} {plan.year}"
+        if progress:
+            progress.report(f"{label}: uploading chunks")
         self.upsert_chunks(result)
+        if progress:
+            progress.report(f"{label}: chunks uploaded", advance_steps=1)
+            progress.report(f"{label}: embedding")
         stats = embed_document(result.document_id, database_url=self._url)
+        if progress:
+            progress.report(f"{label}: embedding done", advance_steps=1)
         logger.info(
             "postgres_store: document_id=%s %s_%s_%s parents=%s subchunks=%s embedded=%s",
             result.document_id,
@@ -40,16 +61,37 @@ class PostgresVectorStore:
             stats.embedded_count,
         )
 
-    async def ingest_async(self, result: IngestResult) -> None:
+    async def ingest_async(
+        self,
+        result: IngestResult,
+        *,
+        progress=None,
+        progress_label: str = "",
+    ) -> None:
         plan = result.chunk_plan
         if plan is None or not plan.parent_chunks:
             logger.info(
                 "postgres_store: skip empty chunk_plan document_id=%s", result.document_id
             )
+            if progress:
+                progress.report(
+                    f"{progress_label}: chunks uploaded", advance_steps=1
+                )
+                progress.report(
+                    f"{progress_label}: embedding done", advance_steps=1
+                )
             return
 
+        label = progress_label or f"{plan.ticker} {plan.year}"
+        if progress:
+            progress.report(f"{label}: uploading chunks")
         await asyncio.to_thread(self.upsert_chunks, result)
+        if progress:
+            progress.report(f"{label}: chunks uploaded", advance_steps=1)
+            progress.report(f"{label}: embedding")
         stats = await embed_document_async(result.document_id, database_url=self._url)
+        if progress:
+            progress.report(f"{label}: embedding done", advance_steps=1)
         logger.info(
             "postgres_store: document_id=%s %s_%s_%s parents=%s subchunks=%s embedded=%s (async)",
             result.document_id,

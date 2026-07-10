@@ -133,12 +133,16 @@ def resolve_or_ingest_sec(
     ticker: str,
     fiscal_year: int | None = None,
     vector_store: VectorStore | None = None,
+    progress=None,
 ) -> RagResolveResult:
+    from session_process_store import filing_progress_label
+
     sym = ticker.strip().upper()
     store = vector_store or get_vector_store()
     try:
         filing_meta = peek_latest_annual_filing_meta(ticker=sym, fiscal_year=fiscal_year)
         filing_key = filing_key_from_meta(filing_meta)
+        label = filing_progress_label(filing_key.ticker, filing_key.year)
         if get_database_url():
             hit = lookup_filing(
                 filing_key.ticker, filing_key.year, filing_key.doctype
@@ -158,6 +162,10 @@ def resolve_or_ingest_sec(
                 logger.info(
                     "rag cache hit %s session=%s", entry["filing_key"], session_id
                 )
+                if progress:
+                    progress.report(
+                        f"{label}: already in database", advance_steps=5
+                    )
                 return RagResolveResult(
                     success=True,
                     from_cache=True,
@@ -180,6 +188,7 @@ def resolve_or_ingest_sec(
             homework_output=False,
             fiscal_year=fiscal_year,
             vector_store=store,
+            progress=progress,
         )
         entry = _after_full_ingest(session_id, result)
         plan = result.chunk_plan
@@ -232,12 +241,16 @@ async def resolve_or_ingest_sec_async(
     ticker: str,
     fiscal_year: int | None = None,
     vector_store: VectorStore | None = None,
+    progress=None,
 ) -> RagResolveResult:
+    from session_process_store import filing_progress_label
+
     sym = ticker.strip().upper()
     store = vector_store or get_vector_store()
     try:
         filing_meta = peek_latest_annual_filing_meta(ticker=sym, fiscal_year=fiscal_year)
         filing_key = filing_key_from_meta(filing_meta)
+        label = filing_progress_label(filing_key.ticker, filing_key.year)
         if get_database_url():
             hit = lookup_filing(
                 filing_key.ticker, filing_key.year, filing_key.doctype
@@ -257,6 +270,10 @@ async def resolve_or_ingest_sec_async(
                 logger.info(
                     "rag cache hit %s session=%s", entry["filing_key"], session_id
                 )
+                if progress:
+                    progress.report(
+                        f"{label}: already in database", advance_steps=5
+                    )
                 return RagResolveResult(
                     success=True,
                     from_cache=True,
@@ -279,6 +296,7 @@ async def resolve_or_ingest_sec_async(
             homework_output=False,
             fiscal_year=fiscal_year,
             vector_store=store,
+            progress=progress,
         )
         entry = _after_full_ingest(session_id, result)
         plan = result.chunk_plan
@@ -334,11 +352,15 @@ def resolve_or_ingest_upload(
     year: int,
     doctype: str,
     vector_store: VectorStore | None = None,
+    progress=None,
 ) -> RagResolveResult:
+    from session_process_store import filing_progress_label
+
     sym = ticker.strip().upper()
     filing_key = DocumentFilingKey(ticker=sym, year=year, doctype=doctype)
     fkey = filing_key_string(sym, year, filing_key.doctype)
     label = filing_label(sym, year, filing_key.doctype)
+    progress_label = filing_progress_label(sym, year)
     store = vector_store or get_vector_store()
     try:
         if get_database_url():
@@ -355,6 +377,11 @@ def resolve_or_ingest_upload(
                     parent_count=hit.parent_count,
                     subchunk_count=hit.subchunk_count,
                 )
+                if progress:
+                    progress.report(
+                        f"{progress_label}: already in database",
+                        advance_steps=5,
+                    )
                 return RagResolveResult(
                     success=True,
                     from_cache=True,
@@ -380,6 +407,7 @@ def resolve_or_ingest_upload(
             session_id=session_id,
             homework_output=False,
             vector_store=store,
+            progress=progress,
         )
         entry = _after_full_ingest(session_id, result)
         plan = result.chunk_plan

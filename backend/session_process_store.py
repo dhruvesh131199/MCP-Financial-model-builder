@@ -10,6 +10,7 @@ list_processes removes expired files on poll (reload-safe, one place for all tra
 from __future__ import annotations
 
 import json
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -196,3 +197,94 @@ def processes_mtime(session_id: str) -> str | None:
     if latest is None:
         return None
     return datetime.fromtimestamp(latest, tz=timezone.utc).isoformat()
+
+
+RAG_INGEST_PROCESS_NAME = "RAG 10-K ingest (this can take a while)"
+
+
+class RagIngestProgress:
+    """Shared progress reporter for MCP/REST RAG ingest (thread-safe for gather).
+
+    Use when: full_report or REST rag ingest/upload needs Processing sidebar updates.
+    Logic: create via start() → report(message, advance_steps=N) after each substep →
+    finish() upserts 100 then delete_process (expires_at).
+    Returns: start() returns the helper; report writes process JSON.
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        process_id: str,
+        *,
+        source: str,
+        step: float,
+        progress: float = 2.0,
+    ) -> None:
+        self.session_id = session_id
+        self.process_id = process_id
+        self.source = source
+        self.step = float(step)
+        self.progress = float(progress)
+        self._lock = threading.Lock()
+
+    @classmethod
+    def start(
+        cls,
+        session_id: str,
+        *,
+        source: str,
+        n_filings: int,
+        message: str = "Starting…",
+    ) -> RagIngestProgress:
+        step = 98.0 / max(1, n_filings * 5)
+        created = upsert_process(
+            session_id,
+            source=source,
+            process_name=RAG_INGEST_PROCESS_NAME,
+            message=message,
+            progress=2,
+        )
+        return cls(
+            session_id,
+            created["id"],
+            source=source,
+            step=step,
+            progress=2.0,
+        )
+
+    def report(self, message: str, *, advance_steps: int = 0) -> None:
+        with self._lock:
+            if advance_steps:
+                self.progress = min(100.0, self.progress + self.step * advance_steps)
+            upsert_process(
+                self.session_id,
+                self.process_id,
+                source=self.source,
+                process_name=RAG_INGEST_PROCESS_NAME,
+                message=message,
+                progress=self.progress,
+            )
+
+    def finish(self, message: str = "Done…") -> None:
+        with self._lock:
+            self.progress = 100.0
+            upsert_process(
+                self.session_id,
+                self.process_id,
+                source=self.source,
+                process_name=RAG_INGEST_PROCESS_NAME,
+                message=message,
+                progress=100,
+            )
+        delete_process(self.session_id, self.process_id)
+
+    def abandon(self) -> None:
+        """Expire the chip without forcing 100 (errors / empty work)."""
+        delete_process(self.session_id, self.process_id)
+
+
+def filing_progress_label(ticker: str, year: int | None) -> str:
+    sym = ticker.strip().upper()
+    if year is not None:
+        return f"{sym} {year}"
+    return sym

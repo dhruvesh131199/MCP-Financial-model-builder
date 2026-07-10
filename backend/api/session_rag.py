@@ -80,15 +80,24 @@ def _load_chunks_for_document(session_id: str, document_id: str) -> dict:
 
 @router.post("/ingest/fetch")
 def post_rag_fetch(session_id: str, body: RagFetchBody) -> dict:
+    from session_process_store import RagIngestProgress
+
     _require_session(session_id)
+    progress = RagIngestProgress.start(session_id, source="rest", n_filings=1)
     try:
         result = resolve_or_ingest_sec(
             session_id=session_id,
             ticker=body.ticker,
             fiscal_year=body.fiscal_year,
+            progress=progress,
         )
+        progress.finish()
+        progress = None  # type: ignore[assignment]
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        if progress is not None:
+            progress.abandon()
     return result.to_dict()
 
 
@@ -100,6 +109,8 @@ async def post_rag_upload(
     year: int = Form(...),
     doctype: str = Form(default="10K"),
 ) -> dict:
+    from session_process_store import RagIngestProgress
+
     _require_session(session_id)
     normalized = doctype.strip().upper().replace("-", "")
     if normalized not in ALLOWED_DOCTYPES:
@@ -114,6 +125,7 @@ async def post_rag_upload(
         content = await file.read()
         tmp.write(content)
 
+    progress = RagIngestProgress.start(session_id, source="rest", n_filings=1)
     try:
         result = resolve_or_ingest_upload(
             session_id=session_id,
@@ -122,11 +134,16 @@ async def post_rag_upload(
             ticker=ticker,
             year=year,
             doctype=normalized,
+            progress=progress,
         )
+        progress.finish()
+        progress = None  # type: ignore[assignment]
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         tmp_path.unlink(missing_ok=True)
+        if progress is not None:
+            progress.abandon()
 
     return result.to_dict()
 

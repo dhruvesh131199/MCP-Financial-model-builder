@@ -63,5 +63,7 @@ finally:
 
 ## Reference implementations
 
-- MCP: `fetch_report` `just_financials` in [`backend/mcp/fetch_report.py`](backend/mcp/fetch_report.py)
-- REST: [`backend/services/financials_fetch_service.py`](backend/services/financials_fetch_service.py)
+- MCP financials: `fetch_report` `just_financials` in [`backend/mcp/fetch_report.py`](backend/mcp/fetch_report.py)
+- REST financials: [`backend/services/financials_fetch_service.py`](backend/services/financials_fetch_service.py)
+- MCP RAG 10-K: `fetch_report` `full_report` via [`RagIngestProgress`](backend/session_process_store.py) — `process_name` = `RAG 10-K ingest (this can take a while)`, start message `Starting…`; 5 steps per filing (cache hit = `+5*step`)
+- REST RAG: [`backend/api/session_rag.py`](backend/api/session_rag.py) `POST .../rag/ingest/fetch` and `.../upload` (same helper)

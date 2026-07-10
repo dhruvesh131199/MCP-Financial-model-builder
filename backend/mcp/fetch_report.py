@@ -10,7 +10,8 @@ from typing import Literal
 from helper.rag.fetch_annual import list_10k_fiscal_years
 from helper.rag.resolve import RagResolveResult, resolve_or_ingest_sec_async
 from services.sec_fetch_handler import handle_cached_sec_fetch
-from session_process_store import delete_process, upsert_process
+from session_process_store import RagIngestProgress, delete_process, upsert_process
+
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +39,17 @@ def _resolve_result_to_dict(resolved: RagResolveResult) -> dict:
 
 
 async def _process_ticker_year_async(
-    session_id: str, ticker: str, year: int
+    session_id: str,
+    ticker: str,
+    year: int,
+    progress: RagIngestProgress | None = None,
 ) -> dict:
     try:
         resolved = await resolve_or_ingest_sec_async(
             session_id=session_id,
             ticker=ticker,
             fiscal_year=year,
+            progress=progress,
         )
         return _resolve_result_to_dict(resolved)
     except Exception as exc:
@@ -187,31 +192,46 @@ async def run_fetch_report_async(
         results.extend(pre_results)
         errors.extend(pre_errors)
 
-        if work_items:
-            outcomes = await asyncio.gather(
-                *[
-                    _process_ticker_year_async(session_id, ticker, year)
-                    for ticker, year in work_items
-                ],
-                return_exceptions=True,
-            )
-            for (ticker, year), outcome in zip(work_items, outcomes, strict=True):
-                if isinstance(outcome, BaseException):
-                    msg = f"{ticker} FY{year}: {outcome}"
-                    errors.append(msg)
-                    results.append(
-                        {
-                            "ticker": ticker,
-                            "year": year,
-                            "success": False,
-                            "error": str(outcome),
-                        }
-                    )
-                elif not outcome["success"]:
-                    errors.append(f"{ticker} FY{year}: {outcome['error']}")
-                    results.append(outcome)
-                else:
-                    results.append(outcome)
+        rag_progress: RagIngestProgress | None = None
+        try:
+            if work_items:
+                rag_progress = RagIngestProgress.start(
+                    session_id,
+                    source="mcp",
+                    n_filings=len(work_items),
+                )
+                outcomes = await asyncio.gather(
+                    *[
+                        _process_ticker_year_async(
+                            session_id, ticker, year, progress=rag_progress
+                        )
+                        for ticker, year in work_items
+                    ],
+                    return_exceptions=True,
+                )
+                for (ticker, year), outcome in zip(work_items, outcomes, strict=True):
+                    if isinstance(outcome, BaseException):
+                        msg = f"{ticker} FY{year}: {outcome}"
+                        errors.append(msg)
+                        results.append(
+                            {
+                                "ticker": ticker,
+                                "year": year,
+                                "success": False,
+                                "error": str(outcome),
+                            }
+                        )
+                    elif not outcome["success"]:
+                        errors.append(f"{ticker} FY{year}: {outcome['error']}")
+                        results.append(outcome)
+                    else:
+                        results.append(outcome)
+                if rag_progress is not None:
+                    rag_progress.finish()
+                    rag_progress = None
+        finally:
+            if rag_progress is not None:
+                rag_progress.abandon()
 
     success_count = sum(1 for r in results if r["success"])
     total_count = len(results)
