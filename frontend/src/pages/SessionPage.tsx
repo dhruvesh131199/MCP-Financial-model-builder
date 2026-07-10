@@ -58,6 +58,11 @@ export default function SessionPage() {
         setError(null);
         setNotFound(!workspace.exists);
 
+        // Processes are ephemeral (Done → expires → gone). Always sync them —
+        // do not gate on updated_at, or a cleared chip can stick in React state
+        // when workspace.updated_at falls back to an unchanged files mtime.
+        setProcesses(workspace.processes ?? []);
+
         if (workspace.updated_at !== lastUpdated) {
           lastUpdated = workspace.updated_at;
           const prevModelCount = modelCountRef.current;
@@ -71,7 +76,6 @@ export default function SessionPage() {
             setFiles(workspace.files);
             setRagDocuments(workspace.rag_documents ?? []);
             setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
-            setProcesses(workspace.processes ?? []);
             for (const model of workspace.models) {
               if (model.type === "detailed_analysis") {
                 const ts =
@@ -93,7 +97,6 @@ export default function SessionPage() {
           setFiles(workspace.files);
           setRagDocuments(workspace.rag_documents ?? []);
           setFinancialsFetchLog(workspace.financials_fetch_log ?? []);
-          setProcesses(workspace.processes ?? []);
 
           let analysisToSelect: ModelEntry | undefined;
           let ragResultToSelect: ModelEntry | undefined;

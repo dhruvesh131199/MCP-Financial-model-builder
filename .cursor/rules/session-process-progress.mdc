@@ -12,10 +12,12 @@ In-flight work shows in the dashboard **Processing** sidebar via JSON files unde
 Use [`backend/session_process_store.py`](backend/session_process_store.py):
 
 - `upsert_process(session_id, process_id=None, *, source, process_name, message, progress)` — create or update
-- `delete_process(session_id, process_id)` — remove when done
-- `list_processes` / `processes_mtime` — wired into `load_workspace` (poll picks them up)
+- `delete_process(session_id, process_id)` — mark chip to expire (**default ~3s** via `expires_at` on the JSON). `list_processes` / workspace poll removes expired files (no background threads — reload-safe). Pass `delay_seconds=0` only in tests / force-clear.
+- `list_processes` / `processes_mtime` — wired into `load_workspace` (poll picks them up; also cleans expired chips)
 
-JSON shape: `{ id, source, process_name, message, progress }` with `progress` 0–100. `source` is `"mcp"` | `"rest"` (or future values).
+JSON shape: `{ id, source, process_name, message, progress }` with `progress` 0–100. Optional `expires_at` after `delete_process`. `source` is `"mcp"` | `"rest"` (or future values).
+
+**Do not** `time.sleep` or start threads in MCP/REST handlers for progress UX — expiry lives only in `delete_process` + poll cleanup.
 
 ## Lifecycle (caller owns it)
 
@@ -23,7 +25,7 @@ The **running function** must:
 
 1. **Create** at start: `progress=2`, message like `"Starting…"`, fixed `process_name` for that job type
 2. **Update** while working: change `message` for the current unit of work; bump `progress` only when advancing to the **next** unit (not on the first unit — otherwise the bar jumps ahead of the work)
-3. **Finish**: upsert `progress=100` (message e.g. `"Done…"`), then **`delete_process` in `finally`** so chips clear on success or error
+3. **Finish**: upsert `progress=100` (message e.g. `"Done…"`), then **`delete_process` in `finally`** (store sets `expires_at` ~3s out; poll clears the chip after that on success or error)
 
 ```python
 process_id = None
@@ -42,12 +44,13 @@ try:
                    message="Done…", progress=100)
 finally:
     if process_id is not None:
-        delete_process(session_id, process_id)
+        delete_process(session_id, process_id)  # sets expires_at ~3s; poll removes
 ```
 
 ## UI contract
 
-- Frontend polls workspace every ~3s; section appears only if `processes.length > 0`
+- Frontend polls workspace every ~3s; **always** applies `workspace.processes` (not gated on `updated_at`) so expired chips clear from React state
+- Section appears only if `processes.length > 0`
 - Chip shows `process_name` + `message`; thin bar width = `progress%`
 - No MCP host progress notifications required for this pattern
 
@@ -55,8 +58,8 @@ finally:
 
 1. Pick a stable `process_name` and `source`
 2. Choose a step unit (ticker, year pair, peer, etc.)
-3. Follow the lifecycle above — do **not** invent a parallel progress channel
-4. Do not leave process files behind (always `finally: delete_process`)
+3. Follow the lifecycle above — do **not** invent a parallel progress channel or per-tool sleep
+4. Always `finally: delete_process` (rely on the store’s default `expires_at` delay + poll cleanup)
 
 ## Reference implementations
 

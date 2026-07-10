@@ -478,20 +478,71 @@ function ModelsSidebarSection({
 }
 
 function ProcessingSidebarSection({ processes }: { processes: SessionProcess[] }) {
-  if (processes.length === 0) return null;
+  type ChipRow = SessionProcess & { leaving?: boolean };
+  const [chips, setChips] = useState<ChipRow[]>(() =>
+    processes.map((p) => ({ ...p, leaving: false })),
+  );
+  const [sectionLeaving, setSectionLeaving] = useState(false);
+  const [sectionVisible, setSectionVisible] = useState(processes.length > 0);
+
+  useEffect(() => {
+    setChips((prev) => {
+      const nextIds = new Set(processes.map((p) => p.id));
+      const live = processes.map((p) => ({ ...p, leaving: false }));
+      const stillLeaving = prev.filter((p) => p.leaving && !nextIds.has(p.id));
+      const newlyGone = prev
+        .filter((p) => !p.leaving && !nextIds.has(p.id))
+        .map((p) => ({ ...p, leaving: true }));
+      return [...live, ...stillLeaving, ...newlyGone];
+    });
+  }, [processes]);
+
+  useEffect(() => {
+    const leavingIds = chips.filter((c) => c.leaving).map((c) => c.id);
+    if (leavingIds.length === 0) return;
+    const t = window.setTimeout(() => {
+      setChips((prev) => prev.filter((c) => !leavingIds.includes(c.id)));
+    }, 220);
+    return () => window.clearTimeout(t);
+  }, [chips]);
+
+  const hasChips = chips.length > 0;
+
+  useEffect(() => {
+    if (hasChips) {
+      setSectionLeaving(false);
+      setSectionVisible(true);
+      return;
+    }
+    if (!sectionVisible) return;
+    setSectionLeaving(true);
+    const t = window.setTimeout(() => {
+      setSectionVisible(false);
+      setSectionLeaving(false);
+    }, 240);
+    return () => window.clearTimeout(t);
+  }, [hasChips, sectionVisible]);
+
+  if (!sectionVisible) return null;
 
   return (
-    <div className="flex flex-col border-b border-[var(--border-soft)] p-2">
+    <div
+      className={`flex flex-col border-b border-[var(--border-soft)] p-2 process-section ${
+        sectionLeaving ? "process-section-out" : "process-section-in"
+      }`}
+    >
       <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-violet-700">
         Processing
       </div>
       <div className="mt-0.5 flex flex-col gap-1.5">
-        {processes.map((proc) => {
+        {chips.map((proc) => {
           const pct = Math.max(0, Math.min(100, Number(proc.progress) || 0));
           return (
             <div
               key={proc.id}
-              className="process-chip-shimmer overflow-hidden rounded-md border border-violet-200/80 px-2 py-1.5"
+              className={`process-chip-shimmer overflow-hidden rounded-md border border-violet-200/80 px-2 py-1.5 ${
+                proc.leaving ? "process-chip-out" : "process-chip-in"
+              }`}
             >
               <p className="truncate text-xs font-medium text-gray-800">
                 {proc.process_name}
