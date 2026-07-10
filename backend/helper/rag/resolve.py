@@ -15,8 +15,8 @@ from helper.rag.chunk_ids import (
 )
 from helper.postgres.db import get_database_url
 from helper.rag.fetch_annual import peek_latest_annual_filing_meta
-from helper.rag.pipeline import ingest_from_sec, ingest_from_upload
-from helper.postgres.postgres_embed import count_unembedded, embed_document
+from helper.rag.pipeline import ingest_from_sec, ingest_from_sec_async, ingest_from_upload
+from helper.postgres.postgres_embed import count_unembedded, embed_document, embed_document_async
 from helper.postgres.postgres_read import lookup_filing
 from helper.rag.schema import DocumentSource, IngestResult
 from helper.rag.vector_store import VectorStore, get_vector_store
@@ -175,6 +175,105 @@ def resolve_or_ingest_sec(
                 )
 
         result = ingest_from_sec(
+            ticker=sym,
+            session_id=session_id,
+            homework_output=False,
+            fiscal_year=fiscal_year,
+            vector_store=store,
+        )
+        entry = _after_full_ingest(session_id, result)
+        plan = result.chunk_plan
+        return RagResolveResult(
+            success=True,
+            from_cache=False,
+            status="ready",
+            document_id=result.document_id,
+            filing_key=entry["filing_key"],
+            rag_entry_id=entry["id"],
+            label=entry["label"],
+            ticker=plan.ticker if plan else filing_key.ticker,
+            year=plan.year if plan else filing_key.year,
+            doctype=plan.doctype if plan else filing_key.doctype,
+            source=result.source.value,
+            parent_count=plan.parent_count if plan else 0,
+            subchunk_count=plan.subchunk_count if plan else 0,
+            ingest=result,
+        )
+    except Exception as exc:
+        logger.exception("rag sec resolve failed ticker=%s", sym)
+        entry = record_rag_error(
+            session_id,
+            label=f"{sym} 10-K",
+            ticker=sym,
+            error=str(exc),
+            source=DocumentSource.SEC_ANNUAL.value,
+        )
+        return RagResolveResult(
+            success=False,
+            from_cache=False,
+            status="error",
+            document_id=None,
+            filing_key=entry.get("filing_key"),
+            rag_entry_id=entry.get("id"),
+            label=entry.get("label"),
+            ticker=sym,
+            year=None,
+            doctype=None,
+            source=DocumentSource.SEC_ANNUAL.value,
+            parent_count=0,
+            subchunk_count=0,
+            error=str(exc),
+        )
+
+
+async def resolve_or_ingest_sec_async(
+    *,
+    session_id: str,
+    ticker: str,
+    fiscal_year: int | None = None,
+    vector_store: VectorStore | None = None,
+) -> RagResolveResult:
+    sym = ticker.strip().upper()
+    store = vector_store or get_vector_store()
+    try:
+        filing_meta = peek_latest_annual_filing_meta(ticker=sym, fiscal_year=fiscal_year)
+        filing_key = filing_key_from_meta(filing_meta)
+        if get_database_url():
+            hit = lookup_filing(
+                filing_key.ticker, filing_key.year, filing_key.doctype
+            )
+            if hit:
+                if count_unembedded(hit.document_id) > 0:
+                    await embed_document_async(hit.document_id)
+                entry = _link_to_session(
+                    session_id,
+                    document_id=hit.document_id,
+                    filing_key=filing_key,
+                    source=hit.source or DocumentSource.SEC_ANNUAL.value,
+                    from_cache=True,
+                    parent_count=hit.parent_count,
+                    subchunk_count=hit.subchunk_count,
+                )
+                logger.info(
+                    "rag cache hit %s session=%s", entry["filing_key"], session_id
+                )
+                return RagResolveResult(
+                    success=True,
+                    from_cache=True,
+                    status="ready",
+                    document_id=hit.document_id,
+                    filing_key=entry["filing_key"],
+                    rag_entry_id=entry["id"],
+                    label=entry["label"],
+                    ticker=filing_key.ticker,
+                    year=filing_key.year,
+                    doctype=filing_key.doctype,
+                    source=entry.get("source"),
+                    parent_count=hit.parent_count,
+                    subchunk_count=hit.subchunk_count,
+                )
+
+        result = await ingest_from_sec_async(
             ticker=sym,
             session_id=session_id,
             homework_output=False,
