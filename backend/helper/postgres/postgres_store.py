@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 
 from helper.postgres.db import get_database_url, schema_is_ready
-from helper.postgres.postgres_embed import embed_document
+from helper.postgres.postgres_embed import embed_document, embed_document_async
 from helper.rag.schema import IngestResult
 
 logger = logging.getLogger(__name__)
@@ -26,16 +27,7 @@ class PostgresVectorStore:
             logger.info("postgres_store: skip empty chunk_plan document_id=%s", result.document_id)
             return
 
-        import psycopg
-
-        with psycopg.connect(self._url) as conn:
-            if not schema_is_ready(conn):
-                raise RuntimeError(
-                    "RAG tables missing. Run: python -m helper.postgres.db migrate"
-                )
-            with conn.transaction():
-                self._upsert_filing(conn, result)
-
+        self.upsert_chunks(result)
         stats = embed_document(result.document_id, database_url=self._url)
         logger.info(
             "postgres_store: document_id=%s %s_%s_%s parents=%s subchunks=%s embedded=%s",
@@ -47,6 +39,38 @@ class PostgresVectorStore:
             plan.subchunk_count,
             stats.embedded_count,
         )
+
+    async def ingest_async(self, result: IngestResult) -> None:
+        plan = result.chunk_plan
+        if plan is None or not plan.parent_chunks:
+            logger.info(
+                "postgres_store: skip empty chunk_plan document_id=%s", result.document_id
+            )
+            return
+
+        await asyncio.to_thread(self.upsert_chunks, result)
+        stats = await embed_document_async(result.document_id, database_url=self._url)
+        logger.info(
+            "postgres_store: document_id=%s %s_%s_%s parents=%s subchunks=%s embedded=%s (async)",
+            result.document_id,
+            plan.ticker,
+            plan.year,
+            plan.doctype,
+            plan.parent_count,
+            plan.subchunk_count,
+            stats.embedded_count,
+        )
+
+    def upsert_chunks(self, result: IngestResult) -> None:
+        import psycopg
+
+        with psycopg.connect(self._url) as conn:
+            if not schema_is_ready(conn):
+                raise RuntimeError(
+                    "RAG tables missing. Run: python -m helper.postgres.db migrate"
+                )
+            with conn.transaction():
+                self._upsert_filing(conn, result)
 
     def _upsert_filing(self, conn, result: IngestResult) -> None:
         plan = result.chunk_plan

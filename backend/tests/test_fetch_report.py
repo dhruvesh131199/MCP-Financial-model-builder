@@ -72,18 +72,24 @@ def test_just_financials_routing(mock_sec):
 
 
 @patch("mcp.fetch_report.list_10k_fiscal_years")
-@patch("mcp.fetch_report.resolve_or_ingest_sec")
+@patch("mcp.fetch_report.resolve_or_ingest_sec_async")
 def test_full_report_routing_with_years(mock_resolve, mock_list):
-    mock_resolve.return_value = type(
-        "R",
-        (),
-        {
-            "success": True,
-            "document_id": "doc-1",
-            "filing_key": "AAPL_2024_10K",
-            "from_cache": False,
-        },
-    )()
+    async def _fake_resolve(**kwargs):
+        return type(
+            "R",
+            (),
+            {
+                "success": True,
+                "document_id": "doc-1",
+                "filing_key": "AAPL_2024_10K",
+                "from_cache": False,
+                "ticker": "AAPL",
+                "year": 2024,
+                "error": None,
+            },
+        )()
+
+    mock_resolve.side_effect = _fake_resolve
     res = run_fetch_report(
         "sess-1",
         report_type="full_report",
@@ -93,6 +99,7 @@ def test_full_report_routing_with_years(mock_resolve, mock_list):
     assert res["success"] is True
     assert len(res["results"]) == 1
     assert res["results"][0]["year"] == 2024
+    assert "duration_seconds" in res
     mock_list.assert_not_called()
     mock_resolve.assert_called_once_with(
         session_id="sess-1", ticker="AAPL", fiscal_year=2024
@@ -100,19 +107,26 @@ def test_full_report_routing_with_years(mock_resolve, mock_list):
 
 
 @patch("mcp.fetch_report.list_10k_fiscal_years")
-@patch("mcp.fetch_report.resolve_or_ingest_sec")
+@patch("mcp.fetch_report.resolve_or_ingest_sec_async")
 def test_full_report_routing_latest(mock_resolve, mock_list):
     mock_list.return_value = [2025]
-    mock_resolve.return_value = type(
-        "R",
-        (),
-        {
-            "success": True,
-            "document_id": "doc-1",
-            "filing_key": "WMT_2025_10K",
-            "from_cache": True,
-        },
-    )()
+
+    async def _fake_resolve(**kwargs):
+        return type(
+            "R",
+            (),
+            {
+                "success": True,
+                "document_id": "doc-1",
+                "filing_key": "WMT_2025_10K",
+                "from_cache": True,
+                "ticker": "WMT",
+                "year": 2025,
+                "error": None,
+            },
+        )()
+
+    mock_resolve.side_effect = _fake_resolve
     res = run_fetch_report(
         "sess-1",
         report_type="full_report",
@@ -124,6 +138,37 @@ def test_full_report_routing_latest(mock_resolve, mock_list):
     mock_resolve.assert_called_once_with(
         session_id="sess-1", ticker="WMT", fiscal_year=2025
     )
+
+
+@patch("mcp.fetch_report.resolve_or_ingest_sec_async")
+def test_full_report_gather_multiple_pairs(mock_resolve):
+    async def _fake_resolve(**kwargs):
+        return type(
+            "R",
+            (),
+            {
+                "success": True,
+                "document_id": f"doc-{kwargs['ticker']}-{kwargs['fiscal_year']}",
+                "filing_key": f"{kwargs['ticker']}_{kwargs['fiscal_year']}_10K",
+                "from_cache": False,
+                "ticker": kwargs["ticker"],
+                "year": kwargs["fiscal_year"],
+                "error": None,
+            },
+        )()
+
+    mock_resolve.side_effect = _fake_resolve
+
+    res = run_fetch_report(
+        "sess-1",
+        report_type="full_report",
+        tickers=["AAPL", "MSFT"],
+        years=[2024, 2023],
+    )
+
+    assert res["success"] is True
+    assert len(res["results"]) == 4
+    assert mock_resolve.call_count == 4
 
 
 @patch("mcp.fetch_report.list_10k_fiscal_years")

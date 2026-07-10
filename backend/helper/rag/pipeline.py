@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -26,6 +28,9 @@ NARRATIVE_MARKERS = (
     ("md_and_a", "management"),
     ("financial_statements", "financial statements"),
 )
+
+_SEC_FETCH_CONCURRENCY = max(1, int(os.getenv("SEC_FETCH_CONCURRENCY", "4")))
+SEC_FETCH_SEMAPHORE = asyncio.Semaphore(_SEC_FETCH_CONCURRENCY)
 
 
 def _narrative_checks(markdown: str) -> dict[str, bool]:
@@ -53,6 +58,7 @@ def _finalize_ingest(
     filing_key: DocumentFilingKey,
     session_id: str | None,
     vector_store: VectorStore,
+    defer_vector_ingest: bool = False,
 ) -> IngestResult:
     markdown = convert_file_to_markdown(raw_path)
     md_path = out_dir / "converted.md"
@@ -111,8 +117,17 @@ def _finalize_ingest(
         build_report_html(result, markdown, outline), encoding="utf-8"
     )
 
-    vector_store.ingest(result)
+    if not defer_vector_ingest:
+        vector_store.ingest(result)
     return result
+
+
+async def _ingest_vector_async(store: VectorStore, result: IngestResult) -> None:
+    ingest_async = getattr(store, "ingest_async", None)
+    if ingest_async is not None:
+        await ingest_async(result)
+    else:
+        await asyncio.to_thread(store.ingest, result)
 
 
 def ingest_from_sec(
@@ -143,6 +158,43 @@ def ingest_from_sec(
         session_id=session_id,
         vector_store=store,
     )
+
+
+async def ingest_from_sec_async(
+    *,
+    ticker: str,
+    session_id: str | None = None,
+    homework_output: bool = False,
+    fiscal_year: int | None = None,
+    vector_store: VectorStore | None = None,
+) -> IngestResult:
+    store = vector_store or get_vector_store()
+    document_id, out_dir = allocate_output_dir(
+        session_id=session_id,
+        ticker=ticker,
+        homework_output=homework_output or session_id is None,
+    )
+    async with SEC_FETCH_SEMAPHORE:
+        fetched = await asyncio.to_thread(
+            fetch_latest_annual_report,
+            ticker=ticker,
+            out_dir=out_dir,
+            fiscal_year=fiscal_year,
+        )
+    result = _finalize_ingest(
+        document_id=document_id,
+        out_dir=out_dir,
+        raw_path=fetched.raw_path,
+        source=DocumentSource.SEC_ANNUAL,
+        source_format=fetched.source_format,
+        filing=fetched.filing_meta,
+        filing_key=filing_key_from_meta(fetched.filing_meta),
+        session_id=session_id,
+        vector_store=store,
+        defer_vector_ingest=True,
+    )
+    await _ingest_vector_async(store, result)
+    return result
 
 
 def ingest_from_upload(
