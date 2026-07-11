@@ -67,3 +67,5 @@ finally:
 - REST financials: [`backend/services/financials_fetch_service.py`](backend/services/financials_fetch_service.py)
 - MCP RAG 10-K: `fetch_report` `full_report` via [`RagIngestProgress`](backend/session_process_store.py) — `process_name` = `RAG 10-K ingest (this can take a while)`, start message `Starting…`; 5 steps per filing (cache hit = `+5*step`)
 - REST RAG: [`backend/api/session_rag.py`](backend/api/session_rag.py) `POST .../rag/ingest/fetch` and `.../upload` (same helper)
+- MCP `query_rag` retrieve: [`RagQueryRetrieveProgress`](backend/session_process_store.py) — one new process per loop; `process_name` = `Query: {query}` (full string for hover tooltip; CSS truncates in chip); progress 10 (search) / 30 (rerank) / 100 (analyzing parent) then delete
+- MCP `query_rag` finalize: [`RagQueryFinalizeProgress`](backend/session_process_store.py) — `Finalizing — generating answer`, 0 → 100 then delete

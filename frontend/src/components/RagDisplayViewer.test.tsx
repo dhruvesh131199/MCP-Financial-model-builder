@@ -30,5 +30,6 @@ describe("RagDisplayViewer", () => {
     expect(screen.getByText("391,035")).toBeTruthy();
     expect(screen.getByText(/Sources:/)).toBeTruthy();
     expect(screen.getByText("Pinned from chat · RAG reference")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Export PDF" })).toBeTruthy();
   });
 });

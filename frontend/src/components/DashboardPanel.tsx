@@ -540,14 +540,21 @@ function ProcessingSidebarSection({ processes }: { processes: SessionProcess[] }
           return (
             <div
               key={proc.id}
+              title={proc.process_name}
               className={`process-chip-shimmer overflow-hidden rounded-md border border-violet-200/80 px-2 py-1.5 ${
                 proc.leaving ? "process-chip-out" : "process-chip-in"
               }`}
             >
-              <p className="truncate text-xs font-medium text-gray-800">
+              <p
+                className="truncate text-xs font-medium text-gray-800"
+                title={proc.process_name}
+              >
                 {proc.process_name}
               </p>
-              <p className="mt-0.5 truncate text-[10px] leading-snug text-gray-500">
+              <p
+                className="mt-0.5 truncate text-[10px] leading-snug text-gray-500"
+                title={proc.message}
+              >
                 {proc.message}
               </p>
               <div className="mt-1.5 h-0.5 w-full overflow-hidden rounded-full bg-violet-100">

@@ -288,3 +288,153 @@ def filing_progress_label(ticker: str, year: int | None) -> str:
     if year is not None:
         return f"{sym} {year}"
     return sym
+
+
+RAG_QUERY_PROCESS_NAME_MAX = 500
+RAG_QUERY_FINALIZE_PROCESS_NAME = "Finalizing — generating answer"
+
+
+def truncate_process_name(name: str, max_len: int = RAG_QUERY_PROCESS_NAME_MAX) -> str:
+    """Cap stored process_name length (UI truncates visually; title shows full string)."""
+    text = name.strip()
+    if len(text) <= max_len:
+        return text
+    return text[: max_len - 1].rstrip() + "…"
+
+
+def query_rag_process_name(query: str) -> str:
+    """Chip title for query_rag retrieve: always 'Query: {query}'."""
+    return truncate_process_name(f"Query: {query.strip()}")
+
+
+class RagQueryRetrieveProgress:
+    """Per-retrieve-loop Processing chip (one process per host query_rag retrieve).
+
+    Use when: MCP query_rag mode=retrieve needs sidebar updates for search/rerank/parent.
+    Logic: start(process_name='Query: …') → set(message, progress) at 10/30/100 → finish/abandon.
+    Returns: start() returns the helper; set/finish write process JSON.
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        process_id: str,
+        *,
+        source: str,
+        process_name: str,
+    ) -> None:
+        self.session_id = session_id
+        self.process_id = process_id
+        self.source = source
+        self.process_name = process_name
+        self._finished = False
+
+    @classmethod
+    def start(
+        cls,
+        session_id: str,
+        *,
+        source: str,
+        process_name: str,
+        message: str = "Starting…",
+    ) -> RagQueryRetrieveProgress:
+        name = truncate_process_name(process_name)
+        created = upsert_process(
+            session_id,
+            source=source,
+            process_name=name,
+            message=message,
+            progress=2,
+        )
+        return cls(
+            session_id,
+            created["id"],
+            source=source,
+            process_name=name,
+        )
+
+    def set(self, message: str, progress: float) -> None:
+        self._upsert(message=message, progress=progress)
+
+    def finish(self, message: str | None = None) -> None:
+        """Expire the chip. Pass message to force progress=100 with that text first."""
+        if self._finished:
+            return
+        if message is not None:
+            self._upsert(message=message, progress=100)
+        delete_process(self.session_id, self.process_id)
+        self._finished = True
+
+    def abandon(self) -> None:
+        if self._finished:
+            return
+        delete_process(self.session_id, self.process_id)
+        self._finished = True
+
+    def _upsert(self, *, message: str, progress: float) -> None:
+        upsert_process(
+            self.session_id,
+            self.process_id,
+            source=self.source,
+            process_name=self.process_name,
+            message=message,
+            progress=progress,
+        )
+
+
+class RagQueryFinalizeProgress:
+    """Short finalize chip for query_rag mode=finalize.
+
+    Use when: MCP query_rag finalize merges parents for the host to answer.
+    Logic: start at progress 0 → finish at 100 → delete_process.
+    Returns: start() returns the helper.
+    """
+
+    def __init__(
+        self,
+        session_id: str,
+        process_id: str,
+        *,
+        source: str,
+    ) -> None:
+        self.session_id = session_id
+        self.process_id = process_id
+        self.source = source
+        self._finished = False
+
+    @classmethod
+    def start(
+        cls,
+        session_id: str,
+        *,
+        source: str,
+        message: str = "Merging sections…",
+    ) -> RagQueryFinalizeProgress:
+        created = upsert_process(
+            session_id,
+            source=source,
+            process_name=RAG_QUERY_FINALIZE_PROCESS_NAME,
+            message=message,
+            progress=0,
+        )
+        return cls(session_id, created["id"], source=source)
+
+    def finish(self, message: str = "Done…") -> None:
+        if self._finished:
+            return
+        upsert_process(
+            self.session_id,
+            self.process_id,
+            source=self.source,
+            process_name=RAG_QUERY_FINALIZE_PROCESS_NAME,
+            message=message,
+            progress=100,
+        )
+        delete_process(self.session_id, self.process_id)
+        self._finished = True
+
+    def abandon(self) -> None:
+        if self._finished:
+            return
+        delete_process(self.session_id, self.process_id)
+        self._finished = True
