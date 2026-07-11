@@ -91,7 +91,7 @@ export default function HomePage() {
 
         {/* Right ~35% — Examples (no card); scrolls independently */}
         <aside className="border-t border-gray-200 bg-gray-50 px-4 py-10 sm:px-6 lg:h-full lg:overflow-y-auto lg:border-t-0 lg:border-l lg:px-8 lg:py-16">
-          <h2 className="text-lg font-semibold text-gray-900">Examples</h2>
+          <h2 className="text-3xl font-semibold tracking-tight text-gray-900 sm:text-4xl">Examples</h2>
           <div className="mt-6 space-y-8">
             {HOME_DEMO_VIDEOS.map((demo) => (
               <HomeDemoVideo key={demo.id} src={demo.src} title={demo.title} />
