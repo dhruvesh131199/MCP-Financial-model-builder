@@ -12,16 +12,86 @@ from integrations.hf_client import HuggingFaceError, get_hf_token
 DEFAULT_EMBED_MODEL = "BAAI/bge-base-en-v1.5"
 EXPECTED_DIMENSION = 768
 HF_INFERENCE_BASE = "https://router.huggingface.co/hf-inference/models"
-EMBED_BATCH_SIZE = 32
-EMBED_PARALLEL_BATCHES = 4
 
 
 class HuggingFaceEmbedError(HuggingFaceError):
     pass
 
 
-def get_embed_model() -> str:
-    return os.getenv("HF_EMBED_MODEL", "").strip() or DEFAULT_EMBED_MODEL
+class HuggingFaceEmbedProvider:
+    """Embed texts via HF feature-extraction (default: bge-base-en-v1.5, 768-dim)."""
+
+    @property
+    def model_id(self) -> str:
+        return os.getenv("HF_EMBED_MODEL", "").strip() or DEFAULT_EMBED_MODEL
+
+    @property
+    def dimension(self) -> int:
+        return EXPECTED_DIMENSION
+
+    def embed_texts(
+        self,
+        texts: list[str],
+        *,
+        model_id: str | None = None,
+        timeout_s: float = 120.0,
+    ) -> list[list[float]]:
+        if not texts:
+            return []
+
+        model = model_id or self.model_id
+        url = _feature_extraction_url(model)
+        token = get_hf_token()
+        payload = {"inputs": texts if len(texts) > 1 else texts[0], "normalize": True}
+
+        try:
+            with httpx.Client(timeout=timeout_s) as client:
+                response = client.post(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    json=payload,
+                )
+        except httpx.RequestError as exc:
+            raise HuggingFaceEmbedError(
+                f"Cannot reach Hugging Face embedding API at {url}. ({exc})"
+            ) from exc
+
+        _raise_for_embed_status(response, model=model, url=url)
+        return _parse_embed_response(
+            texts, response.json(), model=model, dimension=self.dimension
+        )
+
+    async def embed_texts_async(
+        self,
+        texts: list[str],
+        *,
+        model_id: str | None = None,
+        timeout_s: float = 120.0,
+    ) -> list[list[float]]:
+        if not texts:
+            return []
+
+        model = model_id or self.model_id
+        url = _feature_extraction_url(model)
+        token = get_hf_token()
+        payload = {"inputs": texts if len(texts) > 1 else texts[0], "normalize": True}
+
+        try:
+            async with httpx.AsyncClient(timeout=timeout_s) as client:
+                response = await client.post(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    json=payload,
+                )
+        except httpx.RequestError as exc:
+            raise HuggingFaceEmbedError(
+                f"Cannot reach Hugging Face embedding API at {url}. ({exc})"
+            ) from exc
+
+        _raise_for_embed_status(response, model=model, url=url)
+        return _parse_embed_response(
+            texts, response.json(), model=model, dimension=self.dimension
+        )
 
 
 def _feature_extraction_url(model_id: str) -> str:
@@ -60,7 +130,11 @@ def _normalize_embedding(raw: Any) -> list[float]:
 
 
 def _parse_embed_response(
-    texts: list[str], data: Any, *, model: str
+    texts: list[str],
+    data: Any,
+    *,
+    model: str,
+    dimension: int,
 ) -> list[list[float]]:
     if isinstance(data, dict) and "error" in data:
         raise HuggingFaceEmbedError(str(data["error"]))
@@ -76,9 +150,9 @@ def _parse_embed_response(
         vectors = [_normalize_embedding(item) for item in data]
 
     for i, vec in enumerate(vectors):
-        if len(vec) != EXPECTED_DIMENSION:
+        if len(vec) != dimension:
             raise HuggingFaceEmbedError(
-                f"Embedding {i} has dimension {len(vec)}, expected {EXPECTED_DIMENSION} "
+                f"Embedding {i} has dimension {len(vec)}, expected {dimension} "
                 f"for model {model}"
             )
 
@@ -99,39 +173,22 @@ def _raise_for_embed_status(response: httpx.Response, *, model: str, url: str) -
         raise HuggingFaceEmbedError(f"HF embed API {response.status_code}: {detail}")
 
 
+# --- Backward-compatible module helpers (delegate to provider class) ---
+
+
+def get_embed_model() -> str:
+    return HuggingFaceEmbedProvider().model_id
+
+
 def embed_texts(
     texts: list[str],
     *,
     model_id: str | None = None,
     timeout_s: float = 120.0,
 ) -> list[list[float]]:
-    """
-    Embed one or more texts via HF feature-extraction API.
-
-    Returns one vector per input string. Default model: BAAI/bge-base-en-v1.5 (768 dims).
-    """
-    if not texts:
-        return []
-
-    model = model_id or get_embed_model()
-    url = _feature_extraction_url(model)
-    token = get_hf_token()
-    payload = {"inputs": texts if len(texts) > 1 else texts[0], "normalize": True}
-
-    try:
-        with httpx.Client(timeout=timeout_s) as client:
-            response = client.post(
-                url,
-                headers={"Authorization": f"Bearer {token}"},
-                json=payload,
-            )
-    except httpx.RequestError as exc:
-        raise HuggingFaceEmbedError(
-            f"Cannot reach Hugging Face embedding API at {url}. ({exc})"
-        ) from exc
-
-    _raise_for_embed_status(response, model=model, url=url)
-    return _parse_embed_response(texts, response.json(), model=model)
+    return HuggingFaceEmbedProvider().embed_texts(
+        texts, model_id=model_id, timeout_s=timeout_s
+    )
 
 
 async def embed_texts_async(
@@ -140,31 +197,12 @@ async def embed_texts_async(
     model_id: str | None = None,
     timeout_s: float = 120.0,
 ) -> list[list[float]]:
-    """Async variant of embed_texts using httpx.AsyncClient."""
-    if not texts:
-        return []
-
-    model = model_id or get_embed_model()
-    url = _feature_extraction_url(model)
-    token = get_hf_token()
-    payload = {"inputs": texts if len(texts) > 1 else texts[0], "normalize": True}
-
-    try:
-        async with httpx.AsyncClient(timeout=timeout_s) as client:
-            response = await client.post(
-                url,
-                headers={"Authorization": f"Bearer {token}"},
-                json=payload,
-            )
-    except httpx.RequestError as exc:
-        raise HuggingFaceEmbedError(
-            f"Cannot reach Hugging Face embedding API at {url}. ({exc})"
-        ) from exc
-
-    _raise_for_embed_status(response, model=model, url=url)
-    return _parse_embed_response(texts, response.json(), model=model)
+    return await HuggingFaceEmbedProvider().embed_texts_async(
+        texts, model_id=model_id, timeout_s=timeout_s
+    )
 
 
 def vector_to_pg_literal(vec: list[float]) -> str:
-    """Format a float list for Postgres pgvector cast."""
-    return "[" + ",".join(f"{v:.8f}" for v in vec) + "]"
+    from helper.postgres.embedding import vector_to_pg_literal as _fmt
+
+    return _fmt(vec)

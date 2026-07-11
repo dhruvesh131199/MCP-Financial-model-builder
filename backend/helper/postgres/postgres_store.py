@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from contextlib import nullcontext
 
 from helper.postgres.db import get_database_url, schema_is_ready
 from helper.postgres.postgres_embed import embed_document, embed_document_async
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class PostgresVectorStore:
-    """Upsert documents + parent/sub chunks, then embed sub-chunks (768-dim HF)."""
+    """Upsert documents + parent/sub chunks, then embed sub-chunks via EmbedProvider."""
 
     def __init__(self, database_url: str | None = None) -> None:
         self._url = database_url or get_database_url()
@@ -27,6 +28,8 @@ class PostgresVectorStore:
         *,
         progress=None,
         progress_label: str = "",
+        timing=None,
+        timing_key: str = "",
     ) -> None:
         plan = result.chunk_plan
         if plan is None or not plan.parent_chunks:
@@ -43,11 +46,13 @@ class PostgresVectorStore:
         label = progress_label or f"{plan.ticker} {plan.year}"
         if progress:
             progress.report(f"{label}: uploading chunks")
-        self.upsert_chunks(result)
+        with timing.step(timing_key, "db_upsert") if timing and timing_key else nullcontext():
+            self.upsert_chunks(result)
         if progress:
             progress.report(f"{label}: chunks uploaded", advance_steps=1)
             progress.report(f"{label}: embedding")
-        stats = embed_document(result.document_id, database_url=self._url)
+        with timing.step(timing_key, "embedding") if timing and timing_key else nullcontext():
+            stats = embed_document(result.document_id, database_url=self._url)
         if progress:
             progress.report(f"{label}: embedding done", advance_steps=1)
         logger.info(
@@ -67,6 +72,8 @@ class PostgresVectorStore:
         *,
         progress=None,
         progress_label: str = "",
+        timing=None,
+        timing_key: str = "",
     ) -> None:
         plan = result.chunk_plan
         if plan is None or not plan.parent_chunks:
@@ -85,11 +92,13 @@ class PostgresVectorStore:
         label = progress_label or f"{plan.ticker} {plan.year}"
         if progress:
             progress.report(f"{label}: uploading chunks")
-        await asyncio.to_thread(self.upsert_chunks, result)
+        with timing.step(timing_key, "db_upsert") if timing and timing_key else nullcontext():
+            await asyncio.to_thread(self.upsert_chunks, result)
         if progress:
             progress.report(f"{label}: chunks uploaded", advance_steps=1)
             progress.report(f"{label}: embedding")
-        stats = await embed_document_async(result.document_id, database_url=self._url)
+        with timing.step(timing_key, "embedding") if timing and timing_key else nullcontext():
+            stats = await embed_document_async(result.document_id, database_url=self._url)
         if progress:
             progress.report(f"{label}: embedding done", advance_steps=1)
         logger.info(

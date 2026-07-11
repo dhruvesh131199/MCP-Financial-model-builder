@@ -8,6 +8,7 @@ import time
 from typing import Literal
 
 from helper.rag.fetch_annual import list_10k_fiscal_years
+from helper.rag.ingest_timing import IngestTimingSession
 from helper.rag.resolve import RagResolveResult, resolve_or_ingest_sec_async
 from services.sec_fetch_handler import handle_cached_sec_fetch
 from session_process_store import RagIngestProgress, delete_process, upsert_process
@@ -43,6 +44,7 @@ async def _process_ticker_year_async(
     ticker: str,
     year: int,
     progress: RagIngestProgress | None = None,
+    timing: IngestTimingSession | None = None,
 ) -> dict:
     try:
         resolved = await resolve_or_ingest_sec_async(
@@ -50,6 +52,7 @@ async def _process_ticker_year_async(
             ticker=ticker,
             fiscal_year=year,
             progress=progress,
+            timing=timing,
         )
         return _resolve_result_to_dict(resolved)
     except Exception as exc:
@@ -193,8 +196,11 @@ async def run_fetch_report_async(
         errors.extend(pre_errors)
 
         rag_progress: RagIngestProgress | None = None
+        timing: IngestTimingSession | None = None
+        timing_emitted = False
         try:
             if work_items:
+                timing = IngestTimingSession()
                 rag_progress = RagIngestProgress.start(
                     session_id,
                     source="mcp",
@@ -203,7 +209,11 @@ async def run_fetch_report_async(
                 outcomes = await asyncio.gather(
                     *[
                         _process_ticker_year_async(
-                            session_id, ticker, year, progress=rag_progress
+                            session_id,
+                            ticker,
+                            year,
+                            progress=rag_progress,
+                            timing=timing,
                         )
                         for ticker, year in work_items
                     ],
@@ -229,9 +239,14 @@ async def run_fetch_report_async(
                 if rag_progress is not None:
                     rag_progress.finish()
                     rag_progress = None
+                if timing is not None:
+                    timing.emit()
+                    timing_emitted = True
         finally:
             if rag_progress is not None:
                 rag_progress.abandon()
+            if timing is not None and not timing_emitted:
+                timing.emit()
 
     success_count = sum(1 for r in results if r["success"])
     total_count = len(results)

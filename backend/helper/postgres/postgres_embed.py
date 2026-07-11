@@ -1,4 +1,4 @@
-"""Embed sub-chunks in Postgres via Hugging Face."""
+"""Embed sub-chunks in Postgres via the configured EmbedProvider."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from helper.postgres.db import get_database_url, schema_is_ready
-from helper.postgres.hf_embed import (
-    EMBED_BATCH_SIZE,
-    EMBED_PARALLEL_BATCHES,
+from helper.postgres.embedding import (
     embed_texts,
     embed_texts_async,
+    get_embed_batch_size,
     get_embed_model,
+    get_embed_parallel_batches,
     vector_to_pg_literal,
 )
 
@@ -120,9 +120,10 @@ def embed_document(document_id: str, *, database_url: str | None = None) -> Embe
 
     embedded_total = 0
     now = datetime.now(timezone.utc)
+    batch_size = get_embed_batch_size()
 
-    for batch_start in range(0, len(rows), EMBED_BATCH_SIZE):
-        batch = rows[batch_start : batch_start + EMBED_BATCH_SIZE]
+    for batch_start in range(0, len(rows), batch_size):
+        batch = rows[batch_start : batch_start + batch_size]
         ids = [r[0] for r in batch]
         texts = [r[1] for r in batch]
         vectors = embed_texts(texts, model_id=model_id)
@@ -145,7 +146,7 @@ def embed_document(document_id: str, *, database_url: str | None = None) -> Embe
 async def embed_document_async(
     document_id: str, *, database_url: str | None = None
 ) -> EmbedStats:
-    """Embed unembedded sub-chunks with up to EMBED_PARALLEL_BATCHES HF calls in flight."""
+    """Embed unembedded sub-chunks with up to get_embed_parallel_batches() calls in flight."""
     url = database_url or get_database_url()
     if not url:
         raise ValueError("DATABASE_URL is required for embed_document_async")
@@ -156,9 +157,12 @@ async def embed_document_async(
     if not rows:
         return EmbedStats(document_id=document_id, embedded_count=0, model_id=model_id)
 
+    batch_size = get_embed_batch_size()
+    parallel = get_embed_parallel_batches()
+
     batches: list[tuple[list[str], list[str]]] = []
-    for batch_start in range(0, len(rows), EMBED_BATCH_SIZE):
-        batch = rows[batch_start : batch_start + EMBED_BATCH_SIZE]
+    for batch_start in range(0, len(rows), batch_size):
+        batch = rows[batch_start : batch_start + batch_size]
         ids = [r[0] for r in batch]
         texts = [r[1] for r in batch]
         batches.append((ids, texts))
@@ -166,8 +170,8 @@ async def embed_document_async(
     embedded_total = 0
     now = datetime.now(timezone.utc)
 
-    for group_start in range(0, len(batches), EMBED_PARALLEL_BATCHES):
-        group = batches[group_start : group_start + EMBED_PARALLEL_BATCHES]
+    for group_start in range(0, len(batches), parallel):
+        group = batches[group_start : group_start + parallel]
         vectors_groups = await asyncio.gather(
             *[embed_texts_async(texts, model_id=model_id) for _, texts in group]
         )

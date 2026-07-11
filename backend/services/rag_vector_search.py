@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from helper.postgres.db import get_database_url, schema_is_ready
-from helper.postgres.hf_embed import vector_to_pg_literal
+from helper.postgres.embedding import vector_to_pg_literal
 
 try:
     import psycopg

@@ -134,15 +134,19 @@ def resolve_or_ingest_sec(
     fiscal_year: int | None = None,
     vector_store: VectorStore | None = None,
     progress=None,
+    timing=None,
 ) -> RagResolveResult:
     from session_process_store import filing_progress_label
 
     sym = ticker.strip().upper()
     store = vector_store or get_vector_store()
+    timing_key = timing.begin_filing(sym, fiscal_year) if timing else ""
     try:
         filing_meta = peek_latest_annual_filing_meta(ticker=sym, fiscal_year=fiscal_year)
         filing_key = filing_key_from_meta(filing_meta)
         label = filing_progress_label(filing_key.ticker, filing_key.year)
+        if timing:
+            timing_key = timing.remkey(timing_key, filing_key.ticker, filing_key.year)
         if get_database_url():
             hit = lookup_filing(
                 filing_key.ticker, filing_key.year, filing_key.doctype
@@ -166,6 +170,9 @@ def resolve_or_ingest_sec(
                     progress.report(
                         f"{label}: already in database", advance_steps=5
                     )
+                if timing:
+                    timing.mark_cache_hit(timing_key)
+                    timing.finish_filing(timing_key)
                 return RagResolveResult(
                     success=True,
                     from_cache=True,
@@ -189,9 +196,13 @@ def resolve_or_ingest_sec(
             fiscal_year=fiscal_year,
             vector_store=store,
             progress=progress,
+            timing=timing,
+            timing_key=timing_key,
         )
         entry = _after_full_ingest(session_id, result)
         plan = result.chunk_plan
+        if timing:
+            timing.finish_filing(timing_key)
         return RagResolveResult(
             success=True,
             from_cache=False,
@@ -210,6 +221,8 @@ def resolve_or_ingest_sec(
         )
     except Exception as exc:
         logger.exception("rag sec resolve failed ticker=%s", sym)
+        if timing and timing_key:
+            timing.finish_filing(timing_key)
         entry = record_rag_error(
             session_id,
             label=f"{sym} 10-K",
@@ -242,15 +255,19 @@ async def resolve_or_ingest_sec_async(
     fiscal_year: int | None = None,
     vector_store: VectorStore | None = None,
     progress=None,
+    timing=None,
 ) -> RagResolveResult:
     from session_process_store import filing_progress_label
 
     sym = ticker.strip().upper()
     store = vector_store or get_vector_store()
+    timing_key = timing.begin_filing(sym, fiscal_year) if timing else ""
     try:
         filing_meta = peek_latest_annual_filing_meta(ticker=sym, fiscal_year=fiscal_year)
         filing_key = filing_key_from_meta(filing_meta)
         label = filing_progress_label(filing_key.ticker, filing_key.year)
+        if timing:
+            timing_key = timing.remkey(timing_key, filing_key.ticker, filing_key.year)
         if get_database_url():
             hit = lookup_filing(
                 filing_key.ticker, filing_key.year, filing_key.doctype
@@ -274,6 +291,9 @@ async def resolve_or_ingest_sec_async(
                     progress.report(
                         f"{label}: already in database", advance_steps=5
                     )
+                if timing:
+                    timing.mark_cache_hit(timing_key)
+                    timing.finish_filing(timing_key)
                 return RagResolveResult(
                     success=True,
                     from_cache=True,
@@ -297,9 +317,13 @@ async def resolve_or_ingest_sec_async(
             fiscal_year=fiscal_year,
             vector_store=store,
             progress=progress,
+            timing=timing,
+            timing_key=timing_key,
         )
         entry = _after_full_ingest(session_id, result)
         plan = result.chunk_plan
+        if timing:
+            timing.finish_filing(timing_key)
         return RagResolveResult(
             success=True,
             from_cache=False,
@@ -318,6 +342,8 @@ async def resolve_or_ingest_sec_async(
         )
     except Exception as exc:
         logger.exception("rag sec resolve failed ticker=%s", sym)
+        if timing and timing_key:
+            timing.finish_filing(timing_key)
         entry = record_rag_error(
             session_id,
             label=f"{sym} 10-K",

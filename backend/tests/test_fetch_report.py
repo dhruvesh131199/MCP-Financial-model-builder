@@ -136,9 +136,13 @@ def test_just_financials_deletes_process_on_error(mock_sec, mock_upsert, mock_de
 
 
 
+@patch("mcp.fetch_report.RagIngestProgress")
 @patch("mcp.fetch_report.list_10k_fiscal_years")
 @patch("mcp.fetch_report.resolve_or_ingest_sec_async")
-def test_full_report_routing_with_years(mock_resolve, mock_list):
+def test_full_report_routing_with_years(mock_resolve, mock_list, mock_progress_cls):
+    mock_progress_cls.start.return_value.finish = lambda: None
+    mock_progress_cls.start.return_value.abandon = lambda: None
+
     async def _fake_resolve(**kwargs):
         return type(
             "R",
@@ -166,14 +170,21 @@ def test_full_report_routing_with_years(mock_resolve, mock_list):
     assert res["results"][0]["year"] == 2024
     assert "duration_seconds" in res
     mock_list.assert_not_called()
-    mock_resolve.assert_called_once_with(
-        session_id="sess-1", ticker="AAPL", fiscal_year=2024
-    )
+    assert mock_resolve.call_count == 1
+    kwargs = mock_resolve.call_args.kwargs
+    assert kwargs["session_id"] == "sess-1"
+    assert kwargs["ticker"] == "AAPL"
+    assert kwargs["fiscal_year"] == 2024
+    assert "progress" in kwargs
+    assert "timing" in kwargs
 
 
+@patch("mcp.fetch_report.RagIngestProgress")
 @patch("mcp.fetch_report.list_10k_fiscal_years")
 @patch("mcp.fetch_report.resolve_or_ingest_sec_async")
-def test_full_report_routing_latest(mock_resolve, mock_list):
+def test_full_report_routing_latest(mock_resolve, mock_list, mock_progress_cls):
+    mock_progress_cls.start.return_value.finish = lambda: None
+    mock_progress_cls.start.return_value.abandon = lambda: None
     mock_list.return_value = [2025]
 
     async def _fake_resolve(**kwargs):
@@ -200,13 +211,18 @@ def test_full_report_routing_latest(mock_resolve, mock_list):
     assert res["success"] is True
     assert res["results"][0]["year"] == 2025
     mock_list.assert_called_once_with("WMT", 1)
-    mock_resolve.assert_called_once_with(
-        session_id="sess-1", ticker="WMT", fiscal_year=2025
-    )
+    kwargs = mock_resolve.call_args.kwargs
+    assert kwargs["session_id"] == "sess-1"
+    assert kwargs["ticker"] == "WMT"
+    assert kwargs["fiscal_year"] == 2025
 
 
+@patch("mcp.fetch_report.RagIngestProgress")
 @patch("mcp.fetch_report.resolve_or_ingest_sec_async")
-def test_full_report_gather_multiple_pairs(mock_resolve):
+def test_full_report_gather_multiple_pairs(mock_resolve, mock_progress_cls):
+    mock_progress_cls.start.return_value.finish = lambda: None
+    mock_progress_cls.start.return_value.abandon = lambda: None
+
     async def _fake_resolve(**kwargs):
         return type(
             "R",
