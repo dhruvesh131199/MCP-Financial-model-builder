@@ -20,6 +20,11 @@ describe("HomePage", () => {
   beforeEach(() => {
     mockNavigate.mockReset();
     vi.mocked(createSession).mockReset();
+    Object.defineProperty(HTMLMediaElement.prototype, "play", {
+      configurable: true,
+      writable: true,
+      value: vi.fn().mockResolvedValue(undefined),
+    });
   });
 
   it("renders MCP setup and explore paths", () => {
@@ -33,6 +38,16 @@ describe("HomePage", () => {
     expect(screen.getByRole("link", { name: /Set up in 1 minute/i })).toBeTruthy();
     expect(screen.getByText(/Start exploring without MCP setup/i)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Start exploring/i })).toBeTruthy();
+  });
+
+  it("renders Examples panel with demo video title", () => {
+    render(
+      <MemoryRouter>
+        <HomePage />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("heading", { name: /^Examples$/i })).toBeTruthy();
+    expect(screen.getByText(/Live RAG \+ Query from 10k reports/i)).toBeTruthy();
   });
 
   it("creates session and navigates on Start exploring", async () => {
