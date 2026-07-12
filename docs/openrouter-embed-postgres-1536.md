@@ -24,4 +24,4 @@ CREATE INDEX IF NOT EXISTS idx_sub_chunks_embedding
 
 Not applied automatically by `python -m helper.postgres.db migrate` (that still only runs 001 + 002), so you control when data is wiped.
 
-After running: restart MCP, re-fetch full 10-Ks, compare `.logs/rag_ingest_timing.log`.
+After running: restart MCP, re-fetch full 10-Ks.

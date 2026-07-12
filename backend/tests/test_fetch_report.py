@@ -168,7 +168,6 @@ def test_full_report_routing_with_years(mock_resolve, mock_list, mock_progress_c
     assert res["success"] is True
     assert len(res["results"]) == 1
     assert res["results"][0]["year"] == 2024
-    assert "duration_seconds" in res
     mock_list.assert_not_called()
     assert mock_resolve.call_count == 1
     kwargs = mock_resolve.call_args.kwargs
@@ -176,7 +175,7 @@ def test_full_report_routing_with_years(mock_resolve, mock_list, mock_progress_c
     assert kwargs["ticker"] == "AAPL"
     assert kwargs["fiscal_year"] == 2024
     assert "progress" in kwargs
-    assert "timing" in kwargs
+    assert "timing" not in kwargs
 
 
 @patch("mcp.fetch_report.RagIngestProgress")

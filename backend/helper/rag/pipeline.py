@@ -6,7 +6,6 @@ import asyncio
 import json
 import os
 import shutil
-from contextlib import nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -26,7 +25,6 @@ from helper.rag.storage import allocate_output_dir, write_meta
 from helper.rag.vector_store import VectorStore, get_vector_store
 
 if TYPE_CHECKING:
-    from helper.rag.ingest_timing import IngestTimingSession
     from session_process_store import RagIngestProgress
 
 NARRATIVE_MARKERS = (
@@ -67,33 +65,29 @@ def _finalize_ingest(
     defer_vector_ingest: bool = False,
     progress: RagIngestProgress | None = None,
     progress_label: str = "",
-    timing: IngestTimingSession | None = None,
-    timing_key: str = "",
 ) -> IngestResult:
     label = progress_label or filing_key.ticker
     if progress:
         progress.report(f"{label}: converting to markdown")
-    with timing.step(timing_key, "markdown") if timing and timing_key else nullcontext():
-        markdown = convert_file_to_markdown(raw_path)
-        md_path = out_dir / "converted.md"
-        md_path.write_text(markdown, encoding="utf-8")
-        chars, lines = markdown_stats(markdown)
+    markdown = convert_file_to_markdown(raw_path)
+    md_path = out_dir / "converted.md"
+    md_path.write_text(markdown, encoding="utf-8")
+    chars, lines = markdown_stats(markdown)
     if progress:
         progress.report(f"{label}: markdown done", advance_steps=1)
 
     if progress:
         progress.report(f"{label}: chunking")
-    with timing.step(timing_key, "chunking") if timing and timing_key else nullcontext():
-        outline = analyze_sections(markdown)
-        sections_path = out_dir / "sections.json"
-        sections_path.write_text(
-            json.dumps(outline.model_dump(), indent=2), encoding="utf-8"
-        )
-        chunk_plan = build_chunk_plan(markdown, outline, document_id, filing_key)
-        chunks_path = out_dir / "chunks.json"
-        chunks_path.write_text(
-            json.dumps(chunk_plan.model_dump(), indent=2), encoding="utf-8"
-        )
+    outline = analyze_sections(markdown)
+    sections_path = out_dir / "sections.json"
+    sections_path.write_text(
+        json.dumps(outline.model_dump(), indent=2), encoding="utf-8"
+    )
+    chunk_plan = build_chunk_plan(markdown, outline, document_id, filing_key)
+    chunks_path = out_dir / "chunks.json"
+    chunks_path.write_text(
+        json.dumps(chunk_plan.model_dump(), indent=2), encoding="utf-8"
+    )
     if progress:
         progress.report(
             f"{label}: {chunk_plan.parent_count} parents, "
@@ -148,9 +142,6 @@ def _finalize_ingest(
         if progress is not None:
             ingest_kw["progress"] = progress
             ingest_kw["progress_label"] = label
-        if timing is not None and timing_key:
-            ingest_kw["timing"] = timing
-            ingest_kw["timing_key"] = timing_key
         try:
             vector_store.ingest(result, **ingest_kw)
         except TypeError:
@@ -167,8 +158,6 @@ async def _ingest_vector_async(
     *,
     progress: RagIngestProgress | None = None,
     progress_label: str = "",
-    timing: IngestTimingSession | None = None,
-    timing_key: str = "",
 ) -> None:
     ingest_async = getattr(store, "ingest_async", None)
     if ingest_async is not None:
@@ -177,8 +166,6 @@ async def _ingest_vector_async(
                 result,
                 progress=progress,
                 progress_label=progress_label,
-                timing=timing,
-                timing_key=timing_key,
             )
             return
         except TypeError:
@@ -205,8 +192,6 @@ def ingest_from_sec(
     fiscal_year: int | None = None,
     vector_store: VectorStore | None = None,
     progress: RagIngestProgress | None = None,
-    timing: IngestTimingSession | None = None,
-    timing_key: str = "",
 ) -> IngestResult:
     from session_process_store import filing_progress_label
 
@@ -219,10 +204,9 @@ def ingest_from_sec(
     label = filing_progress_label(ticker, fiscal_year)
     if progress:
         progress.report(f"{label}: fetching 10-K from SEC")
-    with timing.step(timing_key, "sec_fetch") if timing and timing_key else nullcontext():
-        fetched = fetch_latest_annual_report(
-            ticker=ticker, out_dir=out_dir, fiscal_year=fiscal_year
-        )
+    fetched = fetch_latest_annual_report(
+        ticker=ticker, out_dir=out_dir, fiscal_year=fiscal_year
+    )
     fkey = filing_key_from_meta(fetched.filing_meta)
     label = filing_progress_label(ticker, fkey.year)
     if progress:
@@ -239,8 +223,6 @@ def ingest_from_sec(
         vector_store=store,
         progress=progress,
         progress_label=label,
-        timing=timing,
-        timing_key=timing_key,
     )
 
 
@@ -252,8 +234,6 @@ async def ingest_from_sec_async(
     fiscal_year: int | None = None,
     vector_store: VectorStore | None = None,
     progress: RagIngestProgress | None = None,
-    timing: IngestTimingSession | None = None,
-    timing_key: str = "",
 ) -> IngestResult:
     from session_process_store import filing_progress_label
 
@@ -266,14 +246,13 @@ async def ingest_from_sec_async(
     label = filing_progress_label(ticker, fiscal_year)
     if progress:
         progress.report(f"{label}: fetching 10-K from SEC")
-    with timing.step(timing_key, "sec_fetch") if timing and timing_key else nullcontext():
-        async with SEC_FETCH_SEMAPHORE:
-            fetched = await asyncio.to_thread(
-                fetch_latest_annual_report,
-                ticker=ticker,
-                out_dir=out_dir,
-                fiscal_year=fiscal_year,
-            )
+    async with SEC_FETCH_SEMAPHORE:
+        fetched = await asyncio.to_thread(
+            fetch_latest_annual_report,
+            ticker=ticker,
+            out_dir=out_dir,
+            fiscal_year=fiscal_year,
+        )
     label = filing_progress_label(
         ticker, filing_key_from_meta(fetched.filing_meta).year
     )
@@ -293,16 +272,12 @@ async def ingest_from_sec_async(
         defer_vector_ingest=True,
         progress=progress,
         progress_label=label,
-        timing=timing,
-        timing_key=timing_key,
     )
     await _ingest_vector_async(
         store,
         result,
         progress=progress,
         progress_label=label,
-        timing=timing,
-        timing_key=timing_key,
     )
     return result
 
@@ -318,8 +293,6 @@ def ingest_from_upload(
     homework_output: bool = False,
     vector_store: VectorStore | None = None,
     progress: RagIngestProgress | None = None,
-    timing: IngestTimingSession | None = None,
-    timing_key: str = "",
 ) -> IngestResult:
     from session_process_store import filing_progress_label
 
@@ -349,6 +322,4 @@ def ingest_from_upload(
         vector_store=store,
         progress=progress,
         progress_label=label,
-        timing=timing,
-        timing_key=timing_key,
     )

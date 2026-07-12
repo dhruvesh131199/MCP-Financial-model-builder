@@ -284,8 +284,9 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-07-11 | Cleanup | Removed RAG step timing helpers and `.logs/rag_*_timing.log` (ingest + query_rag); Processing sidebar progress chips unchanged. |
 | 2026-07-11 | Feature | OpenRouter rerank live: `POST /api/v1/rerank` via `OpenRouterRerankProvider` (`cohere/rerank-v3.5`); switch with `RERANK_PROVIDER=openrouter`; live smoke test proves round-trip + Paris ranks highest. |
-| 2026-07-11 | Architecture | RAG rerank mirrors embed: `RerankProvider` + `RERANK_PROVIDER` (HF live, OpenRouter stub); `query_rag` step timing (`.logs/rag_query_timing.log`) logs embed provider/model/dim so query vectors stay synced with ingest; progress chip messages set *before* each retrieve step. |
+| 2026-07-11 | Architecture | RAG rerank mirrors embed: `RerankProvider` + `RERANK_PROVIDER` (HF + OpenRouter); progress chip messages set *before* each retrieve step. |
 | 2026-07-10 | Fix | Files delete left `inputs/statements.json` ticker cache intact, and Files rematerialize hardcoded `max_years=5` — so 5Y→9Y and post-delete specific years still showed latest 5. Delete now drops the whole ticker from cache; Files view shows all cached years (append + sort). |
 | 2026-07-10 | Perf + Architecture | Multi-level async full 10-K RAG ingest on `making-full10kfetchfaster`: `gather` per (ticker, year), SEC semaphore + `to_thread`, HF embed 4×32 batches; ~46% faster at 3 tickers (195s→105s); `async def fetch_report` fixes `asyncio.run` under FastMCP; `main` keeps sync path + `duration_seconds` for benchmarks. |
 | 2026-07-09 | Refactor | Homework → `backend/helper/` migration: RAG (`helper/rag/`), Postgres (`helper/postgres/`), analysis schema (`helper/analysis/`); main project + tests import `helper.*` only; homework emptied of production code; new `helper-layout.mdc` rule. |

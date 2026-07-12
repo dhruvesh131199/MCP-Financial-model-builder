@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import time
 from typing import Literal
 
 from helper.rag.fetch_annual import list_10k_fiscal_years
-from helper.rag.ingest_timing import IngestTimingSession
 from helper.rag.resolve import RagResolveResult, resolve_or_ingest_sec_async
 from services.sec_fetch_handler import handle_cached_sec_fetch
 from session_process_store import RagIngestProgress, delete_process, upsert_process
@@ -44,7 +42,6 @@ async def _process_ticker_year_async(
     ticker: str,
     year: int,
     progress: RagIngestProgress | None = None,
-    timing: IngestTimingSession | None = None,
 ) -> dict:
     try:
         resolved = await resolve_or_ingest_sec_async(
@@ -52,7 +49,6 @@ async def _process_ticker_year_async(
             ticker=ticker,
             fiscal_year=year,
             progress=progress,
-            timing=timing,
         )
         return _resolve_result_to_dict(resolved)
     except Exception as exc:
@@ -108,10 +104,8 @@ async def run_fetch_report_async(
 
     Use when: MCP `fetch_report` or dashboard asks for financials / RAG corpus.
     Logic: validate tickers → for full_report, gather parallel 10-K ingests per (ticker, year).
-    Returns: e.g. {"success": True, "results": [...], "duration_seconds": 12.5, "message": "Fetched 2/2 ..."}
+    Returns: e.g. {"success": True, "results": [...], "message": "Fetched 2/2 ..."}
     """
-    start = time.perf_counter()
-
     if report_type not in ("full_report", "just_financials"):
         return {
             "error": f"Invalid report_type: {report_type!r}. Must be 'full_report' or 'just_financials'."
@@ -196,11 +190,8 @@ async def run_fetch_report_async(
         errors.extend(pre_errors)
 
         rag_progress: RagIngestProgress | None = None
-        timing: IngestTimingSession | None = None
-        timing_emitted = False
         try:
             if work_items:
-                timing = IngestTimingSession()
                 rag_progress = RagIngestProgress.start(
                     session_id,
                     source="mcp",
@@ -213,7 +204,6 @@ async def run_fetch_report_async(
                             ticker,
                             year,
                             progress=rag_progress,
-                            timing=timing,
                         )
                         for ticker, year in work_items
                     ],
@@ -239,27 +229,15 @@ async def run_fetch_report_async(
                 if rag_progress is not None:
                     rag_progress.finish()
                     rag_progress = None
-                if timing is not None:
-                    timing.emit()
-                    timing_emitted = True
         finally:
             if rag_progress is not None:
                 rag_progress.abandon()
-            if timing is not None and not timing_emitted:
-                timing.emit()
 
     success_count = sum(1 for r in results if r["success"])
     total_count = len(results)
-    elapsed_s = time.perf_counter() - start
 
-    timing_msg = (
-        f"fetch_report duration={elapsed_s:.2f}s report_type={report_type} "
-        f"tickers={clean_tickers} success={success_count}/{total_count}"
-    )
-    print(timing_msg, flush=True)
     logger.info(
-        "fetch_report duration=%.2fs report_type=%s tickers=%s success=%s/%s",
-        elapsed_s,
+        "fetch_report report_type=%s tickers=%s success=%s/%s",
         report_type,
         clean_tickers,
         success_count,
@@ -271,7 +249,6 @@ async def run_fetch_report_async(
         "report_type": report_type,
         "results": results,
         "errors": errors,
-        "duration_seconds": round(elapsed_s, 2),
         "message": f"Fetched {success_count}/{total_count} requested reports.",
     }
 
