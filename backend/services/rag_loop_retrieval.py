@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
-from helper.postgres.embedding import embed_texts
+from helper.postgres.embedding import embed_texts, get_embed_provider
+from helper.rag.query_timing import QueryTimingSession
 from rag_query_state import (
     ParentChunkRecord,
     RagQueryState,
@@ -100,6 +102,10 @@ def _pick_winning_hit(
     return None
 
 
+def _embed_provider_label() -> str:
+    return os.getenv("EMBED_PROVIDER", "huggingface").strip().lower() or "huggingface"
+
+
 def retrieve_loop(
     session_id: str,
     query: str,
@@ -142,6 +148,7 @@ def retrieve_loop(
 
     progress: RagQueryRetrieveProgress | None = None
     finished = False
+    timing: QueryTimingSession | None = None
     try:
         progress = RagQueryRetrieveProgress.start(
             session_id,
@@ -149,18 +156,32 @@ def retrieve_loop(
             process_name=query_rag_process_name(query),
         )
 
-        vectors = embed_texts([query])
+        embed_provider = get_embed_provider()
+        timing = QueryTimingSession(
+            mode="retrieve",
+            ticker=active_ticker,
+            loop=state.loops_completed + 1,
+            query=query,
+            embed_provider=_embed_provider_label(),
+            embed_model=embed_provider.model_id,
+            embed_dim=embed_provider.dimension,
+        )
+
+        progress.set("Embedding query…", 2)
+        with timing.step("query_embed"):
+            vectors = embed_texts([query])
         if not vectors:
             return {"error": "Failed to embed query"}
 
         collected_ids = set(state.collected_parent_ids)
-        hits = search_sub_chunks_global(
-            vectors[0],
-            limit=top_k,
-            ticker=active_ticker,
-            exclude_parent_ids=list(collected_ids),
-        )
         progress.set("Semantic search on subchunks", 10)
+        with timing.step("semantic_search"):
+            hits = search_sub_chunks_global(
+                vectors[0],
+                limit=top_k,
+                ticker=active_ticker,
+                exclude_parent_ids=list(collected_ids),
+            )
 
         if not hits:
             return {
@@ -177,8 +198,9 @@ def retrieve_loop(
                 ),
             }
 
-        reranked = rerank_hits(query, hits)
         progress.set("Reranking sub chunks", 30)
+        with timing.step("rerank"):
+            reranked = rerank_hits(query, hits)
         winner = _pick_winning_hit(reranked, collected_ids)
 
         if winner is None:
@@ -196,34 +218,36 @@ def retrieve_loop(
                 ),
             }
 
-        parent_row = load_parent_chunk(winner.parent_id)
-        if not parent_row:
-            return {"error": f"Parent chunk {winner.parent_id} not found in Postgres"}
-
         progress.set(f"Analyzing parent chunk {winner.parent_id}", 100)
+        with timing.step("load_parent"):
+            parent_row = load_parent_chunk(winner.parent_id)
+            if not parent_row:
+                return {
+                    "error": f"Parent chunk {winner.parent_id} not found in Postgres"
+                }
 
-        loop_num = state.loops_completed + 1
-        record = build_parent_record(
-            parent_row=parent_row,
-            loop=loop_num,
-            loop_query=query,
-            winning_sub_id=winner.sub_id,
-            vector_score=winner.vector_score,
-            rerank_score=winner.rerank_score,
-        )
+            loop_num = state.loops_completed + 1
+            record = build_parent_record(
+                parent_row=parent_row,
+                loop=loop_num,
+                loop_query=query,
+                winning_sub_id=winner.sub_id,
+                vector_score=winner.vector_score,
+                rerank_score=winner.rerank_score,
+            )
 
-        state.parents.append(record)
-        state.loops_completed = loop_num
-        state.loop_history.append(
-            {
-                "loop": loop_num,
-                "query": query,
-                "parent_id": record.parent_id,
-                "winning_sub_id": record.winning_sub_id,
-                "label": record.label,
-            }
-        )
-        save_state(session_id, state)
+            state.parents.append(record)
+            state.loops_completed = loop_num
+            state.loop_history.append(
+                {
+                    "loop": loop_num,
+                    "query": query,
+                    "parent_id": record.parent_id,
+                    "winning_sub_id": record.winning_sub_id,
+                    "label": record.label,
+                }
+            )
+            save_state(session_id, state)
 
         prior_metadata = [p.metadata_summary() for p in state.parents[:-1]]
 
@@ -249,6 +273,8 @@ def retrieve_loop(
             ),
         }
     finally:
+        if timing is not None:
+            timing.emit()
         if progress is not None and not finished:
             progress.abandon()
 
@@ -262,48 +288,55 @@ def finalize_loop(session_id: str, *, source: str = "mcp") -> dict[str, Any]:
     """
     progress: RagQueryFinalizeProgress | None = None
     finished = False
+    timing = QueryTimingSession(mode="finalize")
     try:
         progress = RagQueryFinalizeProgress.start(session_id, source=source)
 
-        state = load_state(session_id)
-        if state is None or not state.parents:
+        with timing.step("build_context"):
+            state = load_state(session_id)
+            if state is None or not state.parents:
+                clear_state(session_id)
+                progress.finish(message="Done…")
+                finished = True
+                return {
+                    "mode": "finalize",
+                    "error": "No parent chunks collected. Run retrieve first or reset.",
+                    "parent_count": 0,
+                    "combined_context": "",
+                }
+
+            seen: set[str] = set()
+            ordered: list[ParentChunkRecord] = []
+            for parent in state.parents:
+                if parent.parent_id in seen:
+                    continue
+                seen.add(parent.parent_id)
+                ordered.append(parent)
+
+            parts: list[str] = []
+            for parent in ordered:
+                header = (
+                    f"[{parent.label} | {parent.filing_key} | "
+                    f"parent_id={parent.parent_id}]"
+                )
+                parts.append(f"{header}\n{parent.content}")
+
+            combined = FINALIZE_SEPARATOR.join(parts)
+            original = state.original_question
+            parent_count = len(ordered)
+            citations = [_citation_dict(p) for p in ordered]
+            ticker = state.ticker
+
             clear_state(session_id)
-            progress.finish(message="Done…")
-            finished = True
-            return {
-                "mode": "finalize",
-                "error": "No parent chunks collected. Run retrieve first or reset.",
-                "parent_count": 0,
-                "combined_context": "",
-            }
 
-        seen: set[str] = set()
-        ordered: list[ParentChunkRecord] = []
-        for parent in state.parents:
-            if parent.parent_id in seen:
-                continue
-            seen.add(parent.parent_id)
-            ordered.append(parent)
-
-        parts: list[str] = []
-        for parent in ordered:
-            header = f"[{parent.label} | {parent.filing_key} | parent_id={parent.parent_id}]"
-            parts.append(f"{header}\n{parent.content}")
-
-        combined = FINALIZE_SEPARATOR.join(parts)
-        original = state.original_question
-        parent_count = len(ordered)
-        citations = [_citation_dict(p) for p in ordered]
-
-        clear_state(session_id)
-
+        timing.ticker = ticker
         progress.finish(message="Done…")
         finished = True
 
         return {
             "mode": "finalize",
             "original_question": original,
-            "ticker": state.ticker,
+            "ticker": ticker,
             "parent_count": parent_count,
             "combined_context": combined,
             "citations": citations,
@@ -317,6 +350,7 @@ def finalize_loop(session_id: str, *, source: str = "mcp") -> dict[str, Any]:
             ),
         }
     finally:
+        timing.emit()
         if progress is not None and not finished:
             progress.abandon()
 

@@ -33,6 +33,7 @@ This is a **fresh MCP-first rewrite** of ideas proven in `AI assisted Financial 
 | Detailed analysis | **`detailed_extract.py` + homework first** | Raw edgartools dump in UI; LLM line picking | Fixed row template (11+8+5 lines × 5 FY); tag-first rules; v1.1 adds **two-phase pick + derive** with provenance metadata (Files panel stays XBRL-only) |
 | DCF cash-flow bridge | **EBIT-tax with explicit D&A and NWC level** | EBITDA-tax proxy with NOPAT row and ΔRev-based NWC | Better finance semantics: show D&A + EBIT explicitly, tax on EBIT, compute ΔNWC from NWC levels, and keep UFCF/terminal/discount rows aligned between engine and UI |
 | Full 10-K RAG ingest | **Multi-level asyncio on feature branch** (`making-full10kfetchfaster`) | Serial sync on `main`; unbounded parallel gather | Layer 1: `asyncio.gather` per (ticker, year); Layer 2: HF embed batches of 32 with 4 parallel calls; SEC fetch behind semaphore + `asyncio.to_thread`; MCP tool uses `async def` + `await` (not `asyncio.run` inside FastMCP loop) |
+| Embed / rerank providers | **Env-switched `EmbedProvider` + `RerankProvider`** | Hardwire HF; separate query embed path | Same factory for ingest + `query_rag` query vectors (`EMBED_PROVIDER`); rerank independent (`RERANK_PROVIDER`, OpenRouter stub). Postgres `vector(N)` must match embed dim after switch. |
 
 ---
 
@@ -283,6 +284,8 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-07-11 | Feature | OpenRouter rerank live: `POST /api/v1/rerank` via `OpenRouterRerankProvider` (`cohere/rerank-v3.5`); switch with `RERANK_PROVIDER=openrouter`; live smoke test proves round-trip + Paris ranks highest. |
+| 2026-07-11 | Architecture | RAG rerank mirrors embed: `RerankProvider` + `RERANK_PROVIDER` (HF live, OpenRouter stub); `query_rag` step timing (`.logs/rag_query_timing.log`) logs embed provider/model/dim so query vectors stay synced with ingest; progress chip messages set *before* each retrieve step. |
 | 2026-07-10 | Fix | Files delete left `inputs/statements.json` ticker cache intact, and Files rematerialize hardcoded `max_years=5` — so 5Y→9Y and post-delete specific years still showed latest 5. Delete now drops the whole ticker from cache; Files view shows all cached years (append + sort). |
 | 2026-07-10 | Perf + Architecture | Multi-level async full 10-K RAG ingest on `making-full10kfetchfaster`: `gather` per (ticker, year), SEC semaphore + `to_thread`, HF embed 4×32 batches; ~46% faster at 3 tickers (195s→105s); `async def fetch_report` fixes `asyncio.run` under FastMCP; `main` keeps sync path + `duration_seconds` for benchmarks. |
 | 2026-07-09 | Refactor | Homework → `backend/helper/` migration: RAG (`helper/rag/`), Postgres (`helper/postgres/`), analysis schema (`helper/analysis/`); main project + tests import `helper.*` only; homework emptied of production code; new `helper-layout.mdc` rule. |

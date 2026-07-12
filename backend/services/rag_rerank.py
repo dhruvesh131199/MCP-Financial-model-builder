@@ -1,22 +1,21 @@
-"""Hugging Face Inference API — text-ranking reranker for RAG retrieval."""
+"""RAG rerank facade — RerankHit + score via RerankProvider, then rank hits."""
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
-from typing import Any
 
-import httpx
-
-from integrations.hf_client import HuggingFaceError, get_hf_token
+from helper.postgres.hf_rerank import HuggingFaceRerankError, _parse_rerank_scores
+from helper.postgres.reranking import get_rerank_model, get_rerank_provider
 from services.rag_vector_search import VectorHit
 
-DEFAULT_RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
-HF_INFERENCE_BASE = "https://router.huggingface.co/hf-inference/models"
-
-
-class HuggingFaceRerankError(HuggingFaceError):
-    pass
+# Re-export for callers / tests that imported from this module.
+__all__ = [
+    "HuggingFaceRerankError",
+    "RerankHit",
+    "get_rerank_model",
+    "rerank_hits",
+    "_parse_rerank_scores",
+]
 
 
 @dataclass
@@ -37,44 +36,6 @@ class RerankHit:
     document_source: str | None = None
 
 
-def get_rerank_model() -> str:
-    return os.getenv("HF_RERANK_MODEL", "").strip() or DEFAULT_RERANK_MODEL
-
-
-def _text_ranking_url(model_id: str) -> str:
-    return f"{HF_INFERENCE_BASE}/{model_id}/pipeline/text-ranking"
-
-
-def _parse_rerank_scores(data: Any, expected: int) -> list[float]:
-    if isinstance(data, list):
-        if not data:
-            raise HuggingFaceRerankError("Empty rerank response")
-        if all(isinstance(x, (int, float)) for x in data):
-            if len(data) != expected:
-                raise HuggingFaceRerankError(
-                    f"Expected {expected} scores, got {len(data)}"
-                )
-            return [float(x) for x in data]
-        if all(isinstance(x, dict) for x in data):
-            scores: list[float | None] = [None] * expected
-            for item in data:
-                idx = item.get("index")
-                score = item.get("score")
-                if idx is None or score is None:
-                    continue
-                if 0 <= int(idx) < expected:
-                    scores[int(idx)] = float(score)
-            if any(s is None for s in scores):
-                raise HuggingFaceRerankError("Rerank response missing index scores")
-            return [float(s) for s in scores]
-    if isinstance(data, dict):
-        if "scores" in data and isinstance(data["scores"], list):
-            return _parse_rerank_scores(data["scores"], expected)
-        if "error" in data:
-            raise HuggingFaceRerankError(str(data["error"]))
-    raise HuggingFaceRerankError(f"Unexpected rerank response: {type(data)}")
-
-
 def rerank_hits(
     query: str,
     hits: list[VectorHit],
@@ -82,38 +43,24 @@ def rerank_hits(
     model_id: str | None = None,
     timeout_s: float = 120.0,
 ) -> list[RerankHit]:
+    """Score vector hits with the configured rerank provider and return ranked hits.
+
+    Use when: query_rag retrieve after semantic search.
+    Logic: provider.score(query, texts) → sort by score desc → RerankHit list.
+    Returns: e.g. [RerankHit(..., rerank_rank=1, rerank_score=0.95), ...]
+    """
     if not hits:
         return []
 
-    model = model_id or get_rerank_model()
-    url = _text_ranking_url(model)
-    token = get_hf_token()
     texts = [h.content for h in hits]
-    payload = {"inputs": {"query": query, "texts": texts}}
-
-    try:
-        with httpx.Client(timeout=timeout_s) as client:
-            response = client.post(
-                url,
-                headers={"Authorization": f"Bearer {token}"},
-                json=payload,
-            )
-    except httpx.RequestError as exc:
+    scores = get_rerank_provider().score(
+        query, texts, model_id=model_id, timeout_s=timeout_s
+    )
+    if len(scores) != len(hits):
         raise HuggingFaceRerankError(
-            f"Cannot reach Hugging Face rerank API at {url}. ({exc})"
-        ) from exc
-
-    if response.status_code == 429:
-        raise HuggingFaceRerankError("HF rate limit (429). Wait and retry.")
-    if response.status_code == 503:
-        raise HuggingFaceRerankError(
-            f"Model {model} unavailable (503). Retry in a few seconds."
+            f"Expected {len(hits)} rerank scores, got {len(scores)}"
         )
-    if response.status_code >= 400:
-        detail = response.text[:300]
-        raise HuggingFaceRerankError(f"HF rerank API {response.status_code}: {detail}")
 
-    scores = _parse_rerank_scores(response.json(), len(hits))
     indexed = list(enumerate(scores))
     indexed.sort(key=lambda pair: pair[1], reverse=True)
 

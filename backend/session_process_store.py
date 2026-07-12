@@ -311,7 +311,7 @@ class RagQueryRetrieveProgress:
     """Per-retrieve-loop Processing chip (one process per host query_rag retrieve).
 
     Use when: MCP query_rag mode=retrieve needs sidebar updates for search/rerank/parent.
-    Logic: start(process_name='Query: …') → set(message, progress) at 10/30/100 → finish/abandon.
+    Logic: start(process_name='Query: …') → set before each step (embed@2, search@10, rerank@30, parent@100) → finish/abandon.
     Returns: start() returns the helper; set/finish write process JSON.
     """
 

@@ -187,10 +187,11 @@ def test_retrieve_loop_progress_10_30_100_and_delete(tmp_path, monkeypatch):
     assert result["loop"] == 1
 
     progresses = [c["progress"] for c in upsert_calls]
-    assert progresses == [10, 30, 100]
-    assert upsert_calls[0]["message"] == "Semantic search on subchunks"
-    assert upsert_calls[1]["message"] == "Reranking sub chunks"
-    assert "Analyzing parent chunk NVDA_2025_10K_P_01" in upsert_calls[2]["message"]
+    assert progresses == [2, 10, 30, 100]
+    assert upsert_calls[0]["message"] == "Embedding query…"
+    assert upsert_calls[1]["message"] == "Semantic search on subchunks"
+    assert upsert_calls[2]["message"] == "Reranking sub chunks"
+    assert "Analyzing parent chunk NVDA_2025_10K_P_01" in upsert_calls[3]["message"]
     assert all(c["process_name"] == f"Query: {query}" for c in upsert_calls)
     assert len(delete_ids) == 1
 
