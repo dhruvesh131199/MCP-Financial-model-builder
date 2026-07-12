@@ -11,6 +11,10 @@ from services.statements_store import compute_fetch_gaps, get_cached_periods_sum
 from services.sec_client import resolve_ticker
 from services.trend_analysis_service import build_trend_from_snapshot
 from store import save_detailed_analysis_model
+from services.da_narrative_store import (
+    build_narrative_next_actions,
+    build_narrative_playbook,
+)
 
 ALL_STATEMENTS = frozenset({"income", "balance", "cashflow"})
 
@@ -146,4 +150,6 @@ def run_detailed_analysis_for_session(
                 for g in gaps_after
             ],
         },
+        "narrative_playbook": build_narrative_playbook(sym),
+        "next_actions": build_narrative_next_actions(sym),
     }

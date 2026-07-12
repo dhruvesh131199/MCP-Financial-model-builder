@@ -51,10 +51,15 @@ const PRINT_STYLES = `
   }
 `;
 
-export function exportRagResultPdf(title: string, contentHtml: string): void {
+export function exportRagResultPdf(
+  title: string,
+  contentHtml: string,
+  meta = "Pinned RAG reference · Financial Analyzer",
+): void {
   const safeTitle = title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const safeMeta = meta.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const iframe = document.createElement("iframe");
-  iframe.setAttribute("title", "Print RAG result");
+  iframe.setAttribute("title", "Print export");
   iframe.style.position = "fixed";
   iframe.style.right = "0";
   iframe.style.bottom = "0";
@@ -82,7 +87,7 @@ export function exportRagResultPdf(title: string, contentHtml: string): void {
 </head>
 <body>
   <h1>${safeTitle}</h1>
-  <p class="meta">Pinned RAG reference · Financial Analyzer</p>
+  <p class="meta">${safeMeta}</p>
   ${contentHtml}
 </body>
 </html>`);

@@ -1,6 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { DetailedAnalysisData, DetailedMetricCell } from "../types";
 import TrendAnalysisSection from "./TrendAnalysisSection";
+import { exportRagResultPdf } from "../utils/exportRagResultPdf";
 import {
   BALANCE_GROUP_LABELS,
   DETAILED_ANALYSIS_DISCLAIMER,
@@ -11,6 +14,13 @@ import {
 } from "../utils/metricOrder";
 
 const MAX_YEARS = 5;
+
+const NARRATIVE_SECTION_ORDER = [
+  "gross_profit",
+  "return_on_capital",
+  "earnings_per_share",
+  "cash_flow",
+] as const;
 
 type StatementKey = "income" | "balance" | "cashflow";
 
@@ -91,6 +101,10 @@ interface DetailedAnalysisViewerProps {
 export default function DetailedAnalysisViewer({
   analysis,
 }: DetailedAnalysisViewerProps) {
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
   const periods = useMemo(
     () =>
       [...analysis.periods]
@@ -106,18 +120,53 @@ export default function DetailedAnalysisViewer({
   }
 
   const yearCount = periods.length;
+  const exportTitle = `${analysis.ticker} detailed analysis — last ${yearCount} ${
+    yearCount === 1 ? "year" : "years"
+  }`;
+
+  function handleExportPdf() {
+    const el = exportRef.current;
+    if (!el) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      exportRagResultPdf(
+        exportTitle,
+        el.innerHTML,
+        `${analysis.entity_name} · SEC EDGAR · Detailed Analysis · Financial Analyzer`,
+      );
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-indigo-50 bg-gradient-to-r from-white to-indigo-50/60 px-4 py-3">
-        <h2 className="text-base font-semibold text-gray-900">
-          {analysis.ticker} detailed analysis — last {yearCount}{" "}
-          {yearCount === 1 ? "year" : "years"}
-        </h2>
-        <p className="mt-0.5 text-xs text-gray-500">
-          {analysis.entity_name} · SEC EDGAR ·{" "}
-          {new Date(analysis.fetched_at).toLocaleDateString()}
-        </p>
+      <div className="flex shrink-0 items-start justify-between gap-3 border-b border-indigo-50 bg-gradient-to-r from-white to-indigo-50/60 px-4 py-3">
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-gray-900">{exportTitle}</h2>
+          <p className="mt-0.5 text-xs text-gray-500">
+            {analysis.entity_name} · SEC EDGAR ·{" "}
+            {new Date(analysis.fetched_at).toLocaleDateString()}
+          </p>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <button
+            type="button"
+            onClick={handleExportPdf}
+            disabled={exporting}
+            className="rounded-lg border border-indigo-200/80 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 shadow-sm transition hover:border-indigo-300 hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {exporting ? "Exporting…" : "Export PDF"}
+          </button>
+          {exportError ? (
+            <p className="max-w-[14rem] text-right text-[10px] text-red-600">
+              {exportError}
+            </p>
+          ) : null}
+        </div>
       </div>
 
       <div className="space-y-3 border-b border-amber-100 bg-amber-50/70 px-4 py-3 text-xs leading-relaxed text-amber-950">
@@ -128,6 +177,7 @@ export default function DetailedAnalysisViewer({
       </div>
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div ref={exportRef}>
         <p className="mb-6 text-sm font-medium text-gray-700">
           {yearCount}-year overview
         </p>
@@ -182,6 +232,36 @@ export default function DetailedAnalysisViewer({
           <TrendAnalysisSection trend={analysis.trend_analysis} />
         )}
 
+        {(() => {
+          const narratives = analysis.narratives ?? [];
+          const ordered = NARRATIVE_SECTION_ORDER.map((key) =>
+            narratives.find((n) => n.section_key === key),
+          ).filter((n): n is NonNullable<typeof n> => Boolean(n?.content_md));
+          if (!ordered.length) return null;
+          return (
+            <div className="mt-10 space-y-6 border-t border-indigo-100 pt-8">
+              <h3 className="text-sm font-semibold text-gray-900">
+                Narrative analysis (10-K)
+              </h3>
+              {ordered.map((n) => (
+                <section
+                  key={n.section_key}
+                  className="mt-2 border-t border-gray-200 pt-5"
+                >
+                  <h4 className="mb-3 border-b border-gray-200 pb-2 text-sm font-semibold text-gray-900">
+                    {n.title}
+                  </h4>
+                  <article className="rag-display-prose max-w-4xl text-sm text-gray-800">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {n.content_md}
+                    </ReactMarkdown>
+                  </article>
+                </section>
+              ))}
+            </div>
+          );
+        })()}
+
         {analysis.integrity_checks.length > 0 && (
           <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50/50 px-3 py-2 text-xs text-amber-900">
             <p className="font-medium">Integrity notes</p>
@@ -192,6 +272,7 @@ export default function DetailedAnalysisViewer({
             </ul>
           </div>
         )}
+        </div>
       </div>
     </div>
   );

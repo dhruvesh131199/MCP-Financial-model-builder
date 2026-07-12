@@ -31,7 +31,7 @@ export const MCP_TOOL_GUIDE: McpToolGuideEntry[] = [
   {
     tool: "run_detailed_analysis",
     summary:
-      "Build a curated 5-year income, balance, and cash flow report in the Detailed Analysis sidebar.",
+      "Build a curated 5-year income, balance, and cash flow report, then follow next_actions: ingest the full 10-K and pin four narrative sections onto Detailed Analysis.",
     examples: ["Do detailed analysis of Micron."],
   },
   {
@@ -53,8 +53,12 @@ export const MCP_TOOL_GUIDE: McpToolGuideEntry[] = [
   },
   {
     tool: "rag_res_on_display",
-    summary: "Pin a formatted answer on the dashboard under RAG Results for quick reference while you work.",
-    examples: ["Pin last output on dashboard."],
+    summary:
+      "Pin a formatted answer to RAG Results (default), or to a Detailed Analysis narrative section when destination=detailed_analysis with ticker and section_key.",
+    examples: [
+      "Pin last output on dashboard.",
+      "Pin gross profit narrative to detailed analysis for AAPL.",
+    ],
   },
 ];
 

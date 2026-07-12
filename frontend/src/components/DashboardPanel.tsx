@@ -226,7 +226,7 @@ export default function DashboardPanel({
 
         <SidebarSection title="Detailed Analysis">
           {displayAnalyses.length === 0 ? (
-            <EmptyHint text="Run detailed analysis from chat" />
+            <EmptyHint text='Ask your LLM: “Do detailed analysis of Microsoft”' />
           ) : (
             displayAnalyses.map((entry) => (
               <SidebarItem

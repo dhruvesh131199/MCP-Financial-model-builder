@@ -45,6 +45,13 @@ export interface DetailedAnalysisData {
   integrity_checks: string[];
   is_bank_style: boolean;
   trend_analysis?: TrendAnalysisData;
+  narratives?: DetailedAnalysisNarrative[];
+}
+
+export interface DetailedAnalysisNarrative {
+  section_key: string;
+  title: string;
+  content_md: string;
 }
 
 export interface DetailedAnalysisModelEntry {

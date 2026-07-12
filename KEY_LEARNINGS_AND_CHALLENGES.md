@@ -284,6 +284,7 @@ Newest first. Add a row when something interview-worthy happens.
 
 | Date | Type | Summary |
 |------|------|---------|
+| 2026-07-12 | Feature | DA narrative pin (`da-rag-pin`): `rag_res_on_display` destination (default RAG Results; `detailed_analysis`+ticker+section_key → session md); `run_detailed_analysis` returns 5 next_actions (full 10-K + 4 query_rag pins); UI shows ordered narrative sections. |
 | 2026-07-11 | Cleanup | Removed RAG step timing helpers and `.logs/rag_*_timing.log` (ingest + query_rag); Processing sidebar progress chips unchanged. |
 | 2026-07-11 | Feature | OpenRouter rerank live: `POST /api/v1/rerank` via `OpenRouterRerankProvider` (`cohere/rerank-v3.5`); switch with `RERANK_PROVIDER=openrouter`; live smoke test proves round-trip + Paris ranks highest. |
 | 2026-07-11 | Architecture | RAG rerank mirrors embed: `RerankProvider` + `RERANK_PROVIDER` (HF + OpenRouter); progress chip messages set *before* each retrieve step. |

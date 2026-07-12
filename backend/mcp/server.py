@@ -118,6 +118,11 @@ Map user requests to tools precisely:
 If the user asks for "detailed analysis", "in-depth breakdown", or a "curated report", use this tool. (Do NOT use `fetch_report`). This populates the Detailed Analysis sidebar and Trend table.
 (e.g., "Analyze AAPL in detail" -> ticker="AAPL", default max_years=5)
 For "update trend" / "refresh trend table", call `run_detailed_analysis` again for the same ticker.
+After success, the tool returns `next_actions` (5 steps). **Execute them in order**:
+1) `fetch_report(full_report)` for that ticker if not already in RAG corpus;
+2–5) for each `narrative_playbook` row: `query_rag` retrieve/finalize with `suggested_query`, then
+`rag_res_on_display(destination="detailed_analysis", ticker=..., section_key=..., name=<title>, content=<markdown+Sources>)`.
+Do **not** invent `destination=detailed_analysis` for unrelated user questions — only while following that playbook.
 
 2. SEC Data & Financials -> `fetch_report`
 If the user asks to "fetch financials", "get statements", or "pull reports":
@@ -143,7 +148,8 @@ If the user asks a question that needs **10-K narrative evidence** (risks, MD&A,
 - After each retrieve, **read `new_parent.content`**. If you need more information OR the parent refers to another part of the filing ("see Item 7", "Note 12"), call retrieve again with a **new query**.
 - When satisfied, `query_rag(mode="finalize")` → answer from `combined_context` and append **Sources:** line from `citations`.
 - `query_rag(mode="reset")` clears state for a new question.
-- After finalize, ask: "Pin this answer to your dashboard for reference?" If yes → `rag_res_on_display(name="<short sidebar label>", content="<markdown with headings, tables, Sources>")`.
+- After finalize, ask: "Pin this answer to your dashboard for reference?" If yes → `rag_res_on_display(name="<short sidebar label>", content="<markdown with headings, tables, Sources>")` — **omit destination** (defaults to RAG Results).
+- Only pass `destination="detailed_analysis"` when following `run_detailed_analysis` `next_actions` / playbook (requires ticker + section_key).
 </tool_routing>
 
 <rag_loop_engineering>
@@ -429,6 +435,9 @@ def run_detailed_analysis(
 
     TREND TABLE: included automatically. To refresh trend only, call this tool again for the ticker.
 
+    AFTER SUCCESS: follow returned `next_actions` in order (full 10-K ingest + four query_rag +
+    rag_res_on_display pins with destination=detailed_analysis). Tables alone are not the full report.
+
     SESSION: session_id REQUIRED — from prior tool response or user-pasted dashboard id.
     """
     session_result = _require_session_or_error(session_id)
@@ -456,9 +465,10 @@ def run_detailed_analysis(
         {
             **result,
             "message": (
-                f"Detailed Analysis saved for {result.get('ticker')}. "
+                f"Detailed Analysis tables saved for {result.get('ticker')}. "
                 f"{result.get('periods_count', 0)} periods. "
-                f"Open {url} → Detailed Analysis sidebar."
+                f"Open {url} → Detailed Analysis. "
+                "Next: execute next_actions in order (full 10-K + four narrative pins)."
             ),
         },
     )
@@ -581,28 +591,38 @@ def query_rag(
 def rag_res_on_display(
     name: str,
     content: str,
+    destination: str | None = None,
+    ticker: str | None = None,
+    section_key: str | None = None,
     session_id: SessionId = None,
 ) -> dict:
     """
-    Pin a host-authored RAG answer on the dashboard for reference.
+    Pin a host-authored RAG answer on the dashboard.
 
-    Use after `query_rag(mode="finalize")` when the user wants a durable sidebar reference
-    (metric tables, DCF inputs from 10-K, risk summaries, etc.).
+    Default destination is RAG Results (sidebar). Pass destination="detailed_analysis"
+    only when following run_detailed_analysis next_actions (requires ticker + section_key).
 
-    WORKFLOW:
-    1. Answer the user in chat from query_rag finalize + citations.
+    WORKFLOW (RAG Results — default):
+    1. Answer from query_rag finalize + citations.
     2. Ask: "Pin this answer to your dashboard for reference?"
-    3. If yes, call with a short `name` (sidebar chip) and full `content` as markdown.
+    3. If yes: rag_res_on_display(name=..., content=...) — omit destination.
+
+    WORKFLOW (Detailed Analysis narrative — playbook only):
+    - After run_detailed_analysis next_actions: pin with
+      destination="detailed_analysis", ticker, section_key
+      (gross_profit | return_on_capital | earnings_per_share | cash_flow).
 
     CONTENT (markdown):
-    - Use headings, bullet lists, and GFM tables where helpful.
-    - End with a **Sources:** line from query_rag citations.
-    - Do not pass raw chunk dumps — write a clean reference document.
+    - Headings, bullets, GFM tables; end with Sources from query_rag citations.
+    - Do not pass raw chunk dumps.
 
     PARAMETERS:
-    - name: short sidebar label (≤80 chars; truncated in UI, full text on hover)
+    - name: short label (RAG Results chip, or ignored title fallback for DA)
     - content: full markdown body
-    - session_id: REQUIRED — from prior tool response or user-pasted dashboard id
+    - destination: omit/"rag_results" (default) or "detailed_analysis"
+    - ticker: required when destination=detailed_analysis
+    - section_key: required when destination=detailed_analysis
+    - session_id: REQUIRED
     """
     session_result = _require_session_or_error(session_id)
     if isinstance(session_result, dict):
@@ -610,18 +630,28 @@ def rag_res_on_display(
     sid = session_result
     _touch_session_writes()
 
-    result = pin_rag_display(sid, name=name, content=content)
+    result = pin_rag_display(
+        sid,
+        name=name,
+        content=content,
+        destination=destination,
+        ticker=ticker,
+        section_key=section_key,
+    )
     if "error" in result:
         return _tool_response(sid, result)
 
     url = _view_url(sid)
+    dest = result.get("destination", "rag_results")
+    if dest == "detailed_analysis":
+        hint = f"Open {url} → Detailed Analysis → narrative sections."
+    else:
+        hint = f"Open {url} → RAG Results sidebar."
     return _tool_response(
         sid,
         {
             **result,
-            "message": (
-                f"{result['message']} Open {url} → RAG Results sidebar."
-            ),
+            "message": f"{result['message']} {hint}",
         },
     )
 

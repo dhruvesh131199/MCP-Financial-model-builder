@@ -60,6 +60,9 @@ def test_run_detailed_analysis_saves_model(mock_resolve, mock_fetch, mock_save):
     assert result["periods_count"] == 1
     assert result["file_id"] == "file-1"
     assert result["file_name"] == "TEST"
+    assert len(result["narrative_playbook"]) == 4
+    assert len(result["next_actions"]) == 5
+    assert "full_report" in result["next_actions"][0]
     mock_save.assert_called_once_with(sid, "TEST", max_years=1)
 
 

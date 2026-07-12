@@ -687,10 +687,32 @@ def load_workspace(session_id: str) -> dict | None:
         ).isoformat()
     rag_mtime = rag_index_mtime(session_id)
     proc_mtime = processes_mtime(session_id)
+    from services.da_narrative_store import da_narratives_mtime, list_da_narratives
+
+    narratives_mtime = da_narratives_mtime(session_id)
+    for entry in models:
+        if entry.get("type") != "detailed_analysis":
+            continue
+        data = entry.get("data")
+        if not isinstance(data, dict):
+            continue
+        ticker = str(data.get("ticker") or "").upper()
+        if not ticker:
+            continue
+        narratives = list_da_narratives(session_id, ticker)
+        if narratives:
+            data = {**data, "narratives": narratives}
+            entry["data"] = data
     updated_at = _workspace_updated_at(
         models,
         files,
-        extra_timestamps=[stmt_mtime, rag_mtime, fetch_log_mtime, proc_mtime],
+        extra_timestamps=[
+            stmt_mtime,
+            rag_mtime,
+            fetch_log_mtime,
+            proc_mtime,
+            narratives_mtime,
+        ],
     )
     return {
         "session_id": session_id,
