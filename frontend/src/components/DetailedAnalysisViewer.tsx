@@ -1,6 +1,4 @@
 import { useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { DetailedAnalysisData, DetailedMetricCell } from "../types";
 import TrendAnalysisSection from "./TrendAnalysisSection";
 import { exportRagResultPdf } from "../utils/exportRagResultPdf";
@@ -12,6 +10,7 @@ import {
   BANK_SECTOR_DISCLAIMER,
   FCF_FOOTNOTE,
 } from "../utils/metricOrder";
+import MarkdownWithCitations from "./MarkdownWithCitations";
 
 const MAX_YEARS = 5;
 
@@ -96,10 +95,12 @@ function buildTableRows(
 
 interface DetailedAnalysisViewerProps {
   analysis: DetailedAnalysisData;
+  sessionId: string;
 }
 
 export default function DetailedAnalysisViewer({
   analysis,
+  sessionId,
 }: DetailedAnalysisViewerProps) {
   const exportRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
@@ -252,9 +253,10 @@ export default function DetailedAnalysisViewer({
                     {n.title}
                   </h4>
                   <article className="rag-display-prose max-w-4xl text-sm text-gray-800">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {n.content_md}
-                    </ReactMarkdown>
+                    <MarkdownWithCitations
+                      markdown={n.content_md}
+                      sessionId={sessionId}
+                    />
                   </article>
                 </section>
               ))}

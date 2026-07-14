@@ -134,6 +134,16 @@ textarea {
   border-top: 1px solid #e5e7eb;
 }
 
+.cite-source-prose mark.cite-highlight {
+  background: #fde68a;
+  color: #111827;
+  border-radius: 0.2rem;
+  padding: 0.05em 0.15em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  scroll-margin-block: 30vh;
+}
+
 @keyframes process-shimmer {
   0% {
     background-position: 100% 0;

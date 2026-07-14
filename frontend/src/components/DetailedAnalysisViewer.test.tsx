@@ -27,7 +27,7 @@ const sampleAnalysis: DetailedAnalysisData = {
 
 describe("DetailedAnalysisViewer", () => {
   it("renders report sections without statement tab buttons", () => {
-    render(<DetailedAnalysisViewer analysis={sampleAnalysis} />);
+    render(<DetailedAnalysisViewer analysis={sampleAnalysis} sessionId="sess-1" />);
 
     expect(
       screen.getByRole("heading", {

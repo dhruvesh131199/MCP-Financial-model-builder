@@ -172,6 +172,37 @@ export async function getSessionRagChunks(
   return res.json() as Promise<ChunkPlan>;
 }
 
+/** Parent chunk payload for the citation source drawer. */
+export interface RagParentChunkResponse {
+  parent_id: string;
+  document_id: string;
+  ticker: string;
+  year: number;
+  doctype: string;
+  chunk_index: number;
+  content: string;
+  char_count: number;
+  approx_tokens: number;
+  document_source: string | null;
+  label: string;
+}
+
+export async function getSessionRagParent(
+  sessionId: string,
+  parentId: string,
+): Promise<RagParentChunkResponse> {
+  const res = await fetch(
+    `${API_BASE}/api/sessions/${sessionId}/rag/parents/${encodeURIComponent(parentId)}`,
+  );
+  const body = (await res.json().catch(() => ({}))) as RagParentChunkResponse & {
+    detail?: string;
+  };
+  if (!res.ok) {
+    throw new Error(body.detail ?? `Parent load failed: ${res.status}`);
+  }
+  return body;
+}
+
 export function sessionRagChunksPath(sessionId: string, documentId: string): string {
   return `/s/${sessionId}/rag/${documentId}/chunks`;
 }

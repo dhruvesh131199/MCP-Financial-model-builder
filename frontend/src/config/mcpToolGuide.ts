@@ -48,13 +48,13 @@ export const MCP_TOOL_GUIDE: McpToolGuideEntry[] = [
   {
     tool: "query_rag",
     summary:
-      "Ask questions against an ingested 10-K. Your assistant retrieves sections, may loop for more context, then answers.",
+      "Ask questions against an ingested 10-K. Your assistant retrieves sections, may loop for more context, then answers with inline [[cite:…]] markers and a Sources footer.",
     examples: ["What are the main risks in NVIDIA's latest 10-K?"],
   },
   {
     tool: "rag_res_on_display",
     summary:
-      "Pin a formatted answer to RAG Results (default), or to a Detailed Analysis narrative section when destination=detailed_analysis with ticker and section_key.",
+      "Pin a formatted answer (keep inline [[cite:…]] markers) to RAG Results (default), or to a Detailed Analysis narrative section when destination=detailed_analysis with ticker and section_key.",
     examples: [
       "Pin last output on dashboard.",
       "Pin gross profit narrative to detailed analysis for AAPL.",

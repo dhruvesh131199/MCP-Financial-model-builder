@@ -23,7 +23,7 @@ const sampleEntry: RagDisplayModelEntry = {
 
 describe("RagDisplayViewer", () => {
   it("renders title and markdown table content", () => {
-    render(<RagDisplayViewer entry={sampleEntry} />);
+    render(<RagDisplayViewer entry={sampleEntry} sessionId="sess-1" />);
 
     expect(screen.getByRole("heading", { name: "AAPL 10-K DCF metrics" })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Revenue" })).toBeTruthy();

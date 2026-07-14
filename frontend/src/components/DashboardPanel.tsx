@@ -311,11 +311,14 @@ export default function DashboardPanel({
           </>
         ) : activeRagResult ? (
           <div className="min-h-0 flex-1 overflow-hidden">
-            <RagDisplayViewer entry={activeRagResult} />
+            <RagDisplayViewer entry={activeRagResult} sessionId={sessionId} />
           </div>
         ) : activeAnalysis ? (
           <div className="min-h-0 flex-1 overflow-hidden">
-            <DetailedAnalysisViewer analysis={activeAnalysis.data} />
+            <DetailedAnalysisViewer
+              analysis={activeAnalysis.data}
+              sessionId={sessionId}
+            />
           </div>
         ) : activeFile ? (
           <>

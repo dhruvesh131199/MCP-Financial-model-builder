@@ -209,3 +209,37 @@ def get_rag_document_report(session_id: str, document_id: str) -> HTMLResponse:
     if not report.is_file():
         raise HTTPException(status_code=404, detail="Report not found")
     return HTMLResponse(content=report.read_text(encoding="utf-8"))
+
+
+@router.get("/parents/{parent_id}")
+def get_rag_parent_chunk(session_id: str, parent_id: str) -> dict:
+    """Load one parent chunk by id for the citation source drawer.
+
+    Use when: dashboard clicks an inline [[cite:…]] chip.
+    Logic: require session → load_parent_chunk from Postgres → add display label.
+    Returns: e.g. {"parent_id": "AAPL_2025_10K_P_07", "ticker": "AAPL", "year": 2025,
+    "doctype": "10K", "chunk_index": 7, "content": "...", "label": "AAPL · 10K · FY2025 · section #7"}
+    """
+    _require_session(session_id)
+    pid = parent_id.strip()
+    if not pid:
+        raise HTTPException(status_code=400, detail="parent_id is required")
+
+    from services.rag_vector_search import load_parent_chunk
+
+    try:
+        row = load_parent_chunk(pid)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Parent chunk not found")
+
+    ticker = str(row.get("ticker") or "")
+    doctype = str(row.get("doctype") or "")
+    year = row.get("year")
+    chunk_index = row.get("chunk_index")
+    label = f"{ticker} · {doctype} · FY{year} · section #{chunk_index}"
+    return {**row, "label": label}

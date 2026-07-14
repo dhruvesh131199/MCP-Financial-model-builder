@@ -121,7 +121,7 @@ For "update trend" / "refresh trend table", call `run_detailed_analysis` again f
 After success, the tool returns `next_actions` (5 steps). **Execute them in order**:
 1) `fetch_report(full_report)` for that ticker if not already in RAG corpus;
 2–5) for each `narrative_playbook` row: `query_rag` retrieve/finalize with `suggested_query`, then
-`rag_res_on_display(destination="detailed_analysis", ticker=..., section_key=..., name=<title>, content=<markdown+Sources>)`.
+`rag_res_on_display(destination="detailed_analysis", ticker=..., section_key=..., name=<title>, content=<markdown with [[cite:…]] + Sources>)`.
 Do **not** invent `destination=detailed_analysis` for unrelated user questions — only while following that playbook.
 
 2. SEC Data & Financials -> `fetch_report`
@@ -146,10 +146,10 @@ If the user asks a question that needs **10-K narrative evidence** (risks, MD&A,
 - Loop 1: `query_rag(mode="retrieve", ticker="NVDA", query="...")` — **ticker required on first retrieve**.
 - Loops 2+: `query_rag(mode="retrieve", query="...")` — ticker reused from session state.
 - After each retrieve, **read `new_parent.content`**. If you need more information OR the parent refers to another part of the filing ("see Item 7", "Note 12"), call retrieve again with a **new query**.
-- When satisfied, `query_rag(mode="finalize")` → answer from `combined_context` and append **Sources:** line from `citations`.
+- When satisfied, `query_rag(mode="finalize")` → answer from `combined_context` with inline `[[cite:parent_id]]` next to claims (from `citations[].parent_id`) and a **Sources:** footer from `citations[].label`.
 - `query_rag(mode="reset")` clears state for a new question.
-- After finalize, ask: "Pin this answer to your dashboard for reference?" If yes → `rag_res_on_display(name="<short sidebar label>", content="<markdown with headings, tables, Sources>")` — **omit destination** (defaults to RAG Results).
-- Only pass `destination="detailed_analysis"` when following `run_detailed_analysis` `next_actions` / playbook (requires ticker + section_key).
+- After finalize, ask: "Pin this answer to your dashboard for reference?" If yes → `rag_res_on_display(name="<short sidebar label>", content="<markdown with headings, tables, inline [[cite:…]], Sources>")` — **omit destination** (defaults to RAG Results).
+- Only pass `destination="detailed_analysis"` when following `run_detailed_analysis` `next_actions` / playbook (requires ticker + section_key). Keep inline `[[cite:…]]` in pinned content so the dashboard chips open the source drawer.
 </tool_routing>
 
 <rag_loop_engineering>
@@ -166,7 +166,7 @@ EXAMPLE:
 User: "What are NVIDIA's supply chain and manufacturing risks in the latest 10-K?"
 - Loop 1: retrieve ticker="NVDA" query="NVIDIA supply chain risks 10-K" → read Item 1A parent
 - Loop 2: retrieve query="NVIDIA Item 2 properties manufacturing suppliers" (ticker omitted — reused)
-- finalize → answer user; end with Sources line from citations
+- finalize → answer user with inline [[cite:parent_id]] markers + Sources footer from citations
 
 Rules:
 - Each loop uses a **new host-authored query** (refined each time).
@@ -175,12 +175,21 @@ Rules:
 </rag_loop_engineering>
 
 <rag_citations>
-After `finalize`, always end your user-facing answer with a **Sources** line using `citations[].label`:
+After `finalize`, place inline citation markers **next to each claim** using `citations[].parent_id`.
+**Prefer a short verbatim quote** copied from that parent’s `content` (or from `combined_context`) so the dashboard can highlight and scroll to it:
+
+Gross margin fell on mix [[cite:AAPL_2025_10K_P_07|"Services and higher cost products"]] and costs [[cite:AAPL_2025_10K_P_07|"component cost pressures"]].
+
+Marker format:
+- Required: `[[cite:PARENT_ID]]` — PARENT_ID must come from that run’s `citations[].parent_id`
+- Strongly preferred: `[[cite:PARENT_ID|"exact 4–12 word substring from that parent"]]` — copy characters from the parent text (do not paraphrase). Shorter exact quotes beat longer paraphrases.
+
+Also end the user-facing answer (and any pinned markdown) with a **Sources** footer using `citations[].label`:
 Sources: NVDA · 10-K · FY2025 · section #7; NVDA · 10-K · FY2025 · section #12
 
-- Keep each reference short (use label only — not parent_id or chunk text).
-- You may inline short refs in the body e.g. (NVDA FY2025 §7) when citing a specific fact.
-- Only cite sections you actually used in the answer.
+- Only cite sections you actually used.
+- Do not invent parent_ids. Do not paste full chunk text into the answer.
+- When pinning via `rag_res_on_display`, keep the same inline `[[cite:…]]` markers so the dashboard can open the source drawer.
 </rag_citations>
 
 <universal_rules>
@@ -540,7 +549,8 @@ def query_rag(
     parent refers to another part of the filing, call retrieve again with a NEW query.
     When satisfied, call finalize.
 
-    CITATIONS: After finalize, end your answer with Sources: using citations[].label
+    CITATIONS: After finalize, place [[cite:parent_id]] inline next to claims (from
+    citations[].parent_id); end with Sources: using citations[].label. Keep markers when pinning.
 
     USER PHRASE → CALL:
     | User says | Call |
@@ -613,7 +623,7 @@ def rag_res_on_display(
       (gross_profit | return_on_capital | earnings_per_share | cash_flow).
 
     CONTENT (markdown):
-    - Headings, bullets, GFM tables; end with Sources from query_rag citations.
+    - Headings, bullets, GFM tables; inline [[cite:parent_id]] next to claims; end with Sources from query_rag citations.
     - Do not pass raw chunk dumps.
 
     PARAMETERS:

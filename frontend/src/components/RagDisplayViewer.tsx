@@ -1,14 +1,14 @@
 import { useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { RagDisplayModelEntry } from "../types";
 import { exportRagResultPdf } from "../utils/exportRagResultPdf";
+import MarkdownWithCitations from "./MarkdownWithCitations";
 
 interface RagDisplayViewerProps {
   entry: RagDisplayModelEntry;
+  sessionId: string;
 }
 
-export default function RagDisplayViewer({ entry }: RagDisplayViewerProps) {
+export default function RagDisplayViewer({ entry, sessionId }: RagDisplayViewerProps) {
   const articleRef = useRef<HTMLElement>(null);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -53,7 +53,10 @@ export default function RagDisplayViewer({ entry }: RagDisplayViewerProps) {
           ref={articleRef}
           className="rag-display-prose mx-auto max-w-4xl text-sm text-gray-800"
         >
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{entry.data.content_md}</ReactMarkdown>
+          <MarkdownWithCitations
+            markdown={entry.data.content_md}
+            sessionId={sessionId}
+          />
         </article>
       </div>
     </div>

@@ -315,9 +315,13 @@ def finalize_loop(session_id: str, *, source: str = "mcp") -> dict[str, Any]:
             "message": (
                 f"Merged {parent_count} parent section(s). "
                 "Answer the user using combined_context. "
-                "End your reply with a Sources line — one short label per section from "
+                "Place [[cite:PARENT_ID|\"exact 4-12 word substring from that parent\"]] "
+                "inline next to each claim (parent_id + verbatim quote from citations / "
+                "combined_context) so the dashboard can highlight and scroll to it. "
+                "Bare [[cite:PARENT_ID]] is allowed only if no short quote fits. "
+                "Also end with a Sources line — one short label per section from "
                 "citations (e.g. 'Sources: NVDA · 10-K · FY2025 · section #7; ...'). "
-                "Do not paste parent_id or chunk text."
+                "Do not paste full chunk text."
             ),
         }
     finally:

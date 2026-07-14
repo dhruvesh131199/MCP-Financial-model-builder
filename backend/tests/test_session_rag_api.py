@@ -248,3 +248,44 @@ def test_raw_endpoint_serves_file(tmp_path):
     res = client.get(f"/api/sessions/{sid}/rag/documents/{doc_id}/raw")
     assert res.status_code == 200
     assert res.content.startswith(b"%PDF")
+
+
+def test_parent_endpoint_returns_chunk():
+    from store import create_session
+
+    sid = create_session()
+    parent = {
+        "parent_id": "AAPL_2025_10K_P_07",
+        "document_id": "doc-1",
+        "ticker": "AAPL",
+        "year": 2025,
+        "doctype": "10K",
+        "chunk_index": 7,
+        "content": "Component cost pressures weighed on gross margin.",
+        "char_count": 50,
+        "approx_tokens": 12,
+        "document_source": "sec_annual",
+    }
+    with patch("services.rag_vector_search.load_parent_chunk", return_value=parent):
+        res = client.get(f"/api/sessions/{sid}/rag/parents/AAPL_2025_10K_P_07")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["parent_id"] == "AAPL_2025_10K_P_07"
+    assert body["content"].startswith("Component cost")
+    assert body["label"] == "AAPL · 10K · FY2025 · section #7"
+
+
+def test_parent_endpoint_404_when_missing():
+    from store import create_session
+
+    sid = create_session()
+    with patch("services.rag_vector_search.load_parent_chunk", return_value=None):
+        res = client.get(f"/api/sessions/{sid}/rag/parents/MISSING_P_01")
+    assert res.status_code == 404
+
+
+def test_parent_endpoint_404_invalid_session():
+    with patch("services.rag_vector_search.load_parent_chunk") as mock_load:
+        res = client.get("/api/sessions/not-a-real-session/rag/parents/AAPL_2025_10K_P_07")
+    assert res.status_code == 404
+    mock_load.assert_not_called()
