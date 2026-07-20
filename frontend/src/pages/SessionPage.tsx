@@ -202,7 +202,7 @@ export default function SessionPage() {
   );
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-full flex-col">
       <ToolGuideModal open={toolGuideOpen} onClose={() => setToolGuideOpen(false)} />
 
       <header className="shrink-0 border-b border-[var(--border-soft)] bg-white px-4 py-3">

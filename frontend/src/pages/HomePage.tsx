@@ -43,7 +43,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white lg:h-screen lg:overflow-hidden">
+    <div className="min-h-full bg-white lg:h-full lg:overflow-hidden">
       <div className="mx-auto grid h-full max-w-6xl lg:grid-cols-[1.65fr_1fr]">
         {/* Left ~65% — setup / explore */}
         <div className="px-4 py-12 sm:px-6 sm:py-16 lg:overflow-y-auto lg:px-8">
