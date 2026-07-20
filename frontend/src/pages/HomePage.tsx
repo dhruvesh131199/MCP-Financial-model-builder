@@ -18,6 +18,11 @@ const HOME_DEMO_VIDEOS = [
     title: "Live RAG + Query from 10k reports",
     src: "/examples/example1.mp4",
   },
+  {
+    id: "rest-mcp-citations",
+    title: "REST and MCP orchestration | Inline citations",
+    src: "/examples/example2.mp4",
+  },
 ] as const;
 
 export default function HomePage() {

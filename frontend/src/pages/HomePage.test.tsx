@@ -48,6 +48,9 @@ describe("HomePage", () => {
     );
     expect(screen.getByRole("heading", { name: /^Examples$/i })).toBeTruthy();
     expect(screen.getByText(/Live RAG \+ Query from 10k reports/i)).toBeTruthy();
+    expect(
+      screen.getByText(/REST and MCP orchestration \| Inline citations/i),
+    ).toBeTruthy();
   });
 
   it("creates session and navigates on Start exploring", async () => {
